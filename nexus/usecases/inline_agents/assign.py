@@ -22,6 +22,25 @@ def infer_single_active_mcp_selection(agent: Agent) -> tuple[str | None, str | N
     return mcp.name, system_slug
 
 
+def resolve_assignment_mcp_fields(
+    agent: Agent,
+    mcp: str | None,
+    mcp_config: dict | None,
+    system: str | None,
+) -> tuple[str | None, dict | None, str | None]:
+    """Infer MCP/system when only constants (``mcp_config``) are sent for a single-MCP agent."""
+    config = mcp_config or {}
+    if mcp or not config:
+        return mcp, config or None, system
+
+    inferred_mcp, inferred_system = infer_single_active_mcp_selection(agent)
+    if inferred_mcp:
+        mcp = inferred_mcp
+        if not system and inferred_system:
+            system = inferred_system
+    return mcp, config, system
+
+
 def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedAgent, agent: Agent) -> bool:
     """When the agent has exactly one active MCP, set metadata mcp/system (same keys as v1 official assign)."""
     prefetched = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")

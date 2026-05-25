@@ -3,7 +3,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -35,7 +35,7 @@ from nexus.inline_agents.api.services.official_catalog import (
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
-from nexus.inline_agents.models import Agent, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, IntegratedAgent
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.api.serializers import ProjectMinimalSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -96,6 +96,14 @@ def _parse_multi_agents_bool(raw) -> tuple[bool | None, str | None]:
 logger = logging.getLogger(__name__)
 
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
+
+_INLINE_AGENT_MCP_PREFETCH = Prefetch(
+    "mcps",
+    queryset=MCP.objects.filter(is_active=True)
+    .select_related("system")
+    .prefetch_related("config_options", "credential_templates")
+    .order_by("order", "name"),
+)
 
 
 class PushAgents(APIView):
@@ -459,9 +467,16 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
                 return Response({"error": str(e)}, status=404)
 
         try:
+            from nexus.usecases.inline_agents.assign import resolve_assignment_mcp_fields
+
+            agent = Agent.objects.prefetch_related(_INLINE_AGENT_MCP_PREFETCH).get(uuid=real_agent_uuid)
+            mcp, mcp_config, system = resolve_assignment_mcp_fields(agent, mcp, mcp_config, system)
+
             created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
             self._update_agent_metadata(integrated_agent, mcp, mcp_config, system)
             return {"assigned": True, "assigned_created": created, "real_agent_uuid": real_agent_uuid}
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
 

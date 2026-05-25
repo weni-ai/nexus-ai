@@ -652,6 +652,54 @@ class OfficialAgentsV1AssignCredentialsTestCase(TestCase):
         self.assertEqual(integrated.metadata.get("system"), self.system.slug)
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_custom_agent_assign_persists_mcp_config_without_explicit_mcp(self, mock_has_permission):
+        """Custom agents with one MCP can assign constants via mcp_config only."""
+        mock_has_permission.return_value = True
+        system = AgentSystem.objects.create(name="VTEX Custom", slug="vtex-custom-mcp-config-test")
+        mcp = MCP.objects.create(
+            name="Product Concierge MCP",
+            slug="product-concierge-mcp-config-test",
+            system=system,
+        )
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="country",
+            label="Country",
+            type=MCPConfigOption.TEXT,
+        )
+        custom_agent = InlineAgent.objects.create(
+            name="Product Concierge Constants",
+            slug="product_concierge_constants_test",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+            is_official=False,
+        )
+        custom_agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=custom_agent)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = self._post_v1_assign(
+            client,
+            str(self.project.uuid),
+            str(custom_agent.uuid),
+            {
+                "assigned": True,
+                "mcp_config": {"country": "BRA", "trade_policy": "1"},
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.json())
+        integrated = IntegratedAgent.objects.get(agent=custom_agent, project=self.project)
+        self.assertEqual(integrated.metadata.get("mcp"), mcp.name)
+        self.assertEqual(integrated.metadata.get("system"), system.slug)
+        self.assertEqual(
+            integrated.metadata.get("mcp_config"),
+            {"country": "BRA", "trade_policy": "1"},
+        )
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_v1_official_list_group_includes_credentials_templates(self, mock_has_permission):
         mock_has_permission.return_value = True
         owner = ProjectFactory()
