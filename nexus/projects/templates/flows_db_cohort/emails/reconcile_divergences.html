@@ -1,16 +1,88 @@
 <p>Olá,</p>
 <p>A reconciliação entre Flows e o banco de conversas encontrou <strong>divergências</strong> no período abaixo.</p>
 <ul>
-  <li><strong>Projeto:</strong> {{ project_id }}</li>
-  <li><strong>Período:</strong> {{ range_from }} – {{ range_to }}</li>
+  <li><strong>Projeto:</strong> {{ project_display }}</li>
+  <li><strong>Período:</strong> {{ period_display }}</li>
   <li><strong>Dias analisados:</strong> {{ days_in_range }}</li>
 </ul>
+<p><strong>Resumo do período</strong></p>
+<ul>
+  <li><strong>Eventos de classificação no Flows:</strong> {{ range_totals.total_flows_events }}</li>
+  <li><strong>Conversas no banco:</strong> {{ range_totals.total_database_conversations }}</li>
+  <li><strong>Só no Flows:</strong> {{ range_totals.total_only_in_flows }} | <strong>Só no banco:</strong> {{ range_totals.total_only_in_database }}</li>
+</ul>
+<p><strong>Amostra de UUIDs divergentes no período</strong> (máximo {{ uuid_sample_limit }} por lado)</p>
+{% if divergent_ids.only_in_flows.total %}
+<p><strong>Só no Flows</strong>{% if divergent_ids.only_in_flows.truncated %} — amostra de {{ divergent_ids.only_in_flows.sample|length }} de {{ divergent_ids.only_in_flows.total }}{% else %} — {{ divergent_ids.only_in_flows.total }}{% endif %}</p>
+<ul>
+  {% for uuid in divergent_ids.only_in_flows.sample %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p><strong>Só no Flows:</strong> nenhum</p>
+{% endif %}
+{% if divergent_ids.only_in_database.total %}
+<p><strong>Só no banco</strong>{% if divergent_ids.only_in_database.truncated %} — amostra de {{ divergent_ids.only_in_database.sample|length }} de {{ divergent_ids.only_in_database.total }}{% else %} — {{ divergent_ids.only_in_database.total }}{% endif %}</p>
+<ul>
+  {% for uuid in divergent_ids.only_in_database.sample %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p><strong>Só no banco:</strong> nenhum</p>
+{% endif %}
+<p><em>Lista completa no Sentry quando houver mais de {{ uuid_sample_limit }} itens em algum lado.</em></p>
+<p><strong>Detalhamento por dia</strong></p>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+  <thead>
+    <tr>
+      <th>Dia</th>
+      <th>Flows</th>
+      <th>Banco</th>
+      <th>Só Flows</th>
+      <th>Só banco</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in day_stats %}
+    <tr>
+      <td>{{ row.day_display }}</td>
+      {% if row.status == "error" %}
+      <td colspan="4">{{ row.error }}</td>
+      {% else %}
+      <td>{{ row.flows_count }}</td>
+      <td>{{ row.database_count }}</td>
+      <td>{{ row.only_in_flows }}</td>
+      <td>{{ row.only_in_database }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p><strong>Divergências por dia</strong></p>
 {% for item in divergent_days %}
-<h3>Dia {{ item.day }}</h3>
+<h3>Dia {{ item.day_display }}</h3>
 <ul>
   {% for line in item.bullets %}
   <li>{{ line }}</li>
   {% endfor %}
 </ul>
+{% if item.id_lists.only_in_flows.total %}
+<p><strong>UUIDs só no Flows</strong>{% if item.id_lists.only_in_flows.truncated %} — amostra de {{ item.id_lists.only_in_flows.sample|length }} de {{ item.id_lists.only_in_flows.total }}{% else %} — {{ item.id_lists.only_in_flows.total }}{% endif %}</p>
+<ul>
+  {% for uuid in item.id_lists.only_in_flows.sample %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% if item.id_lists.only_in_database.total %}
+<p><strong>UUIDs só no banco</strong>{% if item.id_lists.only_in_database.truncated %} — amostra de {{ item.id_lists.only_in_database.sample|length }} de {{ item.id_lists.only_in_database.total }}{% else %} — {{ item.id_lists.only_in_database.total }}{% endif %}</p>
+<ul>
+  {% for uuid in item.id_lists.only_in_database.sample %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% endif %}
 {% endfor %}
 <p>Revise os itens acima e trate as inconsistências indicadas. A equipe técnica dispõe do relatório completo no Sentry para análise detalhada.</p>

@@ -2,8 +2,8 @@ Olá,
 
 Não foi possível concluir a reconciliação entre Flows e o banco de conversas.
 
-Projeto: {{ project_id }}
-Período: {{ date_start }} – {{ date_end }}
+Projeto: {{ project_display }}
+Período: {{ period_display }}
 
 Erro:
 {{ error_message }}

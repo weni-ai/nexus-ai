@@ -300,7 +300,7 @@ def detail_compare_flows_to_db(  # noqa: C901
     mismatch_sample_limit: int,
     *,
     conv_by_lower: dict[str, tuple[str | None, str | None]],
-) -> tuple[dict[str, int], list[dict[str, Any]]]:
+) -> tuple[dict[str, int], list[dict[str, Any]], list[str]]:
     stats: dict[str, int] = {
         "conversations_compared": len(events),
         "not_found_in_database": 0,
@@ -314,6 +314,7 @@ def detail_compare_flows_to_db(  # noqa: C901
         "missing_conversation_id_in_flows": 0,
     }
     mismatches: list[dict[str, Any]] = []
+    ids_timestamp_differ: list[str] = []
 
     rows: list[tuple[dict[str, Any], dict[str, Any], UUID]] = []
     for ev in events:
@@ -368,6 +369,7 @@ def detail_compare_flows_to_db(  # noqa: C901
         if sm_ok and em_ok:
             stats["matching_start_and_end_times"] += 1
         elif not (sm_ok and em_ok):
+            ids_timestamp_differ.append(u)
             if len(mismatches) < mismatch_sample_limit:
                 mismatches.append(
                     {
@@ -379,7 +381,7 @@ def detail_compare_flows_to_db(  # noqa: C901
                     }
                 )
 
-    return stats, mismatches
+    return stats, mismatches, sorted(ids_timestamp_differ)
 
 
 def _flow_uuids_from_events(events: list[dict[str, Any]]) -> set[str]:
@@ -409,6 +411,8 @@ def bidirectional_uuid_sets(
         "unique_ids_in_database_cohort": len(db_uuids),
         "count_only_in_flows": len(in_flows_not_in_db),
         "count_only_in_database": len(in_db_not_in_flows),
+        "ids_only_in_flows": in_flows_not_in_db,
+        "ids_only_in_database": in_db_not_in_flows,
         "example_ids_only_in_flows": in_flows_not_in_db[:uuid_sample_limit],
         "example_ids_only_in_database": in_db_not_in_flows[:uuid_sample_limit],
     }
@@ -463,7 +467,9 @@ def run_flows_db_cohort_reconcile(cfg: dict[str, Any]) -> dict[str, Any]:
     export = fetch_db_cohort_export(cfg)
     db_uuids, conv_by_lower = load_db_cohort_from_export(export, flow_uuids_for_timestamps=flow_uuids)
     database_totals = build_db_cohort_summary(export)
-    stats, mismatches = detail_compare_flows_to_db(cohort, cfg, mismatch_sample_limit, conv_by_lower=conv_by_lower)
+    stats, mismatches, ids_timestamp_differ = detail_compare_flows_to_db(
+        cohort, cfg, mismatch_sample_limit, conv_by_lower=conv_by_lower
+    )
     bidir = bidirectional_uuid_sets(cohort, db_uuids, uuid_sample_limit)
 
     return {
@@ -480,6 +486,7 @@ def run_flows_db_cohort_reconcile(cfg: dict[str, Any]) -> dict[str, Any]:
             "examples_where_timestamps_differ": mismatches,
         },
         "id_comparison_between_flows_and_database": bidir,
+        "ids_timestamp_differ": ids_timestamp_differ,
     }
 
 
@@ -510,6 +517,9 @@ def run_flows_db_cohort_reconcile_range(base_cfg: dict[str, Any]) -> dict[str, A
                     "count_only_in_database": result["id_comparison_between_flows_and_database"][
                         "count_only_in_database"
                     ],
+                    "ids_only_in_flows": result["id_comparison_between_flows_and_database"]["ids_only_in_flows"],
+                    "ids_only_in_database": result["id_comparison_between_flows_and_database"]["ids_only_in_database"],
+                    "ids_timestamp_differ": result.get("ids_timestamp_differ", []),
                 }
             )
         except Exception as exc:

@@ -4,8 +4,17 @@ A reconciliação entre os eventos de classificação do Flows e as conversas re
 
 Resultado: não foram identificadas divergências entre Flows e banco de dados (IDs ausentes em um dos lados ou diferença de início/fim das conversas).
 
-Projeto: {{ project_id }}
-Período analisado: {{ range_from }} – {{ range_to }}
+Projeto: {{ project_display }}
+Período analisado: {{ period_display }}
 Dias analisados: {{ days_in_range }}
+
+Resumo do período
+- Eventos de classificação no Flows: {{ range_totals.total_flows_events }}
+- Conversas no banco: {{ range_totals.total_database_conversations }}
+
+Detalhamento por dia
+{% for row in day_stats %}{% if row.status == "error" %}- {{ row.day_display }}: falha na análise — {{ row.error }}
+{% else %}- {{ row.day_display }}: Flows {{ row.flows_count }} | Banco {{ row.database_count }}
+{% endif %}{% endfor %}
 
 Nenhuma ação é necessária com base nesta verificação.

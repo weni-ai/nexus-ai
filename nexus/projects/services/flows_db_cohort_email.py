@@ -9,6 +9,7 @@ from django.template.loader import render_to_string
 
 from nexus.projects.services.flows_db_cohort_report_message import (
     build_email_context,
+    build_failure_email_context,
     publish_divergences_to_sentry,
     publish_technical_failure_to_sentry,
     report_has_divergences,
@@ -80,13 +81,13 @@ def send_reconcile_failure_email(
     )
     prefix = getattr(settings, "EMAIL_SUBJECT_PREFIX", "")
     subject = f"{prefix}Reconciliação Flows x banco: falha na execução"
-    context = {
-        "project_id": project_id,
-        "date_start": date_start,
-        "date_end": date_end,
-        "error_message": error_message,
-        "recipient_email": recipient_email,
-    }
+    context = build_failure_email_context(
+        recipient_email=recipient_email,
+        project_id=project_id,
+        date_start=date_start,
+        date_end=date_end,
+        error_message=error_message,
+    )
     return _send_html_email(
         subject=subject,
         to=recipient_email,
