@@ -2,38 +2,38 @@ Olá,
 
 A reconciliação entre Flows e o banco de conversas encontrou divergências no período abaixo.
 
-Projeto: {{ project_display }}
-Período: {{ period_display }}
-Dias analisados: {{ days_in_range }}
+Projeto: {{ project_label }}
+Período: {{ formatted_period }}
+Dias analisados: {{ days_analyzed }}
 
 Resumo do período
-- Eventos de classificação no Flows: {{ range_totals.total_flows_events }}
-- Conversas no banco: {{ range_totals.total_database_conversations }}
-- Só no Flows: {{ range_totals.total_only_in_flows }} | Só no banco: {{ range_totals.total_only_in_database }}
+- Eventos de classificação no Flows: {{ period_summary.flows_classification_events }}
+- Conversas no banco: {{ period_summary.database_conversations }}
+- Só no Flows: {{ period_summary.conversations_only_in_flows }} | Só no banco: {{ period_summary.conversations_only_in_database }}
 
-Amostra de UUIDs divergentes no período (máximo {{ uuid_sample_limit }} por lado)
-{% if divergent_ids.only_in_flows.total %}Só no Flows{% if divergent_ids.only_in_flows.truncated %} (amostra de {{ divergent_ids.only_in_flows.sample|length }} de {{ divergent_ids.only_in_flows.total }}){% else %} ({{ divergent_ids.only_in_flows.total }}){% endif %}:
-{% for uuid in divergent_ids.only_in_flows.sample %}- {{ uuid }}
+Amostra de UUIDs divergentes no período (máximo {{ max_uuids_per_side_in_email }} por lado)
+{% if period_divergent_uuid_samples.flows_only.total_count %}Só no Flows{% if period_divergent_uuid_samples.flows_only.is_truncated %} (amostra de {{ period_divergent_uuid_samples.flows_only.uuids|length }} de {{ period_divergent_uuid_samples.flows_only.total_count }}){% else %} ({{ period_divergent_uuid_samples.flows_only.total_count }}){% endif %}:
+{% for uuid in period_divergent_uuid_samples.flows_only.uuids %}- {{ uuid }}
 {% endfor %}{% else %}Só no Flows: nenhum
 {% endif %}
-{% if divergent_ids.only_in_database.total %}Só no banco{% if divergent_ids.only_in_database.truncated %} (amostra de {{ divergent_ids.only_in_database.sample|length }} de {{ divergent_ids.only_in_database.total }}){% else %} ({{ divergent_ids.only_in_database.total }}){% endif %}:
-{% for uuid in divergent_ids.only_in_database.sample %}- {{ uuid }}
+{% if period_divergent_uuid_samples.database_only.total_count %}Só no banco{% if period_divergent_uuid_samples.database_only.is_truncated %} (amostra de {{ period_divergent_uuid_samples.database_only.uuids|length }} de {{ period_divergent_uuid_samples.database_only.total_count }}){% else %} ({{ period_divergent_uuid_samples.database_only.total_count }}){% endif %}:
+{% for uuid in period_divergent_uuid_samples.database_only.uuids %}- {{ uuid }}
 {% endfor %}{% else %}Só no banco: nenhum
 {% endif %}
-Lista completa no Sentry quando houver mais de {{ uuid_sample_limit }} itens em algum lado.
+Lista completa no Sentry quando houver mais de {{ max_uuids_per_side_in_email }} itens em algum lado.
 
 Detalhamento por dia
-{% for row in day_stats %}{% if row.status == "error" %}- {{ row.day_display }}: falha — {{ row.error }}
-{% else %}- {{ row.day_display }}: Flows {{ row.flows_count }} | Banco {{ row.database_count }} | Só Flows {{ row.only_in_flows }} | Só banco {{ row.only_in_database }}
+{% for row in daily_rows %}{% if row.reconcile_status == "error" %}- {{ row.formatted_day }}: falha — {{ row.error_message }}
+{% else %}- {{ row.formatted_day }}: Flows {{ row.flows_classification_events }} | Banco {{ row.database_conversations }} | Só Flows {{ row.conversations_only_in_flows }} | Só banco {{ row.conversations_only_in_database }}
 {% endif %}{% endfor %}
 
 Divergências por dia
-{% for item in divergent_days %}--- Dia {{ item.day_display }} ---
-{% for line in item.bullets %}- {{ line }}
-{% endfor %}{% if item.id_lists.only_in_flows.total %}UUIDs só no Flows{% if item.id_lists.only_in_flows.truncated %} (amostra de {{ item.id_lists.only_in_flows.sample|length }} de {{ item.id_lists.only_in_flows.total }}){% else %} ({{ item.id_lists.only_in_flows.total }}){% endif %}:
-{% for uuid in item.id_lists.only_in_flows.sample %}- {{ uuid }}
-{% endfor %}{% endif %}{% if item.id_lists.only_in_database.total %}UUIDs só no banco{% if item.id_lists.only_in_database.truncated %} (amostra de {{ item.id_lists.only_in_database.sample|length }} de {{ item.id_lists.only_in_database.total }}){% else %} ({{ item.id_lists.only_in_database.total }}){% endif %}:
-{% for uuid in item.id_lists.only_in_database.sample %}- {{ uuid }}
+{% for day in divergence_days %}--- Dia {{ day.formatted_day }} ---
+{% for line in day.summary_lines %}- {{ line }}
+{% endfor %}{% if day.divergent_uuid_samples.flows_only.total_count %}UUIDs só no Flows{% if day.divergent_uuid_samples.flows_only.is_truncated %} (amostra de {{ day.divergent_uuid_samples.flows_only.uuids|length }} de {{ day.divergent_uuid_samples.flows_only.total_count }}){% else %} ({{ day.divergent_uuid_samples.flows_only.total_count }}){% endif %}:
+{% for uuid in day.divergent_uuid_samples.flows_only.uuids %}- {{ uuid }}
+{% endfor %}{% endif %}{% if day.divergent_uuid_samples.database_only.total_count %}UUIDs só no banco{% if day.divergent_uuid_samples.database_only.is_truncated %} (amostra de {{ day.divergent_uuid_samples.database_only.uuids|length }} de {{ day.divergent_uuid_samples.database_only.total_count }}){% else %} ({{ day.divergent_uuid_samples.database_only.total_count }}){% endif %}:
+{% for uuid in day.divergent_uuid_samples.database_only.uuids %}- {{ uuid }}
 {% endfor %}{% endif %}
 {% endfor %}
 Revise os itens acima e trate as inconsistências indicadas. A equipe técnica dispõe do relatório completo no Sentry para análise detalhada.

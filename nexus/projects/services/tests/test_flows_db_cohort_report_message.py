@@ -1,13 +1,13 @@
 from unittest import mock
 
 from nexus.projects.services.flows_db_cohort_report_message import (
-    aggregate_range_totals,
+    aggregate_period_summary_counts,
     build_email_context,
     build_failure_email_context,
+    build_truncated_uuid_list,
     day_divergence_bullets,
     format_email_day_label,
     format_email_period_pt_br,
-    prepare_email_id_sample,
     report_has_divergences,
 )
 
@@ -88,21 +88,21 @@ def test_day_divergence_bullets_pt_br():
 def test_build_email_context_lists_only_divergent_days(_mock_name):
     ctx = build_email_context(_divergent_report(), "user@example.com")
     assert ctx["has_divergences"] is True
-    assert len(ctx["divergent_days"]) == 1
-    assert ctx["divergent_days"][0]["day"] == "2026-01-11"
-    flows_sample = ctx["divergent_days"][0]["id_lists"]["only_in_flows"]
-    assert flows_sample["sample"] == ["aaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
-    assert flows_sample["total"] == 1
-    assert flows_sample["truncated"] is False
-    assert ctx["uuid_sample_limit"] == 10
+    assert len(ctx["divergence_days"]) == 1
+    assert ctx["divergence_days"][0]["calendar_day"] == "2026-01-11"
+    flows_sample = ctx["divergence_days"][0]["divergent_uuid_samples"]["flows_only"]
+    assert flows_sample["uuids"] == ["aaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
+    assert flows_sample["total_count"] == 1
+    assert flows_sample["is_truncated"] is False
+    assert ctx["max_uuids_per_side_in_email"] == 10
 
 
-def test_prepare_email_id_sample_truncates_at_limit():
+def test_build_truncated_uuid_list_truncates_at_limit():
     ids = [f"uuid-{i:02d}" for i in range(15)]
-    result = prepare_email_id_sample(ids, limit=10)
-    assert len(result["sample"]) == 10
-    assert result["total"] == 15
-    assert result["truncated"] is True
+    result = build_truncated_uuid_list(ids, max_items=10)
+    assert len(result["uuids"]) == 10
+    assert result["total_count"] == 15
+    assert result["is_truncated"] is True
 
 
 @mock.patch(
@@ -112,16 +112,15 @@ def test_prepare_email_id_sample_truncates_at_limit():
 def test_build_email_context_ok_when_aligned(_mock_name):
     ctx = build_email_context(_aligned_report(), "user@example.com")
     assert ctx["has_divergences"] is False
-    assert ctx["divergent_days"] == []
-    assert ctx["range_totals"]["total_flows_events"] == 10
-    assert ctx["range_totals"]["total_database_conversations"] == 10
-    assert "total_matching_timestamps" not in ctx["range_totals"]
-    assert len(ctx["day_stats"]) == 1
-    assert ctx["day_stats"][0]["flows_count"] == 10
+    assert ctx["divergence_days"] == []
+    assert ctx["period_summary"]["flows_classification_events"] == 10
+    assert ctx["period_summary"]["database_conversations"] == 10
+    assert len(ctx["daily_rows"]) == 1
+    assert ctx["daily_rows"][0]["flows_classification_events"] == 10
     assert ctx["project_name"] == "Projeto Teste"
-    assert ctx["project_display"] == "Projeto Teste (p1)"
-    assert ctx["period_display"] == "10/01/2026"
-    assert ctx["day_stats"][0]["day_display"] == "10/01/2026"
+    assert ctx["project_label"] == "Projeto Teste (p1)"
+    assert ctx["formatted_period"] == "10/01/2026"
+    assert ctx["daily_rows"][0]["formatted_day"] == "10/01/2026"
 
 
 def test_format_email_period_pt_br_range():
@@ -152,12 +151,12 @@ def test_build_failure_email_context(_mock_name):
         date_end="2026-05-12T23:59:59Z",
         error_message="erro",
     )
-    assert ctx["project_display"] == "Loja ACME (uuid-1)"
-    assert ctx["period_display"] == "06/05/2026 a 12/05/2026"
+    assert ctx["project_label"] == "Loja ACME (uuid-1)"
+    assert ctx["formatted_period"] == "06/05/2026 a 12/05/2026"
 
 
-def test_aggregate_range_totals_sums_days():
-    totals = aggregate_range_totals(_divergent_report()["day_summaries"])
-    assert totals["total_flows_events"] == 13
-    assert totals["total_database_conversations"] == 12
-    assert totals["total_only_in_flows"] == 1
+def test_aggregate_period_summary_counts_sums_days():
+    totals = aggregate_period_summary_counts(_divergent_report()["day_summaries"])
+    assert totals["flows_classification_events"] == 13
+    assert totals["database_conversations"] == 12
+    assert totals["conversations_only_in_flows"] == 1

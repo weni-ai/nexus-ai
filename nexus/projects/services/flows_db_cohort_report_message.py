@@ -67,7 +67,7 @@ def resolve_project_email_fields(project_id: str | None) -> dict[str, str | None
     """Load project name from nexus-ai DB; fall back to UUID only."""
     pid = str(project_id or "").strip()
     if not pid:
-        return {"project_id": "", "project_name": None, "project_display": ""}
+        return {"project_uuid": "", "project_name": None, "project_label": ""}
 
     project_name: str | None = None
     try:
@@ -75,22 +75,22 @@ def resolve_project_email_fields(project_id: str | None) -> dict[str, str | None
     except Exception:
         project_name = None
 
-    display = f"{project_name} ({pid})" if project_name else pid
-    return {"project_id": pid, "project_name": project_name, "project_display": display}
+    label = f"{project_name} ({pid})" if project_name else pid
+    return {"project_uuid": pid, "project_name": project_name, "project_label": label}
 
 
-def day_stats_row(day: dict[str, Any]) -> dict[str, Any]:
+def build_daily_comparison_row(day: dict[str, Any]) -> dict[str, Any]:
     """Per-day counts for admin emails (Flows events vs DB cohort)."""
-    day_key = day.get("day")
+    calendar_day = day.get("day")
     return {
-        "day": day_key,
-        "day_display": format_email_day_label(day_key),
-        "status": day.get("status"),
-        "flows_count": int(day.get("flows_events_inside_selected_dates", 0)),
-        "database_count": int(day.get("conversations_inside_date_rules", 0)),
-        "only_in_flows": int(day.get("count_only_in_flows", 0)),
-        "only_in_database": int(day.get("count_only_in_database", 0)),
-        "error": day.get("error"),
+        "calendar_day": calendar_day,
+        "formatted_day": format_email_day_label(calendar_day),
+        "reconcile_status": day.get("status"),
+        "flows_classification_events": int(day.get("flows_events_inside_selected_dates", 0)),
+        "database_conversations": int(day.get("conversations_inside_date_rules", 0)),
+        "conversations_only_in_flows": int(day.get("count_only_in_flows", 0)),
+        "conversations_only_in_database": int(day.get("count_only_in_database", 0)),
+        "error_message": day.get("error"),
     }
 
 
@@ -98,7 +98,7 @@ def _sorted_unique_ids(values: list[str]) -> list[str]:
     return sorted({str(v).strip() for v in values if v})
 
 
-def email_uuid_sample_limit() -> int:
+def max_uuids_per_side_in_email() -> int:
     try:
         from django.conf import settings as django_settings
 
@@ -107,50 +107,50 @@ def email_uuid_sample_limit() -> int:
         return 10
 
 
-def prepare_email_id_sample(ids: list[str], *, limit: int | None = None) -> dict[str, Any]:
-    """Up to ``limit`` UUIDs for admin email; full totals kept for context."""
-    cap = email_uuid_sample_limit() if limit is None else limit
-    ordered = _sorted_unique_ids(ids)
-    total = len(ordered)
+def build_truncated_uuid_list(conversation_uuids: list[str], *, max_items: int | None = None) -> dict[str, Any]:
+    """UUID list for admin email with total count when truncated."""
+    cap = max_uuids_per_side_in_email() if max_items is None else max_items
+    ordered = _sorted_unique_ids(conversation_uuids)
+    total_count = len(ordered)
     return {
-        "sample": ordered[:cap],
-        "total": total,
-        "truncated": total > cap,
-        "limit": cap,
+        "uuids": ordered[:cap],
+        "total_count": total_count,
+        "is_truncated": total_count > cap,
+        "max_items": cap,
     }
 
 
-def email_id_lists_for_period(day_summaries: list[dict[str, Any]]) -> dict[str, Any]:
-    """Divergent UUID samples for the whole period (Flows and banco, max 10 each)."""
-    only_flows: list[str] = []
-    only_db: list[str] = []
+def build_period_divergent_uuid_samples(day_summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Divergent conversation UUID samples for the whole period (max per side)."""
+    flows_only_uuids: list[str] = []
+    database_only_uuids: list[str] = []
     for day in day_summaries:
         if day.get("status") == "error":
             continue
-        only_flows.extend(day.get("ids_only_in_flows") or [])
-        only_db.extend(day.get("ids_only_in_database") or [])
+        flows_only_uuids.extend(day.get("ids_only_in_flows") or [])
+        database_only_uuids.extend(day.get("ids_only_in_database") or [])
     return {
-        "only_in_flows": prepare_email_id_sample(only_flows),
-        "only_in_database": prepare_email_id_sample(only_db),
+        "flows_only": build_truncated_uuid_list(flows_only_uuids),
+        "database_only": build_truncated_uuid_list(database_only_uuids),
     }
 
 
-def email_id_lists_for_day(day: dict[str, Any]) -> dict[str, Any]:
-    """Divergent UUID samples for one day (Flows and banco, max 10 each)."""
+def build_daily_divergent_uuid_samples(day: dict[str, Any]) -> dict[str, Any]:
+    """Divergent conversation UUID samples for one calendar day (max per side)."""
     return {
-        "only_in_flows": prepare_email_id_sample(list(day.get("ids_only_in_flows") or [])),
-        "only_in_database": prepare_email_id_sample(list(day.get("ids_only_in_database") or [])),
+        "flows_only": build_truncated_uuid_list(list(day.get("ids_only_in_flows") or [])),
+        "database_only": build_truncated_uuid_list(list(day.get("ids_only_in_database") or [])),
     }
 
 
-def aggregate_range_totals(day_summaries: list[dict[str, Any]]) -> dict[str, int]:
-    """Sum counts across days that completed (exclude error rows)."""
-    rows = [day_stats_row(d) for d in day_summaries if d.get("status") != "error"]
+def aggregate_period_summary_counts(day_summaries: list[dict[str, Any]]) -> dict[str, int]:
+    """Sum reconcile counts across days that completed (exclude error rows)."""
+    rows = [build_daily_comparison_row(d) for d in day_summaries if d.get("status") != "error"]
     return {
-        "total_flows_events": sum(r["flows_count"] for r in rows),
-        "total_database_conversations": sum(r["database_count"] for r in rows),
-        "total_only_in_flows": sum(r["only_in_flows"] for r in rows),
-        "total_only_in_database": sum(r["only_in_database"] for r in rows),
+        "flows_classification_events": sum(r["flows_classification_events"] for r in rows),
+        "database_conversations": sum(r["database_conversations"] for r in rows),
+        "conversations_only_in_flows": sum(r["conversations_only_in_flows"] for r in rows),
+        "conversations_only_in_database": sum(r["conversations_only_in_database"] for r in rows),
     }
 
 
@@ -183,43 +183,43 @@ def day_divergence_bullets(day: dict[str, Any]) -> list[str]:
 def build_email_context(report: dict[str, Any], recipient_email: str) -> dict[str, Any]:
     """Template context for admin-facing reconcile emails (PT-BR)."""
     requested = report.get("requested_range") or {}
-    divergent_days: list[dict[str, Any]] = []
+    divergence_days: list[dict[str, Any]] = []
     for day in report.get("day_summaries", []):
-        bullets = day_divergence_bullets(day)
-        if bullets:
-            day_key = day.get("day")
-            divergent_days.append(
+        summary_lines = day_divergence_bullets(day)
+        if summary_lines:
+            calendar_day = day.get("day")
+            divergence_days.append(
                 {
-                    "day": day_key,
-                    "day_display": format_email_day_label(day_key),
-                    "from_inclusive": day.get("from_inclusive"),
-                    "to_inclusive": day.get("to_inclusive"),
-                    "bullets": bullets,
-                    "id_lists": email_id_lists_for_day(day),
+                    "calendar_day": calendar_day,
+                    "formatted_day": format_email_day_label(calendar_day),
+                    "window_start_iso": day.get("from_inclusive"),
+                    "window_end_iso": day.get("to_inclusive"),
+                    "summary_lines": summary_lines,
+                    "divergent_uuid_samples": build_daily_divergent_uuid_samples(day),
                 }
             )
 
     day_summaries = report.get("day_summaries") or []
-    day_stats = [day_stats_row(d) for d in day_summaries]
-    range_totals = aggregate_range_totals(day_summaries)
+    daily_rows = [build_daily_comparison_row(d) for d in day_summaries]
+    period_summary = aggregate_period_summary_counts(day_summaries)
     project_fields = resolve_project_email_fields(report.get("project_id"))
-    range_from = requested.get("from_inclusive")
-    range_to = requested.get("to_inclusive")
+    period_start_iso = requested.get("from_inclusive")
+    period_end_iso = requested.get("to_inclusive")
 
     return {
         "recipient_email": recipient_email,
         **project_fields,
-        "range_from": range_from,
-        "range_to": range_to,
-        "period_display": format_email_period_pt_br(range_from, range_to),
-        "days_in_range": report.get("days_in_range"),
+        "period_start_iso": period_start_iso,
+        "period_end_iso": period_end_iso,
+        "formatted_period": format_email_period_pt_br(period_start_iso, period_end_iso),
+        "days_analyzed": report.get("days_in_range"),
         "overall_status": report.get("overall_status"),
-        "divergent_days": divergent_days,
-        "has_divergences": bool(divergent_days),
-        "range_totals": range_totals,
-        "day_stats": day_stats,
-        "divergent_ids": email_id_lists_for_period(day_summaries),
-        "uuid_sample_limit": email_uuid_sample_limit(),
+        "divergence_days": divergence_days,
+        "has_divergences": bool(divergence_days),
+        "period_summary": period_summary,
+        "daily_rows": daily_rows,
+        "period_divergent_uuid_samples": build_period_divergent_uuid_samples(day_summaries),
+        "max_uuids_per_side_in_email": max_uuids_per_side_in_email(),
     }
 
 
@@ -236,9 +236,9 @@ def build_failure_email_context(
     return {
         "recipient_email": recipient_email,
         **project_fields,
-        "date_start": date_start,
-        "date_end": date_end,
-        "period_display": format_email_period_pt_br(date_start, date_end),
+        "period_start_iso": date_start,
+        "period_end_iso": date_end,
+        "formatted_period": format_email_period_pt_br(date_start, date_end),
         "error_message": error_message,
     }
 
