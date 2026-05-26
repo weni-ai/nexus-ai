@@ -1805,8 +1805,9 @@ class InstructionsClassificationAPIView(APIView):
         operation_id="instruction_classify",
         summary="Classify instruction",
         description=(
-            "Classifies an instruction based on the project's existing content base instructions. "
-            "Returns suggested categories and an improvement suggestion."
+            "Classifies an instruction based on the project description, available categories, "
+            "and existing content base instructions. Returns classification, suggested category, "
+            "and an improvement suggestion."
         ),
         request=InstructionClassificationRequestSerializer,
         parameters=[
@@ -1834,6 +1835,7 @@ class InstructionsClassificationAPIView(APIView):
             serializer = InstructionClassificationRequestSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             instruction = serializer.validated_data["instruction"]
+            instructions_categories = serializer.validated_data["instructions_categories"]
             language = serializer.validated_data["language"]
 
             user = request.user
@@ -1843,6 +1845,7 @@ class InstructionsClassificationAPIView(APIView):
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
             project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            project_description = content_base.intelligence.description or ""
 
             goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
             adjective = content_base.agent.personality if content_base.agent else "friendly"
@@ -1855,17 +1858,26 @@ class InstructionsClassificationAPIView(APIView):
 
             lambda_usecase = LambdaUseCase()
 
-            classification, suggestion = lambda_usecase.instruction_classify(
+            classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
                 name=name,
                 occupation=occupation,
                 goal=goal,
                 adjective=adjective,
                 instructions=instructions,
                 instruction_to_classify=instruction,
+                instructions_categories=instructions_categories,
                 language=language,
+                project_description=project_description,
             )
 
-            return Response({"classification": classification, "suggestion": suggestion}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "classification": classification,
+                    "suggested_category": suggested_category,
+                    "suggestion": suggestion,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             sentry_sdk.capture_exception(e)

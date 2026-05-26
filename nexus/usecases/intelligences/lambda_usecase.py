@@ -576,7 +576,9 @@ class LambdaUseCase:
         adjective: str,
         instructions: list,
         instruction_to_classify: str,
+        instructions_categories: list,
         language: str,
+        project_description: str,
     ):
         try:
             instructions_payload = {
@@ -586,7 +588,9 @@ class LambdaUseCase:
                 "adjective": adjective,
                 "instructions": instructions,
                 "instruction_to_classify": instruction_to_classify,
+                "instructions_categories": instructions_categories,
                 "language": language,
+                "project_description": project_description,
             }
 
             response = self.invoke_lambda(
@@ -648,6 +652,7 @@ class LambdaUseCase:
 
             classification_data = response_data.get("classifications") or response_data.get("classification", [])
             suggestion = response_data.get("suggestion")
+            suggested_category = response_data.get("suggested_category") or ""
             reason = response_data.get("reason", "")
 
             # Normalize classification data to consistent format
@@ -660,7 +665,7 @@ class LambdaUseCase:
                     if isinstance(name, str) and name.strip().lower() == "correct":
                         classification = []
 
-            return classification, suggestion
+            return classification, suggestion, suggested_category
 
         except Exception as e:
             sentry_sdk.capture_exception(e)

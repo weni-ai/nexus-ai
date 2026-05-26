@@ -424,6 +424,12 @@ class InstructionClassificationRequestSerializer(serializers.Serializer):
         required=True,
         help_text=("Instruction text to classify against existing content base instructions."),
     )
+    instructions_categories = serializers.ListField(
+        child=serializers.CharField(),
+        required=True,
+        allow_empty=True,
+        help_text="Instruction category names available for classification.",
+    )
     language = serializers.CharField(
         required=True,
         help_text=("Language code for classification context (e.g., pt-br, en, es)."),
@@ -449,6 +455,11 @@ class InstructionClassificationResponseSerializer(serializers.Serializer):
     classification = ClassificationItemSerializer(
         many=True,
         help_text="Classifications for the instruction; each has category and optional reason.",
+    )
+    suggested_category = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Suggested instruction category returned by classification",
     )
     suggestion = serializers.CharField(
         required=False,
