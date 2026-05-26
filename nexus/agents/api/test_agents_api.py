@@ -17,6 +17,7 @@ from nexus.inline_agents.models import (
     AgentSystem,
     IntegratedAgent,
     MCPConfigOption,
+    MCPCredentialTemplate,
     Version,
 )
 from nexus.inline_agents.models import Agent as InlineAgent
@@ -121,6 +122,51 @@ class AgentViewsetSetTestCase(TestCase):
         row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
         self.assertEqual(row["name"], "Product Concierge")
 
+    def test_get_my_agents_includes_mcp_definition(self):
+        system = AgentSystem.objects.create(name="Test MCP System", slug="test-mcp-system-my-agents-xyz")
+        mcp = MCP.objects.create(name="Test MCP", slug="test-mcp-my-agents-xyz", system=system)
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="REGION_TOGGLE",
+            label="Regionalization",
+            type=MCPConfigOption.SWITCH,
+            options=[],
+            is_required=False,
+            default_value=True,
+        )
+        MCPCredentialTemplate.objects.create(
+            mcp=mcp,
+            name="SYNERISE_API_TOKEN",
+            label="Synerise API Key",
+            placeholder="your-api-key-here",
+            is_confidential=True,
+        )
+        agent_with_mcp = InlineAgent.objects.create(
+            name="Concierge With MCP",
+            slug="concierge-mcp-my-agents-xyz",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent_with_mcp.mcps.add(mcp)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        self.assertEqual(response.status_code, 200)
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_with_mcp.uuid))
+        self.assertIn("mcp_definition", row)
+        self.assertEqual(len(row["mcp_definition"]["config"]), 1)
+        self.assertEqual(row["mcp_definition"]["config"][0]["name"], "REGION_TOGGLE")
+        self.assertEqual(len(row["mcp_definition"]["credentials"]), 1)
+        self.assertEqual(row["mcp_definition"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
+        cred_names = {c["name"] for c in row["credentials"]}
+        self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
+
 
 class TeamViewsetSetTestCase(TestCase):
     def setUp(self) -> None:
@@ -174,9 +220,21 @@ class TeamViewsetSetTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content["agents"]), 1)
-        self.assertEqual(content["agents"][0].get("uuid"), str(agent.uuid))
-        self.assertEqual(content["agents"][0].get("name"), agent.name)
-        self.assertTrue(content["agents"][0].get("active", True))
+        row = content["agents"][0]
+        self.assertEqual(row.get("uuid"), str(agent.uuid))
+        self.assertEqual(row.get("slug"), agent.slug)
+        self.assertEqual(row.get("name"), agent.name)
+        self.assertTrue(row.get("active", True))
+        self.assertNotIn("id", row)
+        self.assertNotIn("skills", row)
+        self.assertNotIn("description", row)
+        self.assertNotIn("mcp", row)
+        self.assertIsNone(row["mcps"])
+        self.assertEqual(
+            row["about"],
+            {"en": "Test Agent Description", "pt": None, "es": None},
+        )
+        self.assertIsNone(row.get("group"))
 
     def test_get_team_excludes_inactive_integrated_agents(self):
         """Agents with is_active=False on IntegratedAgent do not appear in team list."""
@@ -245,15 +303,15 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(about["pt"], "About PT")
         self.assertEqual(about["es"], "About ES")
         self.assertNotIn("presentation", row)
-        self.assertNotIn("mcp", row)
-        self.assertNotIn("skills", row)
+        self.assertIsNone(row["mcps"])
+        self.assertEqual(row.get("group"), group.slug)
 
-    def test_get_team_about_matches_catalog_shape_without_group(self):
+    def test_get_team_about_from_collaboration_instructions_without_group(self):
         agent = InlineAgent.objects.create(
             name="No Group Agent",
             slug="no_group_team_agent",
             instruction="Test",
-            collaboration_instructions="Team about fallback",
+            collaboration_instructions="Custom agent about text",
             foundation_model="model:version",
             project=self.project,
         )
@@ -267,12 +325,13 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = content["agents"][0]
-        self.assertEqual(row["about"]["en"], "Team about fallback")
-        self.assertIsNone(row["about"]["pt"])
-        self.assertIsNone(row["about"]["es"])
+        self.assertEqual(
+            row["about"],
+            {"en": "Custom agent about text", "pt": None, "es": None},
+        )
 
     def test_get_team_mcp_description_locale_map(self):
-        """Team rows expose MCPs in ``mcps`` with localized description (same as catalog APIs)."""
+        """Team rows expose only the configured MCP inside ``mcps`` (one-element array)."""
         system = AgentSystem.objects.create(name="Team MCP System", slug="team-mcp-sys-unique")
         mcp = MCP.objects.create(
             name="Team Catalog MCP",
@@ -310,11 +369,56 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = next(m for m in row["mcps"] if m["name"] == "Team Catalog MCP")
+        self.assertEqual(len(row["mcps"]), 1)
+        mcp_payload = row["mcps"][0]
+        self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        self.assertIsNone(mcp_payload["config"])
+        self.assertEqual(mcp_payload["system"], system.name)
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
         self.assertEqual(desc["pt"], "Portuguese MCP")
         self.assertEqual(desc["es"], "Spanish MCP")
+
+    def test_get_team_mcps_from_mcp_config_only_metadata(self):
+        """Expose configured constants when metadata has mcp_config but no explicit mcp key yet."""
+        system = AgentSystem.objects.create(name="Team Config System", slug="team-config-sys-unique")
+        mcp = MCP.objects.create(
+            name="Team Config MCP",
+            slug="team-config-mcp-unique",
+            system=system,
+        )
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="country",
+            label="Country",
+            type=MCPConfigOption.TEXT,
+        )
+        agent = InlineAgent.objects.create(
+            name="Config Only Agent",
+            slug="team-config-only-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        IntegratedAgent.objects.create(
+            agent=agent,
+            project=self.project,
+            metadata={"mcp_config": {"country": "BRA"}},
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
+        self.assertEqual(len(row["mcps"]), 1)
+        self.assertEqual(row["mcps"][0]["name"], "Team Config MCP")
+        self.assertEqual(row["mcps"][0]["config"], {"Country": "BRA"})
 
 
 class ActivateAgentViewTestCase(TestCase):
@@ -417,127 +521,262 @@ class ActivateAgentViewTestCase(TestCase):
         self.assertIn("Integrated agent not found", response.json().get("error", ""))
 
 
-class AssignAgentViewTestCase(TestCase):
-    """Assign endpoint must reactivate existing inactive IntegratedAgent and return active state."""
+class OfficialAgentsV1AssignCredentialsTestCase(TestCase):
+    """POST /api/v1/official/agents assign + credentials (replaces removed project assign route)."""
 
     def setUp(self):
         self.project = ProjectFactory()
         self.user = self.project.created_by
+        self.system = AgentSystem.objects.create(name="Cred System", slug="assign-cred-system-unique")
+        self.mcp = MCP.objects.create(
+            name="Assign Cred MCP",
+            slug="assign-cred-mcp-unique",
+            system=self.system,
+        )
+        MCPCredentialTemplate.objects.create(
+            mcp=self.mcp,
+            name="api_token",
+            label="API token",
+            placeholder="Token",
+            is_confidential=True,
+        )
         self.agent = InlineAgent.objects.create(
-            name="Assign Test Agent",
-            slug="assign-test-agent",
-            instruction="Test",
-            collaboration_instructions="Test",
+            name="Cred Assign Agent",
+            slug="assign-cred-agent-unique",
+            instruction="i",
+            collaboration_instructions="c",
             foundation_model="model:version",
             project=self.project,
         )
+        self.agent.systems.add(self.system)
+        self.agent.mcps.add(self.mcp)
         Version.objects.create(skills=[], display_skills=[], agent=self.agent)
 
-    def test_assign_reactivates_deactivated_integrated_agent_and_appears_in_team(self):
-        IntegratedAgent.objects.create(
-            agent=self.agent,
-            project=self.project,
-            is_active=False,
+    def _post_v1_assign(self, client, project_uuid, agent_uuid, body, *, auth_header=True):
+        url = reverse("v1-official-agents")
+        url = f"{url}?project_uuid={project_uuid}&agent_uuid={agent_uuid}"
+        kwargs = {"format": "json"}
+        if auth_header:
+            kwargs["HTTP_AUTHORIZATION"] = "Bearer test-token"
+        return client.post(url, body, **kwargs)
+
+    def _post_v1_assign_group(self, client, project_uuid, group_slug, body, *, auth_header=True):
+        url = reverse("v1-official-agents")
+        url = f"{url}?project_uuid={project_uuid}&group={group_slug}"
+        kwargs = {"format": "json"}
+        if auth_header:
+            kwargs["HTTP_AUTHORIZATION"] = "Bearer test-token"
+        return client.post(url, body, **kwargs)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_assign_accepts_blank_system_for_group_mcp_without_agent_system(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        owner = ProjectFactory()
+        group = AgentGroup.objects.create(
+            name="Feedback",
+            slug="feedback-blank-system-assign",
+            shared_config={},
         )
+        mcp = MCP.objects.create(
+            name="CSAT (Customer Satisfaction Score)",
+            slug="csat-blank-system-mcp-unique",
+            system=None,
+        )
+        group.mcps.add(mcp)
+        official_agent = InlineAgent.objects.create(
+            name="Feedback Agent",
+            slug="feedback-blank-system-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=owner,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        official_agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=official_agent)
 
         client = APIClient()
         client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(self.agent.uuid),
+        response = self._post_v1_assign_group(
+            client,
+            str(self.project.uuid),
+            group.slug,
+            {
+                "assigned": True,
+                "system": "",
+                "mcp": mcp.name,
+                "mcp_config": {},
+                "credentials": [],
             },
         )
-        response = client.patch(url, {"assigned": True}, format="json")
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertTrue(response.json()["assigned"])
+        integrated = IntegratedAgent.objects.get(agent=official_agent, project=self.project)
+        self.assertEqual(integrated.metadata.get("mcp"), mcp.name)
+        self.assertNotIn("system", integrated.metadata)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_invalid_project_uuid_returns_400(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = self._post_v1_assign(
+            client,
+            "not-a-uuid",
+            str(self.agent.uuid),
+            {"assigned": True},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("project_uuid", str(response.json()).lower())
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_assigned_false_unassigns(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        IntegratedAgent.objects.create(agent=self.agent, project=self.project, is_active=True)
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = self._post_v1_assign(
+            client,
+            str(self.project.uuid),
+            str(self.agent.uuid),
+            {"assigned": False},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["assigned"])
+        self.assertFalse(IntegratedAgent.objects.filter(agent=self.agent, project=self.project).exists())
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_credentials_not_a_list_returns_400(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = self._post_v1_assign(
+            client,
+            str(self.project.uuid),
+            str(self.agent.uuid),
+            {
+                "assigned": True,
+                "credentials": "not-a-list",
+                "system": self.system.slug,
+                "mcp": self.mcp.name,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_assign_with_credentials_creates_project_credentials(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        body = {
+            "assigned": True,
+            "system": self.system.slug,
+            "mcp": self.mcp.name,
+            "credentials": [
+                {
+                    "name": "api_token",
+                    "label": "API token",
+                    "placeholder": "Token",
+                    "is_confidential": True,
+                    "value": "secret-value",
+                }
+            ],
+        }
+        response = self._post_v1_assign(client, str(self.project.uuid), str(self.agent.uuid), body)
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertTrue(data["assigned"], "assign endpoint should return assigned=True")
-        self.assertTrue(data["active"], "assign endpoint should return active=True after reactivation")
+        self.assertTrue(data["assigned"])
+        self.assertIn("api_token", data.get("created_credentials", []))
 
-        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
-        self.assertTrue(
-            integrated_agent.is_active,
-            "IntegratedAgent should be active after assign when it was previously deactivated",
-        )
+        integrated = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertEqual(integrated.metadata.get("mcp"), self.mcp.name)
+        self.assertEqual(integrated.metadata.get("system"), self.system.slug)
 
-        team_url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
-        team_response = client.get(team_url)
-        team_response.render()
-        team_content = json.loads(team_response.content)
-        self.assertEqual(team_response.status_code, 200)
-        agent_uuids = [a["uuid"] for a in team_content.get("agents", [])]
-        self.assertIn(
-            str(self.agent.uuid),
-            agent_uuids,
-            "Reactivated agent should appear in team list (filtered by is_active=True)",
-        )
-
-    def test_assign_sets_mcp_metadata_when_agent_has_single_active_mcp(self):
-        """Legacy PATCH assign infers mcp/system when the agent has exactly one active MCP."""
-        system = AgentSystem.objects.create(name="Infer MCP System", slug="infer-mcp-system-unique")
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_custom_agent_assign_persists_mcp_config_without_explicit_mcp(self, mock_has_permission):
+        """Custom agents with one MCP can assign constants via mcp_config only."""
+        mock_has_permission.return_value = True
+        system = AgentSystem.objects.create(name="VTEX Custom", slug="vtex-custom-mcp-config-test")
         mcp = MCP.objects.create(
-            name="Infer Catalog MCP",
-            slug="infer-catalog-mcp-unique",
+            name="Product Concierge MCP",
+            slug="product-concierge-mcp-config-test",
             system=system,
         )
-        agent = InlineAgent.objects.create(
-            name="Single MCP Assign Agent",
-            slug="single-mcp-assign-agent-unique",
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="country",
+            label="Country",
+            type=MCPConfigOption.TEXT,
+        )
+        custom_agent = InlineAgent.objects.create(
+            name="Product Concierge Constants",
+            slug="product_concierge_constants_test",
             instruction="i",
             collaboration_instructions="c",
             foundation_model="model:version",
             project=self.project,
+            is_official=False,
         )
-        agent.mcps.add(mcp)
-        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        custom_agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=custom_agent)
 
         client = APIClient()
         client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(agent.uuid),
+        response = self._post_v1_assign(
+            client,
+            str(self.project.uuid),
+            str(custom_agent.uuid),
+            {
+                "assigned": True,
+                "mcp_config": {"country": "BRA", "trade_policy": "1"},
             },
         )
-        response = client.patch(url, {"assigned": True}, format="json")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.json())
+        integrated = IntegratedAgent.objects.get(agent=custom_agent, project=self.project)
+        self.assertEqual(integrated.metadata.get("mcp"), mcp.name)
+        self.assertEqual(integrated.metadata.get("system"), system.slug)
+        self.assertEqual(
+            integrated.metadata.get("mcp_config"),
+            {"country": "BRA", "trade_policy": "1"},
+        )
 
-        integrated_agent = IntegratedAgent.objects.get(agent=agent, project=self.project)
-        self.assertEqual(integrated_agent.metadata.get("mcp"), "Infer Catalog MCP")
-        self.assertEqual(integrated_agent.metadata.get("system"), "infer-mcp-system-unique")
-
-    def test_assign_does_not_set_mcp_metadata_when_multiple_active_mcps(self):
-        system = AgentSystem.objects.create(name="Multi MCP System", slug="multi-mcp-system-unique")
-        mcp_a = MCP.objects.create(name="MCP A", slug="multi-mcp-a-unique", system=system)
-        mcp_b = MCP.objects.create(name="MCP B", slug="multi-mcp-b-unique", system=system)
-        agent = InlineAgent.objects.create(
-            name="Multi MCP Assign Agent",
-            slug="multi-mcp-assign-agent-unique",
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_v1_official_list_group_includes_credentials_templates(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        owner = ProjectFactory()
+        group = AgentGroup.objects.create(name="Cred Group", slug="assign-cred-group-unique", shared_config={})
+        official_agent = InlineAgent.objects.create(
+            name="Official Cred Agent",
+            slug="official-cred-agent-unique",
             instruction="i",
             collaboration_instructions="c",
-            foundation_model="model:version",
-            project=self.project,
+            foundation_model="m",
+            project=owner,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
         )
-        agent.mcps.add(mcp_a, mcp_b)
-        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        official_agent.systems.add(self.system)
+        official_agent.mcps.add(self.mcp)
+        group.mcps.add(self.mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=official_agent)
 
         client = APIClient()
         client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(agent.uuid),
-            },
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"group": group.slug},
+            HTTP_AUTHORIZATION="Bearer test-token",
         )
-        response = client.patch(url, {"assigned": True}, format="json")
-        self.assertEqual(response.status_code, 200)
-
-        integrated_agent = IntegratedAgent.objects.get(agent=agent, project=self.project)
-        self.assertIsNone(integrated_agent.metadata.get("mcp"))
-        self.assertIsNone(integrated_agent.metadata.get("system"))
+        self.assertEqual(resp.status_code, 200)
+        groups = resp.json().get("new", {}).get("agents", [])
+        row = next(g for g in groups if g.get("group") == group.slug)
+        creds = row.get("credentials") or []
+        self.assertEqual(len(creds), 1)
+        self.assertEqual(creds[0]["name"], "api_token")
 
 
 class GroupUnassignmentTestCase(TestCase):
@@ -960,6 +1199,7 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(list_resp.status_code, 200)
+        self.assertNotIn("available_systems", list_resp.json()["new"])
         listed = _official_v1_grouped_rows(list_resp.json())
         entry = next(a for a in listed if a.get("group") == group.slug)
         about = entry["about"]
@@ -984,7 +1224,7 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
 
 
 class CatalogRowKeyParityTestCase(TestCase):
-    """My-agents, team, project official, and v1 official group rows share the same catalog keys."""
+    """My-agents, team, and v1 official group rows share the same catalog keys."""
 
     def setUp(self):
         from nexus.inline_agents.api.serializers.catalog import CATALOG_ROW_KEYS
@@ -1012,7 +1252,7 @@ class CatalogRowKeyParityTestCase(TestCase):
         self.assertEqual(frozenset(row.keys()), self.expected_keys)
         self.assertNotIn("agents", row)
 
-    def test_my_agents_team_and_official_project_share_row_keys(self):
+    def test_my_agents_and_team_share_row_keys(self):
         client = APIClient()
         client.force_authenticate(user=self.user)
         project_uuid = str(self.project.uuid)
@@ -1025,11 +1265,7 @@ class CatalogRowKeyParityTestCase(TestCase):
         team_resp.render()
         team_row = next(r for r in json.loads(team_resp.content)["agents"] if r["uuid"] == str(self.agent.uuid))
 
-        official_resp = client.get(reverse("official-agents", kwargs={"project_uuid": project_uuid}))
-        official_resp.render()
-        official_row = next(r for r in json.loads(official_resp.content) if r["uuid"] == str(self.agent.uuid))
-
-        for row in (my_row, team_row, official_row):
+        for row in (my_row, team_row):
             self._assert_catalog_row_keys(row)
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
@@ -1058,6 +1294,64 @@ class CatalogRowKeyParityTestCase(TestCase):
         self._assert_catalog_row_keys(group_row)
         self.assertEqual(group_row["name"], "Parity Display")
         self.assertEqual(frozenset(group_row.keys()), frozenset(my_row.keys()))
+
+
+class OfficialAvailableSystemsV1TestCase(TestCase):
+    """GET /api/v1/official/available-systems and list payload without embedded available_systems."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_available_systems_returns_envelope(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        slug = "avail-systems-api-test-unique"
+        AgentSystem.objects.create(name="API Test System", slug=slug)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        url = reverse("v1-official-available-systems")
+        response = client.get(
+            url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("available_systems", body)
+        slugs = [s["slug"] for s in body["available_systems"]]
+        self.assertIn(slug, slugs)
+
+    def test_available_systems_forbidden_without_project_uuid_for_project_bearer(self):
+        """Bearer tokens outside EXTERNAL_SUPERUSERS_TOKENS require project_uuid (ProjectPermission)."""
+        target_project = ProjectFactory()
+        user = target_project.created_by
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        url = reverse("v1-official-available-systems")
+        response = client.get(url, HTTP_AUTHORIZATION="Bearer test-token")
+        self.assertEqual(response.status_code, 403)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_official_agents_list_new_object_has_no_available_systems(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        new_payload = resp.json()["new"]
+        self.assertNotIn("available_systems", new_payload)
+        self.assertIn("agents", new_payload)
 
 
 class TestCommunicateInternallyPermission(TestCase):
@@ -1142,3 +1436,82 @@ class RationaleViewTestCase(TestCase):
         # Verify the change was persisted
         self.team.refresh_from_db()
         self.assertFalse(self.team.metadata["rationale"])
+
+
+class InlineTraceResponseRemapTestCase(TestCase):
+    """API-only remap of ``trace.config.agentName`` (slug → list display name)."""
+
+    def test_remap_leaves_manager_unchanged_and_resolves_agent_slug(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_traces_config_agent_names
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        traces = [
+            {"trace": {"config": {"agentName": "manager", "type": "x", "toolName": ""}, "trace": {}}},
+            {"trace": {"config": {"agentName": "product_concierge_catalog", "type": "y", "toolName": ""}, "trace": {}}},
+        ]
+        out = remap_inline_traces_config_agent_names(traces, project_uuid=str(project.uuid))
+        self.assertEqual(out[0]["trace"]["config"]["agentName"], "manager")
+        self.assertEqual(out[1]["trace"]["config"]["agentName"], "Template VTEX")
+
+    def test_remap_invalid_project_uuid_leaves_slugs_unchanged(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_traces_config_agent_names
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        traces = [
+            {"trace": {"config": {"agentName": "product_concierge_catalog", "type": "y", "toolName": ""}, "trace": {}}},
+        ]
+        out = remap_inline_traces_config_agent_names(traces, project_uuid="not-a-uuid")
+        self.assertEqual(out[0]["trace"]["config"]["agentName"], "product_concierge_catalog")
+
+    def test_remap_resolves_slug_when_trace_casing_differs_from_db(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_traces_config_agent_names
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        traces = [
+            {"trace": {"config": {"agentName": "Product_Concierge_Catalog", "type": "y", "toolName": ""}, "trace": {}}},
+        ]
+        out = remap_inline_traces_config_agent_names(traces, project_uuid=str(project.uuid))
+        self.assertEqual(out[0]["trace"]["config"]["agentName"], "Template VTEX")
+
+    def test_remap_flat_websocket_trace_payload(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_trace_for_preview_websocket
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        trace = {
+            "config": {"agentName": "product_concierge_catalog", "type": "y", "toolName": ""},
+            "trace": {},
+        }
+        out = remap_inline_trace_for_preview_websocket(trace, project_uuid=str(project.uuid))
+        self.assertEqual(out["config"]["agentName"], "Template VTEX")
