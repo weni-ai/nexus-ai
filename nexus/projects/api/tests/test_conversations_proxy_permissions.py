@@ -7,7 +7,11 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from nexus.projects.api.views import ConversationDetailProxyView, ConversationsProxyView
+from nexus.projects.api.views import (
+    ConversationDetailProxyView,
+    ConversationsExportProxyView,
+    ConversationsProxyView,
+)
 from nexus.projects.models import Project
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
@@ -173,3 +177,61 @@ class TestConversationDetailProxyViewPermissions(_PermissionTestBase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         mock_get.assert_not_called()
+
+
+def _build_csv_export_response(content=b"conversation_uuid\n", day="2026-05-13", row_count=1):
+    resp = mock.Mock()
+    resp.status_code = 200
+    resp.content = content
+    resp.headers = {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": f'attachment; filename="conversations_{day}.csv"',
+        "X-Export-Row-Count": str(row_count),
+        "X-Export-Target-Date": day,
+    }
+    resp.raise_for_status.return_value = None
+    return resp
+
+
+@mock.patch("nexus.internals.conversations.ConversationsRESTClient.export_conversations_csv")
+class TestConversationsExportProxyViewPermissions(_PermissionTestBase):
+    def setUp(self):
+        super().setUp()
+        self.view = ConversationsExportProxyView.as_view()
+        self.url = f"/api/v2/{self.project_uuid}/conversations/export"
+
+    def test_project_permission_grants_access(self, mock_export):
+        mock_export.return_value = _build_csv_export_response()
+
+        request = self.factory.post(self.url, {"target_date": "2026-05-13"}, format="json")
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        mock_export.assert_called_once_with(self.project_uuid, target_date="2026-05-13")
+
+    def test_internal_permission_grants_access_when_project_denied(self, mock_export):
+        mock_export.return_value = _build_csv_export_response()
+
+        request = self.factory.post(self.url, {}, format="json")
+        force_authenticate(request, user=self.internal_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_export.assert_called_once_with(self.project_uuid, target_date=None)
+
+    def test_no_permission_returns_403(self, mock_export):
+        request = self.factory.post(self.url, {}, format="json")
+        force_authenticate(request, user=self.unauthorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_export.assert_not_called()
+
+    def test_unauthenticated_returns_401(self, mock_export):
+        request = self.factory.post(self.url, {}, format="json")
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        mock_export.assert_not_called()

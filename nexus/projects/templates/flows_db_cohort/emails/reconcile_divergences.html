@@ -1,0 +1,88 @@
+<p>Olá,</p>
+<p>A reconciliação entre Flows e o banco de conversas encontrou <strong>divergências</strong> no período abaixo.</p>
+<ul>
+  <li><strong>Projeto:</strong> {{ project_label }}</li>
+  <li><strong>Período:</strong> {{ formatted_period }}</li>
+  <li><strong>Dias analisados:</strong> {{ days_analyzed }}</li>
+</ul>
+<p><strong>Resumo do período</strong></p>
+<ul>
+  <li><strong>Eventos de classificação no Flows:</strong> {{ period_summary.flows_classification_events }}</li>
+  <li><strong>Conversas no banco:</strong> {{ period_summary.database_conversations }}</li>
+  <li><strong>Só no Flows:</strong> {{ period_summary.conversations_only_in_flows }} | <strong>Só no banco:</strong> {{ period_summary.conversations_only_in_database }}</li>
+</ul>
+<p><strong>Amostra de UUIDs divergentes no período</strong> (máximo {{ max_uuids_per_side_in_email }} por lado)</p>
+{% if period_divergent_uuid_samples.flows_only.total_count %}
+<p><strong>Só no Flows</strong>{% if period_divergent_uuid_samples.flows_only.is_truncated %} — amostra de {{ period_divergent_uuid_samples.flows_only.uuids|length }} de {{ period_divergent_uuid_samples.flows_only.total_count }}{% else %} — {{ period_divergent_uuid_samples.flows_only.total_count }}{% endif %}</p>
+<ul>
+  {% for uuid in period_divergent_uuid_samples.flows_only.uuids %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p><strong>Só no Flows:</strong> nenhum</p>
+{% endif %}
+{% if period_divergent_uuid_samples.database_only.total_count %}
+<p><strong>Só no banco</strong>{% if period_divergent_uuid_samples.database_only.is_truncated %} — amostra de {{ period_divergent_uuid_samples.database_only.uuids|length }} de {{ period_divergent_uuid_samples.database_only.total_count }}{% else %} — {{ period_divergent_uuid_samples.database_only.total_count }}{% endif %}</p>
+<ul>
+  {% for uuid in period_divergent_uuid_samples.database_only.uuids %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p><strong>Só no banco:</strong> nenhum</p>
+{% endif %}
+<p><em>Lista completa no Sentry quando houver mais de {{ max_uuids_per_side_in_email }} itens em algum lado.</em></p>
+<p><strong>Detalhamento por dia</strong></p>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+  <thead>
+    <tr>
+      <th>Dia</th>
+      <th>Flows</th>
+      <th>Banco</th>
+      <th>Só Flows</th>
+      <th>Só banco</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in daily_rows %}
+    <tr>
+      <td>{{ row.formatted_day }}</td>
+      {% if row.reconcile_status == "error" %}
+      <td colspan="4">{{ row.error_message }}</td>
+      {% else %}
+      <td>{{ row.flows_classification_events }}</td>
+      <td>{{ row.database_conversations }}</td>
+      <td>{{ row.conversations_only_in_flows }}</td>
+      <td>{{ row.conversations_only_in_database }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p><strong>Divergências por dia</strong></p>
+{% for day in divergence_days %}
+<h3>Dia {{ day.formatted_day }}</h3>
+<ul>
+  {% for line in day.summary_lines %}
+  <li>{{ line }}</li>
+  {% endfor %}
+</ul>
+{% if day.divergent_uuid_samples.flows_only.total_count %}
+<p><strong>UUIDs só no Flows</strong>{% if day.divergent_uuid_samples.flows_only.is_truncated %} — amostra de {{ day.divergent_uuid_samples.flows_only.uuids|length }} de {{ day.divergent_uuid_samples.flows_only.total_count }}{% else %} — {{ day.divergent_uuid_samples.flows_only.total_count }}{% endif %}</p>
+<ul>
+  {% for uuid in day.divergent_uuid_samples.flows_only.uuids %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% if day.divergent_uuid_samples.database_only.total_count %}
+<p><strong>UUIDs só no banco</strong>{% if day.divergent_uuid_samples.database_only.is_truncated %} — amostra de {{ day.divergent_uuid_samples.database_only.uuids|length }} de {{ day.divergent_uuid_samples.database_only.total_count }}{% else %} — {{ day.divergent_uuid_samples.database_only.total_count }}{% endif %}</p>
+<ul>
+  {% for uuid in day.divergent_uuid_samples.database_only.uuids %}
+  <li><code>{{ uuid }}</code></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endfor %}
+<p>Revise os itens acima e trate as inconsistências indicadas. A equipe técnica dispõe do relatório completo no Sentry para análise detalhada.</p>
