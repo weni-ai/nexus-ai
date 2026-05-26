@@ -5,6 +5,7 @@ from uuid import UUID
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import HttpResponse
 from rest_framework import serializers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -353,6 +354,91 @@ class ConversationsProxyView(APIView):
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class ConversationsExportProxyView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usecase = ConversationsUsecase()
+
+    def post(self, request, *args, **kwargs):
+        """
+        Proxy endpoint to export conversations CSV from the Conversations service.
+        Authenticated users need project permission; the upstream call uses CONVERSATIONS_TOKEN.
+        """
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        payload = {}
+        target_date = request.data.get("target_date")
+        if target_date is not None:
+            payload["target_date"] = target_date
+
+        try:
+            upstream = self._call_conversations_export(project_uuid, payload)
+            return self._build_csv_response(upstream)
+        except requests.exceptions.HTTPError as e:
+            return self._handle_http_error(e, project_uuid)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.RequestException,
+            Exception,
+        ) as e:
+            return self._handle_generic_error(e, project_uuid)
+
+    def _call_conversations_export(self, project_uuid, payload):
+        return self.usecase.export_conversations_csv(
+            project_uuid,
+            target_date=payload.get("target_date"),
+        )
+
+    def _build_csv_response(self, upstream):
+        response = HttpResponse(
+            upstream.content,
+            content_type=upstream.headers.get("Content-Type", "text/csv; charset=utf-8"),
+            status=upstream.status_code,
+        )
+        for header in ("Content-Disposition", "X-Export-Row-Count", "X-Export-Target-Date"):
+            if header in upstream.headers:
+                response[header] = upstream.headers[header]
+        return response
+
+    def _handle_http_error(self, e, project_uuid):
+        if e.response is None:
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            body = {"error": "Internal server error"}
+        else:
+            status_code = e.response.status_code
+            content_type = e.response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                try:
+                    body = e.response.json()
+                except ValueError:
+                    body = {"error": "Internal server error"}
+            else:
+                body = {"error": "Internal server error"}
+
+        logger.error(
+            "Conversations export failed for project %s: status_code=%s body=%s",
+            project_uuid,
+            status_code,
+            body,
+            exc_info=True,
+        )
+        return Response(body, status=status_code)
+
+    def _handle_generic_error(self, e, project_uuid):
+        logger.error(
+            "Error exporting conversations for project %s: %s",
+            project_uuid,
+            e,
+            exc_info=True,
+        )
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class ConversationDetailProxyView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
@@ -529,3 +615,84 @@ class ConversationDetailProxyView(APIView):
         )
         self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _flows_db_cohort_build_cfg(project_uuid: str, data: dict) -> dict:
+    return {
+        "project": str(project_uuid),
+        "flows_api_token": str(data["flows_api_token"]).strip(),
+        "date_start": str(data["date_start"]).strip(),
+        "date_end": str(data["date_end"]).strip(),
+        "use_date_end": True,
+        "apply_terminal_cohort_filter": data["apply_terminal_cohort_filter"],
+        "key": data.get("key", "conversation_classification"),
+        "authorization_prefix": data.get("authorization_prefix", "Token"),
+        "flows_page_limit": data.get("flows_page_limit", 10_000),
+        "flows_offset_start": data.get("flows_offset_start", 0),
+        "flows_max_pages": data.get("flows_max_pages"),
+        "mismatch_sample_limit": data.get("mismatch_sample_limit", 20),
+        "uuid_sample_limit": data.get("uuid_sample_limit", 20),
+    }
+
+
+class FlowsDbCohortReconcileProxyView(APIView):
+    """
+    Queue Flows vs DB cohort reconcile on nexus-ai (Celery + email).
+    Injects ``recipient_email`` from the authenticated Nexus user.
+    """
+
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def post(self, request, *args, **kwargs):
+        from django.conf import settings as django_settings
+
+        from nexus.projects.api.flows_db_cohort_serializers import FlowsDbCohortReconcileRequestSerializer
+        from nexus.projects.tasks import reconcile_flows_db_cohort_email_task
+
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient_email = getattr(request.user, "email", None)
+        if not recipient_email:
+            return Response(
+                {"error": "Authenticated user has no email address"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ser = FlowsDbCohortReconcileRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        cfg = _flows_db_cohort_build_cfg(project_uuid, data)
+        flows_api_token = cfg.pop("flows_api_token")
+
+        celery_hard = int(getattr(django_settings, "FLOWS_DB_COHORT_TASK_TIME_LIMIT", 3600))
+        celery_soft = max(celery_hard - 100, 60)
+
+        from uuid import uuid4
+
+        from nexus.projects.services.flows_db_cohort_credentials import store_flows_api_token
+
+        job_id = str(uuid4())
+        store_flows_api_token(job_id, flows_api_token, timeout=celery_hard + 300)
+
+        reconcile_flows_db_cohort_email_task.apply_async(
+            args=[cfg, recipient_email],
+            task_id=job_id,
+            soft_time_limit=celery_soft,
+            time_limit=celery_hard,
+        )
+
+        return Response(
+            {
+                "status": "queued",
+                "job_id": job_id,
+                "project_id": str(project_uuid),
+                "recipient_email": recipient_email,
+                "requested_range": {
+                    "from_inclusive": cfg["date_start"],
+                    "to_inclusive": cfg["date_end"],
+                },
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
