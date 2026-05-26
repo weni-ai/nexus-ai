@@ -336,7 +336,7 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
         fields = ["name", "label", "placeholder", "is_confidential", "value", "agents_using"]
 
     def get_agents_using(self, obj):
-        qs = IntegratedAgent.objects.filter(project=obj.project)
+        qs = IntegratedAgent.objects.filter(project=obj.project, agent__in=obj.agents.all())
         if not self.context.get("include_inactive_integrated"):
             qs = qs.filter(is_active=True)
         return [

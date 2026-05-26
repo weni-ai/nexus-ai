@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils.datastructures import MultiValueDict
 from rest_framework.test import APIClient
 
+from nexus.inline_agents.api.serializers import ProjectCredentialsListSerializer
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
@@ -458,6 +459,53 @@ class TestGetInlineCredentials(TestCase):
         official_credentials, custom_credentials = self.usecase.get_credentials_by_project(self.project.uuid)
         self.assertEqual(len(official_credentials), 1)
         self.assertEqual(len(custom_credentials), 0)
+
+
+class TestProjectCredentialsListSerializerAgentsUsing(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory(name="Credentials Project", brain_on=True)
+        self.agent_a = Agent.objects.create(
+            name="Agent A",
+            slug="agent-a",
+            project=self.project,
+        )
+        self.agent_b = Agent.objects.create(
+            name="Agent B",
+            slug="agent-b",
+            project=self.project,
+        )
+        IntegratedAgent.objects.create(agent=self.agent_a, project=self.project)
+        IntegratedAgent.objects.create(agent=self.agent_b, project=self.project)
+        self.credential = AgentCredential.objects.create(
+            key="API_KEY",
+            label="API Key",
+            placeholder="your-api-key-here",
+            is_confidential=True,
+            project=self.project,
+        )
+        self.credential.agents.add(self.agent_a)
+
+    def test_agents_using_returns_only_linked_agents(self):
+        data = ProjectCredentialsListSerializer(self.credential).data
+
+        self.assertEqual(len(data["agents_using"]), 1)
+        self.assertEqual(data["agents_using"][0]["uuid"], self.agent_a.uuid)
+
+    def test_agents_using_excludes_inactive_integrated_by_default(self):
+        IntegratedAgent.objects.filter(agent=self.agent_a, project=self.project).update(is_active=False)
+
+        data = ProjectCredentialsListSerializer(self.credential).data
+
+        self.assertEqual(data["agents_using"], [])
+
+    def test_agents_using_includes_inactive_when_requested(self):
+        IntegratedAgent.objects.filter(agent=self.agent_a, project=self.project).update(is_active=False)
+        context = {"include_inactive_integrated": True}
+
+        data = ProjectCredentialsListSerializer(self.credential, context=context).data
+
+        self.assertEqual(len(data["agents_using"]), 1)
+        self.assertEqual(data["agents_using"][0]["uuid"], self.agent_a.uuid)
 
 
 class MockLogGroupBedrockClient:
