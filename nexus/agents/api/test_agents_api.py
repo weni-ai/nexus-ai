@@ -162,42 +162,6 @@ class AgentViewsetSetTestCase(TestCase):
         cred_names = {c["name"] for c in row["credentials"]}
         self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
 
-    def make_agents_official(self):
-        self.agent.is_official = True
-        self.agent.source_type = InlineAgent.PLATFORM
-        self.agent.save()
-        self.agent2.is_official = True
-        self.agent2.source_type = InlineAgent.PLATFORM
-        self.agent2.save()
-
-    def test_get_official_agents(self):
-        self.make_agents_official()
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 2)
-
-    def test_get_official_agents_with_search(self):
-        self.make_agents_official()
-        query_params = {"search": "information"}
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        url = f"{url}?{urlencode(query_params)}"
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 1)
-        self.assertEqual(content[0].get("name"), "Information Analyst")
-
 
 class TeamViewsetSetTestCase(TestCase):
     def setUp(self) -> None:
@@ -251,9 +215,21 @@ class TeamViewsetSetTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content["agents"]), 1)
-        self.assertEqual(content["agents"][0].get("uuid"), str(agent.uuid))
-        self.assertEqual(content["agents"][0].get("name"), agent.name)
-        self.assertTrue(content["agents"][0].get("active", True))
+        row = content["agents"][0]
+        self.assertEqual(row.get("uuid"), str(agent.uuid))
+        self.assertEqual(row.get("slug"), agent.slug)
+        self.assertEqual(row.get("name"), agent.name)
+        self.assertTrue(row.get("active", True))
+        self.assertNotIn("id", row)
+        self.assertNotIn("skills", row)
+        self.assertNotIn("description", row)
+        self.assertNotIn("mcp", row)
+        self.assertIsNone(row["mcps"])
+        self.assertEqual(
+            row["about"],
+            {"en": "Test Agent Description", "pt": None, "es": None},
+        )
+        self.assertIsNone(row.get("group"))
 
     def test_get_team_excludes_inactive_integrated_agents(self):
         """Agents with is_active=False on IntegratedAgent do not appear in team list."""
@@ -321,13 +297,15 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(about["pt"], "About PT")
         self.assertEqual(about["es"], "About ES")
         self.assertNotIn("presentation", row)
+        self.assertIsNone(row["mcps"])
+        self.assertEqual(row.get("group"), group.slug)
 
-    def test_get_team_about_null_without_group(self):
+    def test_get_team_about_from_collaboration_instructions_without_group(self):
         agent = InlineAgent.objects.create(
             name="No Group Agent",
             slug="no_group_team_agent",
             instruction="Test",
-            collaboration_instructions="Test",
+            collaboration_instructions="Custom agent about text",
             foundation_model="model:version",
             project=self.project,
         )
@@ -341,10 +319,13 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = content["agents"][0]
-        self.assertIsNone(row.get("about"))
+        self.assertEqual(
+            row["about"],
+            {"en": "Custom agent about text", "pt": None, "es": None},
+        )
 
     def test_get_team_mcp_description_locale_map(self):
-        """Teams API returns MCP description as en/pt/es map (not a single collapsed string)."""
+        """Team rows expose only the configured MCP inside ``mcps`` (one-element array)."""
         system = AgentSystem.objects.create(name="Team MCP System", slug="team-mcp-sys-unique")
         mcp = MCP.objects.create(
             name="Team Catalog MCP",
@@ -382,12 +363,56 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = row["mcp_definition"]
+        self.assertEqual(len(row["mcps"]), 1)
+        mcp_payload = row["mcps"][0]
         self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        self.assertIsNone(mcp_payload["config"])
+        self.assertEqual(mcp_payload["system"], system.name)
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
         self.assertEqual(desc["pt"], "Portuguese MCP")
         self.assertEqual(desc["es"], "Spanish MCP")
+
+    def test_get_team_mcps_from_mcp_config_only_metadata(self):
+        """Expose configured constants when metadata has mcp_config but no explicit mcp key yet."""
+        system = AgentSystem.objects.create(name="Team Config System", slug="team-config-sys-unique")
+        mcp = MCP.objects.create(
+            name="Team Config MCP",
+            slug="team-config-mcp-unique",
+            system=system,
+        )
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="country",
+            label="Country",
+            type=MCPConfigOption.TEXT,
+        )
+        agent = InlineAgent.objects.create(
+            name="Config Only Agent",
+            slug="team-config-only-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        IntegratedAgent.objects.create(
+            agent=agent,
+            project=self.project,
+            metadata={"mcp_config": {"country": "BRA"}},
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
+        self.assertEqual(len(row["mcps"]), 1)
+        self.assertEqual(row["mcps"][0]["name"], "Team Config MCP")
+        self.assertEqual(row["mcps"][0]["config"], {"Country": "BRA"})
 
 
 class ActivateAgentViewTestCase(TestCase):

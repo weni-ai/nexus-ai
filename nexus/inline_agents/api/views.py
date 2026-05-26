@@ -25,6 +25,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
+    TeamRosterAgentSerializer,
     official_agent_modal_presentation_payload,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
@@ -1047,35 +1048,17 @@ class TeamView(APIView):
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
-        agents = usecase.get_active_agents(project_uuid)
-        serializer = IntegratedAgentSerializer(agents, many=True)
+        agents = usecase.get_active_agents(project_uuid).prefetch_related(
+            "agent__group",
+            "agent__group__modal",
+            "agent__mcps",
+            "agent__mcps__system",
+            "agent__mcps__config_options",
+        )
+        serializer = TeamRosterAgentSerializer(agents, many=True)
 
         data = {"manager": {"external_id": ""}, "agents": serializer.data}
         return Response(data)
-
-
-class OfficialAgentsView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
-
-    def get(self, request, *args, **kwargs):
-        # TODO: filter skills
-        project_uuid = kwargs.get("project_uuid")
-        search = self.request.query_params.get("search")
-
-        agents = _prefetch_inline_agent_mcp_credentials(
-            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related("group", "group__modal")
-        )
-
-        if search:
-            query_filter = (
-                Q(name__icontains=search)
-                | Q(group__name__icontains=search)
-                | Q(group__modal__agent_name__icontains=search)
-            )
-            agents = agents.filter(query_filter).distinct("uuid")
-
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
-        return Response(serializer.data)
 
 
 class ProjectCredentialsView(APIView):
