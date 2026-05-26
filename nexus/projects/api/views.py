@@ -615,3 +615,84 @@ class ConversationDetailProxyView(APIView):
         )
         self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _flows_db_cohort_build_cfg(project_uuid: str, data: dict) -> dict:
+    return {
+        "project": str(project_uuid),
+        "flows_api_token": str(data["flows_api_token"]).strip(),
+        "date_start": str(data["date_start"]).strip(),
+        "date_end": str(data["date_end"]).strip(),
+        "use_date_end": True,
+        "apply_terminal_cohort_filter": data["apply_terminal_cohort_filter"],
+        "key": data.get("key", "conversation_classification"),
+        "authorization_prefix": data.get("authorization_prefix", "Token"),
+        "flows_page_limit": data.get("flows_page_limit", 10_000),
+        "flows_offset_start": data.get("flows_offset_start", 0),
+        "flows_max_pages": data.get("flows_max_pages"),
+        "mismatch_sample_limit": data.get("mismatch_sample_limit", 20),
+        "uuid_sample_limit": data.get("uuid_sample_limit", 20),
+    }
+
+
+class FlowsDbCohortReconcileProxyView(APIView):
+    """
+    Queue Flows vs DB cohort reconcile on nexus-ai (Celery + email).
+    Injects ``recipient_email`` from the authenticated Nexus user.
+    """
+
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def post(self, request, *args, **kwargs):
+        from django.conf import settings as django_settings
+
+        from nexus.projects.api.flows_db_cohort_serializers import FlowsDbCohortReconcileRequestSerializer
+        from nexus.projects.tasks import reconcile_flows_db_cohort_email_task
+
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient_email = getattr(request.user, "email", None)
+        if not recipient_email:
+            return Response(
+                {"error": "Authenticated user has no email address"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ser = FlowsDbCohortReconcileRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        cfg = _flows_db_cohort_build_cfg(project_uuid, data)
+        flows_api_token = cfg.pop("flows_api_token")
+
+        celery_hard = int(getattr(django_settings, "FLOWS_DB_COHORT_TASK_TIME_LIMIT", 3600))
+        celery_soft = max(celery_hard - 100, 60)
+
+        from uuid import uuid4
+
+        from nexus.projects.services.flows_db_cohort_credentials import store_flows_api_token
+
+        job_id = str(uuid4())
+        store_flows_api_token(job_id, flows_api_token, timeout=celery_hard + 300)
+
+        reconcile_flows_db_cohort_email_task.apply_async(
+            args=[cfg, recipient_email],
+            task_id=job_id,
+            soft_time_limit=celery_soft,
+            time_limit=celery_hard,
+        )
+
+        return Response(
+            {
+                "status": "queued",
+                "job_id": job_id,
+                "project_id": str(project_uuid),
+                "recipient_email": recipient_email,
+                "requested_range": {
+                    "from_inclusive": cfg["date_start"],
+                    "to_inclusive": cfg["date_end"],
+                },
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )

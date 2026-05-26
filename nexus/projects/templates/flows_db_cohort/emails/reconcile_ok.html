@@ -1,0 +1,37 @@
+<p>Olá,</p>
+<p>A reconciliação entre os eventos de classificação do Flows e as conversas registradas no banco foi concluída para o período informado.</p>
+<p><strong>Resultado:</strong> não foram identificadas divergências entre Flows e banco de dados (IDs ausentes em um dos lados ou diferença de início/fim das conversas).</p>
+<ul>
+  <li><strong>Projeto:</strong> {{ project_label }}</li>
+  <li><strong>Período analisado:</strong> {{ formatted_period }}</li>
+  <li><strong>Dias analisados:</strong> {{ days_analyzed }}</li>
+</ul>
+<p><strong>Resumo do período</strong></p>
+<ul>
+  <li><strong>Eventos de classificação no Flows:</strong> {{ period_summary.flows_classification_events }}</li>
+  <li><strong>Conversas no banco:</strong> {{ period_summary.database_conversations }}</li>
+</ul>
+<p><strong>Detalhamento por dia</strong></p>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+  <thead>
+    <tr>
+      <th>Dia</th>
+      <th>Flows</th>
+      <th>Banco</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in daily_rows %}
+    <tr>
+      <td>{{ row.formatted_day }}</td>
+      {% if row.reconcile_status == "error" %}
+      <td colspan="2">{{ row.error_message }}</td>
+      {% else %}
+      <td>{{ row.flows_classification_events }}</td>
+      <td>{{ row.database_conversations }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p>Nenhuma ação é necessária com base nesta verificação.</p>
