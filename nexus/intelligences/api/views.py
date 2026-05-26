@@ -1839,7 +1839,7 @@ class InstructionsClassificationAPIView(APIView):
             language = serializer.validated_data["language"]
 
             user = request.user
-            name = user.name or user.email.split("@")[0]
+            name = getattr(user, "name", None) or user.email.split("@")[0]
             occupation = getattr(user, "occupation", "Customer Service Agent")
 
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
