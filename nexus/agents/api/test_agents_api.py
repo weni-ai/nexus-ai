@@ -1195,6 +1195,7 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(list_resp.status_code, 200)
+        self.assertNotIn("available_systems", list_resp.json()["new"])
         listed = list_resp.json()["new"]["agents"]
         entry = next(a for a in listed if a.get("group") == group.slug)
         pres = entry["presentation"]
@@ -1228,6 +1229,64 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
         cfg_by_name = {c["name"]: c for c in mcp_payload["config"]}
         self.assertTrue(cfg_by_name["REQ_FIELD"]["is_required"])
         self.assertFalse(cfg_by_name["OPT_FIELD"]["is_required"])
+
+
+class OfficialAvailableSystemsV1TestCase(TestCase):
+    """GET /api/v1/official/available-systems and list payload without embedded available_systems."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_available_systems_returns_envelope(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        slug = "avail-systems-api-test-unique"
+        AgentSystem.objects.create(name="API Test System", slug=slug)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        url = reverse("v1-official-available-systems")
+        response = client.get(
+            url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("available_systems", body)
+        slugs = [s["slug"] for s in body["available_systems"]]
+        self.assertIn(slug, slugs)
+
+    def test_available_systems_forbidden_without_project_uuid_for_project_bearer(self):
+        """Bearer tokens outside EXTERNAL_SUPERUSERS_TOKENS require project_uuid (ProjectPermission)."""
+        target_project = ProjectFactory()
+        user = target_project.created_by
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        url = reverse("v1-official-available-systems")
+        response = client.get(url, HTTP_AUTHORIZATION="Bearer test-token")
+        self.assertEqual(response.status_code, 403)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_official_agents_list_new_object_has_no_available_systems(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        new_payload = resp.json()["new"]
+        self.assertNotIn("available_systems", new_payload)
+        self.assertIn("agents", new_payload)
 
 
 class TestCommunicateInternallyPermission(TestCase):
