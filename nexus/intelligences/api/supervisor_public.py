@@ -505,10 +505,19 @@ class SupervisorPublicConversationsViewV2(APIView):
             "previous": self._rewrite_pagination_url(previous_url, request) if previous_url else None,
         }
 
+    @staticmethod
+    def _get_v2_date_bounds(request):
+        """
+        Public API uses start/end; cursor next links from nexus-conversations use start_date/end_date.
+        Prefer start/end when both are present.
+        """
+        start = request.query_params.get("start") or request.query_params.get("start_date")
+        end = request.query_params.get("end") or request.query_params.get("end_date")
+        return start, end
+
     def _parse_request_params(self, request):
         """Parse and validate query params for nexus-conversations API. Raises ValidationError on invalid input."""
-        start = request.query_params.get("start")
-        end = request.query_params.get("end")
+        start, end = self._get_v2_date_bounds(request)
         _validate_supervisor_public_v2_query_dates(start, end)
 
         params = {}
@@ -534,6 +543,15 @@ class SupervisorPublicConversationsViewV2(APIView):
         params["page_size"] = page_size
         return params, page_size
 
+    @staticmethod
+    def _normalize_public_v2_pagination_query(query_params):
+        """Map upstream start_date/end_date to public start/end in cursor links."""
+        if "start_date" in query_params and "start" not in query_params:
+            query_params["start"] = query_params.pop("start_date")
+        if "end_date" in query_params and "end" not in query_params:
+            query_params["end"] = query_params.pop("end_date")
+        return query_params
+
     def _rewrite_pagination_url(self, url, request):
         """Rewrite pagination URL to point to nexus-ai v2 endpoint."""
         if not url:
@@ -544,6 +562,7 @@ class SupervisorPublicConversationsViewV2(APIView):
             if not query_params:
                 return request.build_absolute_uri(request.path)
 
+            query_params = self._normalize_public_v2_pagination_query(query_params)
             base_url = request.build_absolute_uri(request.path)
             query_string = urlencode(query_params, doseq=True)
             parsed_base = urlparse(base_url)

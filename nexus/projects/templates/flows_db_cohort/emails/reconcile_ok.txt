@@ -1,0 +1,20 @@
+Olá,
+
+A reconciliação entre os eventos de classificação do Flows e as conversas registradas no banco foi concluída para o período informado.
+
+Resultado: não foram identificadas divergências entre Flows e banco de dados (IDs ausentes em um dos lados ou diferença de início/fim das conversas).
+
+Projeto: {{ project_label }}
+Período analisado: {{ formatted_period }}
+Dias analisados: {{ days_analyzed }}
+
+Resumo do período
+- Eventos de classificação no Flows: {{ period_summary.flows_classification_events }}
+- Conversas no banco: {{ period_summary.database_conversations }}
+
+Detalhamento por dia
+{% for row in daily_rows %}{% if row.reconcile_status == "error" %}- {{ row.formatted_day }}: falha na análise — {{ row.error_message }}
+{% else %}- {{ row.formatted_day }}: Flows {{ row.flows_classification_events }} | Banco {{ row.database_conversations }}
+{% endif %}{% endfor %}
+
+Nenhuma ação é necessária com base nesta verificação.

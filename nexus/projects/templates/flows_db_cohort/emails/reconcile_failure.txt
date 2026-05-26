@@ -1,0 +1,11 @@
+Olá,
+
+Não foi possível concluir a reconciliação entre Flows e o banco de conversas.
+
+Projeto: {{ project_label }}
+Período: {{ formatted_period }}
+
+Erro:
+{{ error_message }}
+
+A equipe técnica foi notificada automaticamente para investigar o problema.
