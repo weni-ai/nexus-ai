@@ -31,8 +31,9 @@ class TestInstructionsClassificationAPIView(TestCase):
             project=self.project,
             created_by=self.user,
         )
+        self.content_base.intelligence.is_router = True
         self.content_base.intelligence.description = "Project description for classification"
-        self.content_base.intelligence.save(update_fields=["description"])
+        self.content_base.intelligence.save(update_fields=["description", "is_router"])
 
         self.url = f"{self.project.uuid}/instructions-classification/"
 
@@ -48,10 +49,9 @@ class TestInstructionsClassificationAPIView(TestCase):
 
         self._mock_ext_permission.side_effect = _local_permission
 
-        self._lambda_patcher = mock.patch(
-            "nexus.usecases.intelligences.lambda_usecase.LambdaUseCase.instruction_classify"
-        )
-        self._mock_instruction_classify = self._lambda_patcher.start()
+        self._lambda_patcher = mock.patch("nexus.usecases.intelligences.lambda_usecase.LambdaUseCase")
+        self._mock_lambda_class = self._lambda_patcher.start()
+        self._mock_instruction_classify = self._mock_lambda_class.return_value.instruction_classify
         self._mock_instruction_classify.return_value = (
             [{"name": "policy", "reason": "Matches policy rules"}],
             "Improve clarity",
@@ -76,7 +76,7 @@ class TestInstructionsClassificationAPIView(TestCase):
 
         response = InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.data)
         response.render()
         content = json.loads(response.content)
         self.assertEqual(content["classification"], [{"name": "policy", "reason": "Matches policy rules"}])
@@ -84,6 +84,7 @@ class TestInstructionsClassificationAPIView(TestCase):
         self.assertEqual(content["suggestion"], "Improve clarity")
 
         content_base = get_default_content_base_by_project(str(self.project.uuid))
+        self._mock_lambda_class.assert_called_once()
         self._mock_instruction_classify.assert_called_once_with(
             name=mock.ANY,
             occupation=mock.ANY,
@@ -112,7 +113,7 @@ class TestInstructionsClassificationAPIView(TestCase):
 
         response = InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.data)
         response.render()
         content = json.loads(response.content)
         self.assertEqual(content["suggested_category"], "")
@@ -130,7 +131,7 @@ class TestInstructionsClassificationAPIView(TestCase):
 
         response = InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.data)
         self._mock_instruction_classify.assert_called_once()
         call_kwargs = self._mock_instruction_classify.call_args.kwargs
         self.assertEqual(call_kwargs["instructions_categories"], [])

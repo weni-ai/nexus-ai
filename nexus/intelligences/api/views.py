@@ -1835,7 +1835,7 @@ class InstructionsClassificationAPIView(APIView):
             serializer = InstructionClassificationRequestSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             instruction = serializer.validated_data["instruction"]
-            instructions_categories = serializer.validated_data["instructions_categories"]
+            instructions_categories = serializer.validated_data.get("instructions_categories", [])
             language = serializer.validated_data["language"]
 
             user = request.user
