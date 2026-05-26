@@ -122,6 +122,36 @@ class AgentViewsetSetTestCase(TestCase):
         row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
         self.assertEqual(row["name"], "Product Concierge")
 
+    def test_get_my_agents_returns_about_locale_map_from_modal(self):
+        group = AgentGroup.objects.create(name="About Group", slug="about-group-my-agents-unique")
+        AgentGroupModal.objects.create(
+            group=group,
+            agent_name="Catalog Agent",
+            about_en="About EN",
+            about_pt="About PT",
+            about_es="About ES",
+        )
+        agent_grouped = InlineAgent.objects.create(
+            name="Template",
+            slug="about-modal-my-agents",
+            instruction="x",
+            collaboration_instructions="fallback should not win",
+            foundation_model="model:version",
+            project=self.project,
+            group=group,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
+        self.assertEqual(row["about"]["en"], "About EN")
+        self.assertEqual(row["about"]["pt"], "About PT")
+        self.assertEqual(row["about"]["es"], "About ES")
+        self.assertNotIn("description", row)
+
     def test_get_my_agents_includes_mcp_definition(self):
         system = AgentSystem.objects.create(name="Test MCP System", slug="test-mcp-system-my-agents-xyz")
         mcp = MCP.objects.create(name="Test MCP", slug="test-mcp-my-agents-xyz", system=system)
@@ -159,13 +189,14 @@ class AgentViewsetSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         content = json.loads(response.content)
         row = next(c for c in content if c.get("uuid") == str(agent_with_mcp.uuid))
-        self.assertIn("mcp_definitions", row)
-        self.assertEqual(len(row["mcp_definitions"]["config"]), 1)
-        self.assertEqual(row["mcp_definitions"]["config"][0]["name"], "REGION_TOGGLE")
-        self.assertEqual(len(row["mcp_definitions"]["credentials"]), 1)
-        self.assertEqual(row["mcp_definitions"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
-        cred_names = {c["name"] for c in row["credentials"]}
-        self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
+        self.assertIn("about", row)
+        self.assertNotIn("description", row)
+        self.assertEqual(len(row["mcps"]), 1)
+        mcp_payload = row["mcps"][0]
+        self.assertEqual(len(mcp_payload["config"]), 1)
+        self.assertEqual(mcp_payload["config"][0]["name"], "REGION_TOGGLE")
+        self.assertEqual(len(mcp_payload["credentials"]), 1)
+        self.assertEqual(mcp_payload["credentials"][0]["name"], "SYNERISE_API_TOKEN")
 
 
 class TeamViewsetSetTestCase(TestCase):
