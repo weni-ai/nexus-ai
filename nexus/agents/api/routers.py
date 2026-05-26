@@ -14,7 +14,6 @@ from nexus.inline_agents.api.views import (
     ProjectEngineSourceView,
     ProjectModelProvidersView,
 )
-from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgentsView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
 from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
 from nexus.inline_agents.api.views import ProjectCredentialsView as InlineProjectCredentialsView
@@ -38,7 +37,6 @@ urlpatterns = [
     path("agents/app-my-agents/<project_uuid>", VtexAppInlineAgentsView.as_view(), name="vtex-my-agents"),
     path("agents/traces/", AgentTracesView.as_view(), name="traces"),
     path("agents/app-official/<project_uuid>", VtexAppOfficialInlineAgentsView.as_view(), name="vtex-official-agents"),
-    path("project/<project_uuid>/assign/<str:agent_uuid>", ActiveInlineAgentsView.as_view(), name="assign-agents"),
     path(
         "project/<project_uuid>/activate-agent/<str:agent_uuid>",
         ActivateAgentView.as_view(),
