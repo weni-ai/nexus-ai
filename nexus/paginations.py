@@ -8,6 +8,10 @@ class CustomCursorPagination(CursorPagination):
     ordering = "created_at"
 
 
+class InlineContentBaseTextCursorPagination(CustomCursorPagination):
+    ordering = "-last_updated_at"
+
+
 class InlineConversationsCursorPagination(CursorPagination):
     page_size = 12
     ordering = "-created_at"

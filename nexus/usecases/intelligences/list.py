@@ -92,9 +92,10 @@ class ListContentBaseTextUseCase:
         integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
         intelligence = integrated_intelligence.intelligence
 
-        # Integrated intelligence by default has only one content base
-        content_base = intelligence.contentbases.first()
-        return ContentBaseText.objects.filter(content_base=content_base)
+        content_base = intelligence.contentbases.filter(is_router=True).first()
+        if content_base is None:
+            content_base = intelligence.contentbases.first()
+        return ContentBaseText.objects.filter(content_base=content_base).order_by("-last_updated_at")
 
 
 class ListContentBaseFileUseCase:
