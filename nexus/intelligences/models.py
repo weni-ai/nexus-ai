@@ -193,6 +193,7 @@ class ContentBaseAgent(models.Model):
 
 class ContentBaseInstruction(models.Model):
     instruction = models.TextField()
+    suggested_category = models.CharField(max_length=255, blank=True, default="")
     content_base = models.ForeignKey(ContentBase, related_name="instructions", on_delete=models.CASCADE)
 
     def __str__(self):

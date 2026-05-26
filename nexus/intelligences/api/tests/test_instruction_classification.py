@@ -96,7 +96,7 @@ class TestInstructionsClassificationAPIView(TestCase):
             project_description=content_base.intelligence.description,
         )
 
-    def test_post_returns_empty_suggested_category_when_lambda_returns_none(self):
+    def test_post_returns_empty_suggested_category_when_lambda_returns_empty_string(self):
         self._mock_instruction_classify.return_value = ([], None, "")
 
         request = self.factory.post(
@@ -116,3 +116,21 @@ class TestInstructionsClassificationAPIView(TestCase):
         response.render()
         content = json.loads(response.content)
         self.assertEqual(content["suggested_category"], "")
+
+    def test_post_accepts_request_without_instructions_categories(self):
+        request = self.factory.post(
+            self.url,
+            {
+                "instruction": "Always greet the customer",
+                "language": "en",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 200)
+        self._mock_instruction_classify.assert_called_once()
+        call_kwargs = self._mock_instruction_classify.call_args.kwargs
+        self.assertEqual(call_kwargs["instructions_categories"], [])
