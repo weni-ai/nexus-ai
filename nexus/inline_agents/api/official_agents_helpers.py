@@ -147,23 +147,36 @@ def _sort_systems(systems: list) -> list:
 
 
 def get_all_systems_for_group(group_slug: str) -> list:
-    """Unique system slugs for a group from its MCPs."""
+    """Unique AgentSystem slugs for a group (MCPs without system do not add a synthetic slug)."""
     systems = list(
         AgentSystem.objects.filter(mcps__groups__slug=group_slug, mcps__is_active=True)
         .values_list("slug", flat=True)
         .distinct()
     )
-
-    has_no_system_mcps = MCP.objects.filter(groups__slug=group_slug, is_active=True, system__isnull=True).exists()
-
-    if has_no_system_mcps:
-        systems.append("no_system")
-
     return _sort_systems(systems)
 
 
+def _system_bucket_sort_key(slug: str | None) -> tuple:
+    """Sort order for MCP buckets: vtex first, then named systems, then unscoped (``None``)."""
+    if slug is None:
+        return (2, "")
+    normalized = str(slug).lower()
+    return (0 if normalized == "vtex" else 1, normalized)
+
+
+def group_mcps_for_system(all_group_mcps: dict, system: str | None) -> list:
+    """MCP payloads for ``system``; empty/None selects MCPs whose ``system`` field is null."""
+    if not system:
+        return all_group_mcps.get(None, [])
+    system_lower = system.lower()
+    for sys_key, sys_mcps in all_group_mcps.items():
+        if sys_key is not None and sys_key.lower() == system_lower:
+            return sys_mcps
+    return []
+
+
 def get_all_mcps_for_group(group_slug: str) -> dict:
-    """All MCPs for a group keyed by system slug."""
+    """All MCPs for a group keyed by system slug (``None`` when MCP has no AgentSystem)."""
     try:
         group = AgentGroup.objects.get(slug=group_slug)
     except AgentGroup.DoesNotExist:
@@ -177,7 +190,7 @@ def get_all_mcps_for_group(group_slug: str) -> dict:
 
     result = {}
     for mcp in mcps:
-        system_slug = mcp.system.slug if mcp.system else "no_system"
+        system_slug = mcp.system.slug if mcp.system else None
         if system_slug not in result:
             result[system_slug] = []
 
