@@ -321,9 +321,11 @@ def log_conversations_failure(
     exc: Exception,
 ) -> None:
     logger.error(
-        "[projects_resolution_rate] nexus-conversations request failed project_count=%s start_date=%s end_date=%s",
+        "[projects_resolution_rate] nexus-conversations request failed "
+        "project_count=%s start_date=%s end_date=%s sample_project_uuids=%s",
         len(project_uuids),
         start_date,
         end_date,
+        project_uuids[:5],
         exc_info=(type(exc), exc, exc.__traceback__),
     )
