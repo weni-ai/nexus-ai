@@ -26,6 +26,10 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
     TeamRosterAgentSerializer,
 )
+from nexus.inline_agents.api.serializers.catalog import (
+    build_row_from_project_agent,
+    project_agent_assignment_map,
+)
 from nexus.inline_agents.api.services.official_catalog import (
     bump_official_catalog_cache_generation,
     list_official_catalog_page,
@@ -679,9 +683,7 @@ class AgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = _prefetch_inline_agent_mcp_credentials(
-            Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
-        )
+        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
 
         if search:
             query_filter = (
@@ -691,8 +693,20 @@ class AgentsView(APIView):
             )
             agents = agents.filter(query_filter).distinct("uuid")
 
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
-        return Response(serializer.data)
+        agents = agents.prefetch_related("systems")
+        assignment = (
+            project_agent_assignment_map(str(project_uuid), include_inactive_integrated=False) if project_uuid else None
+        )
+        data = [
+            build_row_from_project_agent(
+                agent,
+                project_uuid,
+                include_inactive_integrated=False,
+                assignment_by_agent_id=assignment,
+            )
+            for agent in agents
+        ]
+        return Response(data)
 
 
 class AgentProjectsView(APIView):
