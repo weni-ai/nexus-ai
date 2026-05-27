@@ -130,6 +130,28 @@ class TestProjectsResolutionRateView(TestCase):
         assert "page_size" in response.data
         mock_summary.assert_not_called()
 
+    def test_client_called_with_single_batch_not_per_project(self, mock_summary):
+        other = Project.objects.create(
+            name="Batch Other",
+            org=self.ab2_project.org,
+            created_by=self.ab2_project.created_by,
+            agents_backend="BedrockBackend",
+        )
+        mock_summary.return_value = _summary_for_projects([])
+        self._get(
+            {
+                "project_uuids": f"{self.ab2_project.uuid},{other.uuid}",
+                "start_date": "2026-05-19",
+                "end_date": "2026-05-25",
+            }
+        )
+        mock_summary.assert_called_once()
+        called_uuids = set(mock_summary.call_args.kwargs["project_uuids"])
+        self.assertEqual(
+            called_uuids,
+            {str(self.ab2_project.uuid), str(other.uuid)},
+        )
+
     def test_success_merges_conversations_and_local_metadata(self, mock_summary):
         mock_summary.return_value = _summary_for_projects(
             [
@@ -293,6 +315,91 @@ class TestProjectsResolutionRateView(TestCase):
         mock_summary.side_effect = requests.ConnectionError("down")
         response = self._get({"project_uuids": str(self.ab2_project.uuid)})
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    def test_conversations_http_502_returns_502(self, mock_summary):
+        import requests
+
+        exc = requests.HTTPError("bad gateway")
+        exc.response = mock.Mock(status_code=status.HTTP_502_BAD_GATEWAY)
+        mock_summary.side_effect = exc
+        response = self._get({"project_uuids": str(self.ab2_project.uuid)})
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+
+    def test_page_size_over_100_is_truncated_in_response(self, mock_summary):
+        mock_summary.return_value = _summary_for_projects(
+            [
+                {
+                    "project_uuid": str(self.ab2_project.uuid),
+                    "conversation_count": 1,
+                    "resolved_count": 1,
+                    "unresolved_count": 0,
+                    "human_support_count": 0,
+                    "resolution_rate": 1.0,
+                    "csat": None,
+                    "csat_responses_count": 0,
+                    "nps": None,
+                    "nps_responses_count": 0,
+                }
+            ]
+        )
+        response = self._get(
+            {
+                "project_uuids": str(self.ab2_project.uuid),
+                "page_size": "150",
+            }
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["page_size"], 100)
+
+    def test_period_averages_stable_across_pages(self, mock_summary):
+        other = Project.objects.create(
+            name="ZZZ Other",
+            org=self.ab2_project.org,
+            created_by=self.ab2_project.created_by,
+            agents_backend="BedrockBackend",
+        )
+        summary = _summary_for_projects(
+            [
+                {
+                    "project_uuid": str(self.ab2_project.uuid),
+                    "conversation_count": 1,
+                    "resolved_count": 0,
+                    "unresolved_count": 1,
+                    "human_support_count": 0,
+                    "resolution_rate": 0.0,
+                    "csat": None,
+                    "csat_responses_count": 0,
+                    "nps": None,
+                    "nps_responses_count": 0,
+                },
+                {
+                    "project_uuid": str(other.uuid),
+                    "conversation_count": 1,
+                    "resolved_count": 1,
+                    "unresolved_count": 0,
+                    "human_support_count": 0,
+                    "resolution_rate": 1.0,
+                    "csat": None,
+                    "csat_responses_count": 0,
+                    "nps": None,
+                    "nps_responses_count": 0,
+                },
+            ]
+        )
+        summary["average_resolution_rate"] = 0.5
+        summary["average_csat"] = 4.0
+        summary["average_nps"] = 8.0
+        mock_summary.return_value = summary
+
+        page_one = self._get({"page": 1, "page_size": 1})
+        page_two = self._get({"page": 2, "page_size": 1})
+        self.assertEqual(page_one.status_code, status.HTTP_200_OK)
+        self.assertEqual(page_two.status_code, status.HTTP_200_OK)
+        self.assertEqual(page_one.data["count"], 2)
+        self.assertEqual(page_one.data["average_resolution_rate"], 0.5)
+        self.assertEqual(page_two.data["average_resolution_rate"], 0.5)
+        self.assertEqual(page_one.data["average_csat"], 4.0)
+        self.assertEqual(page_two.data["average_csat"], 4.0)
 
     def test_no_visible_projects_returns_empty_payload(self, mock_summary):
         response = self._get({"project_uuids": str(uuid4())})
