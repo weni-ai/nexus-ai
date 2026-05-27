@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .resolution_rate_views import ProjectsResolutionRateView
 from .views import (
     AgentBuilderProjectDetailsView,
     AgentsBackendView,
@@ -22,6 +23,7 @@ urlpatterns = [
     path("<project_uuid>/agents-backend", AgentsBackendView.as_view(), name="agents-backend"),
     path("<project_uuid>/human-support", EnableHumanSupportView.as_view(), name="enable-human-support"),
     path("<project_uuid>/ab-project-details", AgentBuilderProjectDetailsView.as_view(), name="ab-project-details"),
+    path("v2/projects/resolution-rate", ProjectsResolutionRateView.as_view(), name="projects-resolution-rate-v2"),
     path("v2/<project_uuid>/conversations", ConversationsProxyView.as_view(), name="conversations-proxy-v2"),
     path(
         "v2/<project_uuid>/conversations/export",
