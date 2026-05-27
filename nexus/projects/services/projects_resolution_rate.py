@@ -97,7 +97,7 @@ def parse_page_size(value: str | None, default: int = 20, maximum: int = 100) ->
     except (TypeError, ValueError) as e:
         raise ValueError("page_size must be a positive integer") from e
     if size < 1:
-        return default
+        raise ValueError("page_size must be a positive integer")
     return min(size, maximum)
 
 
@@ -162,6 +162,27 @@ def _metrics_by_project_uuid(summary_payload: dict[str, Any]) -> dict[str, dict[
     return {str(row["project_uuid"]): row for row in summary_payload.get("projects", [])}
 
 
+def _resolution_rate_from_metrics(
+    metrics: dict[str, Any],
+    *,
+    conversation_count: int,
+    resolved_count: int,
+) -> float:
+    raw = metrics.get("resolution_rate")
+    if raw is None:
+        return float(resolved_count / conversation_count) if conversation_count > 0 else 0.0
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return float(resolved_count / conversation_count) if conversation_count > 0 else 0.0
+
+
+def _response_dates(query: ResolutionRateQuery, summary_payload: dict[str, Any]) -> tuple[Any, Any]:
+    start_date = query.start_date.isoformat() if query.start_date else summary_payload.get("start_date")
+    end_date = query.end_date.isoformat() if query.end_date else summary_payload.get("end_date")
+    return start_date, end_date
+
+
 def build_result_rows(
     projects: list[Project],
     summary_payload: dict[str, Any],
@@ -175,9 +196,11 @@ def build_result_rows(
         agent_row = agent_map.get(project.uuid, {"agents_count": 0, "official_agents_count": 0})
         conversation_count = int(metrics.get("conversation_count") or 0)
         resolved_count = int(metrics.get("resolved_count") or 0)
-        resolution_rate = float(metrics.get("resolution_rate", 0.0))
-        if conversation_count > 0 and "resolution_rate" not in metrics:
-            resolution_rate = resolved_count / conversation_count
+        resolution_rate = _resolution_rate_from_metrics(
+            metrics,
+            conversation_count=conversation_count,
+            resolved_count=resolved_count,
+        )
 
         rows.append(
             {
@@ -260,13 +283,15 @@ def build_response(
     summary_payload: dict[str, Any],
     projects: list[Project],
 ) -> dict[str, Any]:
+    start_date, end_date = _response_dates(query, summary_payload)
+
     if not projects:
         return {
             "count": 0,
             "page": query.page,
             "page_size": query.page_size,
-            "start_date": query.start_date.isoformat() if query.start_date else None,
-            "end_date": query.end_date.isoformat() if query.end_date else None,
+            "start_date": start_date,
+            "end_date": end_date,
             **empty_summary_averages(),
             "results": [],
         }
@@ -279,8 +304,8 @@ def build_response(
         "count": count,
         "page": query.page,
         "page_size": query.page_size,
-        "start_date": summary_payload.get("start_date"),
-        "end_date": summary_payload.get("end_date"),
+        "start_date": start_date,
+        "end_date": end_date,
         "average_resolution_rate": summary_payload.get("average_resolution_rate", 0.0),
         "average_csat": summary_payload.get("average_csat"),
         "average_nps": summary_payload.get("average_nps"),
@@ -295,10 +320,10 @@ def log_conversations_failure(
     end_date: str | None,
     exc: Exception,
 ) -> None:
-    logger.exception(
+    logger.error(
         "[projects_resolution_rate] nexus-conversations request failed project_count=%s start_date=%s end_date=%s",
         len(project_uuids),
         start_date,
         end_date,
-        exc_info=exc,
+        exc_info=(type(exc), exc, exc.__traceback__),
     )

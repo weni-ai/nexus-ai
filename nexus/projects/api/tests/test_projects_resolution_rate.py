@@ -15,10 +15,12 @@ from nexus.projects.api.resolution_rate_views import ProjectsResolutionRateView
 from nexus.projects.models import Project
 from nexus.projects.services.projects_resolution_rate import (
     apply_include_blocks,
+    build_result_rows,
     parse_page_size,
     sort_result_rows,
 )
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 SUMMARY_PAYLOAD = {
@@ -120,6 +122,12 @@ class TestProjectsResolutionRateView(TestCase):
     def test_partial_date_range_returns_400(self, mock_summary):
         response = self._get({"start_date": "2026-05-01"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_summary.assert_not_called()
+
+    def test_invalid_page_size_returns_400(self, mock_summary):
+        response = self._get({"project_uuids": str(self.ab2_project.uuid), "page_size": "0"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        assert "page_size" in response.data
         mock_summary.assert_not_called()
 
     def test_success_merges_conversations_and_local_metadata(self, mock_summary):
@@ -299,6 +307,33 @@ class TestProjectsResolutionRateView(TestCase):
 class TestProjectsResolutionRateServiceHelpers(TestCase):
     def test_parse_page_size_truncates_above_100(self):
         self.assertEqual(parse_page_size("500"), 100)
+
+    def test_parse_page_size_rejects_zero(self):
+        with self.assertRaises(ValueError):
+            parse_page_size("0")
+
+    def test_build_result_rows_handles_null_resolution_rate(self):
+        project = ProjectFactory(agents_backend="BedrockBackend")
+        rows = build_result_rows(
+            [project],
+            {
+                "projects": [
+                    {
+                        "project_uuid": str(project.uuid),
+                        "conversation_count": 2,
+                        "resolved_count": 1,
+                        "unresolved_count": 1,
+                        "human_support_count": 0,
+                        "resolution_rate": None,
+                        "csat": None,
+                        "csat_responses_count": 0,
+                        "nps": None,
+                        "nps_responses_count": 0,
+                    }
+                ]
+            },
+        )
+        self.assertEqual(rows[0]["resolution_rate"], 0.5)
 
     def test_sort_result_rows_orders_by_resolution_rate(self):
         rows = sort_result_rows(
