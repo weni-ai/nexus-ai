@@ -693,13 +693,7 @@ class AgentsView(APIView):
             )
             agents = agents.filter(query_filter).distinct("uuid")
 
-        agents = agents.prefetch_related(
-            "systems",
-            "mcps",
-            "mcps__system",
-            "mcps__config_options",
-            "mcps__credential_templates",
-        )
+        agents = agents.prefetch_related("systems")
         assignment = (
             project_agent_assignment_map(str(project_uuid), include_inactive_integrated=False) if project_uuid else None
         )
