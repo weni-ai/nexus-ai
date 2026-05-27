@@ -699,12 +699,12 @@ class AgentsView(APIView):
         )
         data = [
             build_row_from_project_agent(
-                a,
+                agent,
                 project_uuid,
                 include_inactive_integrated=False,
                 assignment_by_agent_id=assignment,
             )
-            for a in agents
+            for agent in agents
         ]
         return Response(data)
 
