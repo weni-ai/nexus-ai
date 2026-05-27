@@ -2,6 +2,7 @@ import hashlib
 import logging
 from time import sleep
 from typing import Optional, Tuple
+from urllib.parse import unquote, urlparse
 
 import pendulum
 from botocore.exceptions import ClientError
@@ -35,12 +36,30 @@ def build_client_token(project_uuid: str, content_base_file: ContentBaseFile) ->
 
 
 def https_file_url_to_s3_uri(file_url: str, bucket_name: str, region_name: str) -> str:
-    prefix = f"https://{bucket_name}.s3.{region_name}.amazonaws.com/"
-    if file_url.startswith(prefix):
-        key = file_url[len(prefix) :]
-        return f"s3://{bucket_name}/{key}"
+    """Convert HTTPS S3 object URLs to s3://bucket/key (supports regional and global endpoints)."""
     if file_url.startswith("s3://"):
         return file_url
+
+    parsed = urlparse(file_url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Unsupported file URL for S3 ingestion: {file_url}")
+
+    host = parsed.netloc
+    object_key = unquote(parsed.path.lstrip("/"))
+    if not object_key:
+        raise ValueError(f"Unsupported file URL for S3 ingestion: {file_url}")
+
+    virtual_hosts = (
+        f"{bucket_name}.s3.{region_name}.amazonaws.com",
+        f"{bucket_name}.s3.amazonaws.com",
+    )
+    if host in virtual_hosts:
+        return f"s3://{bucket_name}/{object_key}"
+
+    path_style_hosts = (f"s3.{region_name}.amazonaws.com", "s3.amazonaws.com")
+    if host in path_style_hosts and object_key.startswith(f"{bucket_name}/"):
+        return f"s3://{bucket_name}/{object_key[len(bucket_name) + 1 :]}"
+
     raise ValueError(f"Unsupported file URL for S3 ingestion: {file_url}")
 
 
