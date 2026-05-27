@@ -599,6 +599,14 @@ class BedrockFileDatabase(FileDataBase):
             logger.error("Error invoking supervisor stream: %s", str(e), exc_info=True)
             raise
 
+    def _object_key_from_s3_uri(self, s3_uri: str) -> str:
+        from urllib.parse import unquote
+
+        prefix = f"s3://{self.bucket_name}/"
+        if not s3_uri.startswith(prefix):
+            raise ValueError(f"S3 URI does not match bucket {self.bucket_name}: {s3_uri}")
+        return unquote(s3_uri[len(prefix) :])
+
     def ingest_knowledge_base_documents(
         self,
         s3_uri: str,
@@ -606,7 +614,11 @@ class BedrockFileDatabase(FileDataBase):
         content_base_uuid: str,
         file_uuid: str,
     ) -> Dict[str, Any]:
+        from nexus.task_managers.ingestion.direct import build_s3_uri
+
         logger.info("[Bedrock] Ingesting knowledge base document via direct path")
+        object_key = self._object_key_from_s3_uri(s3_uri)
+        metadata_uri = build_s3_uri(self.bucket_name, f"{object_key}.metadata.json")
         document = {
             "content": {
                 "dataSourceType": "S3",
@@ -616,7 +628,7 @@ class BedrockFileDatabase(FileDataBase):
             },
             "metadata": {
                 "type": "S3_LOCATION",
-                "s3Location": {"uri": s3_uri},
+                "s3Location": {"uri": metadata_uri},
             },
         }
         response = self.bedrock_agent.ingest_knowledge_base_documents(

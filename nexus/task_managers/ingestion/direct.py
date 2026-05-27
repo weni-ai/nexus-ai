@@ -2,7 +2,7 @@ import hashlib
 import logging
 from time import sleep
 from typing import Optional, Tuple
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import pendulum
 from botocore.exceptions import ClientError
@@ -35,6 +35,11 @@ def build_client_token(project_uuid: str, content_base_file: ContentBaseFile) ->
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def build_s3_uri(bucket_name: str, object_key: str) -> str:
+    """Build an S3 URI with a safely encoded object key (spaces and special chars)."""
+    return f"s3://{bucket_name}/{quote(object_key, safe='/')}"
+
+
 def https_file_url_to_s3_uri(file_url: str, bucket_name: str, region_name: str) -> str:
     """Convert HTTPS S3 object URLs to s3://bucket/key (supports regional and global endpoints)."""
     if file_url.startswith("s3://"):
@@ -54,11 +59,11 @@ def https_file_url_to_s3_uri(file_url: str, bucket_name: str, region_name: str) 
         f"{bucket_name}.s3.amazonaws.com",
     )
     if host in virtual_hosts:
-        return f"s3://{bucket_name}/{object_key}"
+        return build_s3_uri(bucket_name, object_key)
 
     path_style_hosts = (f"s3.{region_name}.amazonaws.com", "s3.amazonaws.com")
     if host in path_style_hosts and object_key.startswith(f"{bucket_name}/"):
-        return f"s3://{bucket_name}/{object_key[len(bucket_name) + 1 :]}"
+        return build_s3_uri(bucket_name, object_key[len(bucket_name) + 1 :])
 
     raise ValueError(f"Unsupported file URL for S3 ingestion: {file_url}")
 
@@ -141,7 +146,9 @@ def run_direct_ingest(
             break
         except ClientError as exc:
             api_returned_at = _utc_now()
-            error_code = exc.response.get("Error", {}).get("Code", "")
+            error = exc.response.get("Error", {})
+            error_code = error.get("Code", "")
+            error_message = error.get("Message", "")
             last_exception = exc
             log_ingestion_failed(
                 {
@@ -155,6 +162,7 @@ def run_direct_ingest(
                     "project_uuid": project_uuid,
                     "document_type": "file",
                     "exception_type": error_code,
+                    "bedrock_error_message": error_message or None,
                 }
             )
             if error_code in NON_RETRYABLE_ERROR_CODES:
