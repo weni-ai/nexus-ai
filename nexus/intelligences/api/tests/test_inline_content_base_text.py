@@ -54,6 +54,8 @@ class InlineContentBaseTextViewsetTestCase(TestCase):
         create_response = self.view_list(create_request, project_uuid=str(self.project.uuid))
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(create_response.data["title"], "Doc A")
+        self.assertIsNotNone(create_response.data["created_at"])
+        self.assertIsNone(create_response.data["last_updated_at"])
         mock_upload.assert_called_once()
 
         create_request_2 = self.factory.post(
@@ -70,6 +72,10 @@ class InlineContentBaseTextViewsetTestCase(TestCase):
         results = list_response.data.get("results", list_response.data)
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["title"], "Doc B")
+        for item in results:
+            self.assertIn("created_at", item)
+            self.assertIn("last_updated_at", item)
+            self.assertIsNone(item["last_updated_at"])
 
     @patch("nexus.intelligences.api.views.upload_text_file.delay")
     def test_create_default_untitled_title(self, mock_upload):
@@ -118,6 +124,7 @@ class InlineContentBaseTextViewsetTestCase(TestCase):
             )
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.assertEqual(response.data["title"], "Renamed")
+            self.assertIsNotNone(response.data["last_updated_at"])
             mock_reindex.assert_not_called()
 
     def test_patch_rejects_empty_body(self):

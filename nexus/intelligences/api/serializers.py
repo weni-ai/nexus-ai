@@ -55,13 +55,13 @@ class ContentBaseTextSerializer(serializers.ModelSerializer):
 class ContentBaseTextListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseText
-        fields = ["uuid", "title", "last_updated_at"]
+        fields = ["uuid", "title", "created_at", "last_updated_at"]
 
 
 class ContentBaseTextDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseText
-        fields = ["uuid", "title", "last_updated_at", "text"]
+        fields = ["uuid", "title", "created_at", "last_updated_at", "text"]
 
 
 class InlineContentBaseTextWriteSerializer(serializers.Serializer):

@@ -75,7 +75,7 @@ class TestListInlineContentBaseTextUseCase(TestCase):
     def test_inline_list_orders_by_last_updated_at(self):
         older = ContentBaseTextFactory(content_base=self.router, created_by=self.integrated.created_by)
         newer = ContentBaseTextFactory(content_base=self.router, created_by=self.integrated.created_by)
-        newer.last_updated_at = older.last_updated_at + timedelta(hours=1)
+        newer.last_updated_at = older.created_at + timedelta(hours=1)
         newer.save(update_fields=["last_updated_at"])
 
         use_case = ListContentBaseTextUseCase()

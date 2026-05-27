@@ -9,7 +9,7 @@ class CustomCursorPagination(CursorPagination):
 
 
 class InlineContentBaseTextCursorPagination(CustomCursorPagination):
-    ordering = "-last_updated_at"
+    ordering = "-_sort_at"
 
 
 class InlineConversationsCursorPagination(CursorPagination):

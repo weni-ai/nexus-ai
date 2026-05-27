@@ -61,7 +61,7 @@ class ContentBaseTextFactory(factory.django.DjangoModelFactory):
     content_base = factory.SubFactory(ContentBaseFactory, created_by=factory.SelfAttribute("..created_by"))
     text = factory.Sequence(lambda n: "test%d" % n)
     title = "Untitled"
-    last_updated_at = factory.LazyFunction(timezone.now)
+    last_updated_at = None
 
 
 class ContentBaseFileFactory(factory.django.DjangoModelFactory):

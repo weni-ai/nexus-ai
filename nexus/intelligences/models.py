@@ -95,7 +95,7 @@ class ContentBaseText(BaseModel, SoftDeleteModel):
     file_name = models.CharField(max_length=255, null=True, blank=True)
     text = models.TextField()
     title = models.CharField(max_length=100, default="Untitled")
-    last_updated_at = models.DateTimeField()
+    last_updated_at = models.DateTimeField(null=True, blank=True)
     content_base = models.ForeignKey(ContentBase, related_name="contentbasetexts", on_delete=models.CASCADE)
 
 
