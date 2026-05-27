@@ -89,6 +89,36 @@ class ConversationsRESTClient(RestClient):
         response.raise_for_status()
         return response.json()
 
+    def get_projects_resolution_summary(
+        self,
+        *,
+        project_uuids: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        timeout: int = 60,
+    ) -> dict:
+        """
+        Aggregated resolution, CSAT and NPS metrics for multiple projects (internal endpoint).
+        """
+        endpoint = "/api/v1/projects/resolution-summary/"
+        params: list[tuple[str, str]] = []
+        if start_date is not None:
+            params.append(("start_date", start_date))
+        if end_date is not None:
+            params.append(("end_date", end_date))
+        if project_uuids:
+            for project_uuid in project_uuids:
+                params.append(("project_uuids", project_uuid))
+
+        response = requests.get(
+            self._get_url(endpoint),
+            headers=self.headers,
+            params=params or None,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def get_reconcile_cohort(
         self,
         project_uuid: str,
