@@ -12,6 +12,7 @@ from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.agents.models import Team
 from nexus.inline_agents.models import (
     MCP,
+    AgentCredential,
     AgentGroup,
     AgentGroupModal,
     AgentSystem,
@@ -197,6 +198,79 @@ class AgentViewsetSetTestCase(TestCase):
         self.assertEqual(mcp_payload["config"][0]["name"], "REGION_TOGGLE")
         self.assertEqual(len(mcp_payload["credentials"]), 1)
         self.assertEqual(mcp_payload["credentials"][0]["name"], "SYNERISE_API_TOKEN")
+
+    def test_get_my_agents_includes_agent_credentials_in_mcps_without_linked_mcp(self):
+        agent_with_credentials = InlineAgent.objects.create(
+            name="VTEX Orders Agent",
+            slug="vtex-orders-cred-test-xyz",
+            instruction="x",
+            collaboration_instructions="Consulta pedidos VTEX",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        for key, label, is_confidential in (
+            ("vtex_app_key", "VTEX App Key", True),
+            ("vtex_account", "Conta VTEX", False),
+        ):
+            credential = AgentCredential.objects.create(
+                project=self.project,
+                key=key,
+                label=label,
+                placeholder=f"placeholder-{key}",
+                is_confidential=is_confidential,
+            )
+            credential.agents.add(agent_with_credentials)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        self.assertEqual(response.status_code, 200)
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_with_credentials.uuid))
+        self.assertEqual(len(row["mcps"]), 1)
+        mcp_payload = row["mcps"][0]
+        self.assertIsNone(mcp_payload["name"])
+        self.assertEqual(mcp_payload["system"], None)
+        self.assertEqual(mcp_payload["config"], [])
+        cred_names = {c["name"] for c in mcp_payload["credentials"]}
+        self.assertEqual(cred_names, {"vtex_app_key", "vtex_account"})
+        by_name = {c["name"]: c for c in mcp_payload["credentials"]}
+        self.assertEqual(by_name["vtex_app_key"]["label"], "VTEX App Key")
+        self.assertTrue(by_name["vtex_app_key"]["is_confidential"])
+
+    def test_get_my_agents_merges_agent_credentials_when_mcp_templates_empty(self):
+        system = AgentSystem.objects.create(name="VTEX System", slug="vtex-system-cred-merge-xyz")
+        mcp = MCP.objects.create(name="VTEX MCP", slug="vtex-mcp-cred-merge-xyz", system=system)
+        agent = InlineAgent.objects.create(
+            name="Agent MCP merge",
+            slug="agent-mcp-cred-merge-xyz",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent.mcps.add(mcp)
+        credential = AgentCredential.objects.create(
+            project=self.project,
+            key="vtex_app_token",
+            label="VTEX App Token",
+            placeholder="token",
+            is_confidential=True,
+        )
+        credential.agents.add(agent)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent.uuid))
+        self.assertEqual(len(row["mcps"]), 1)
+        cred_names = {c["name"] for c in row["mcps"][0]["credentials"]}
+        self.assertEqual(cred_names, {"vtex_app_token"})
 
 
 class TeamViewsetSetTestCase(TestCase):
