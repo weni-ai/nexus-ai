@@ -5,7 +5,7 @@ import pendulum
 from django.test import SimpleTestCase
 
 from nexus.task_managers.ingestion.constants import STRATEGY_DIRECT_WITH_FALLBACK
-from nexus.task_managers.ingestion.direct import build_client_token, https_file_url_to_s3_uri
+from nexus.task_managers.ingestion.direct import build_client_token, build_s3_uri, https_file_url_to_s3_uri
 
 
 class BuildClientTokenTest(SimpleTestCase):
@@ -47,7 +47,13 @@ class HttpsToS3UriTest(SimpleTestCase):
             "weni-develop-bedrock",
             "us-east-1",
         )
-        self.assertEqual(uri, "s3://weni-develop-bedrock/cb-uuid/file name.pdf")
+        self.assertEqual(uri, "s3://weni-develop-bedrock/cb-uuid/file%20name.pdf")
+
+    def test_build_s3_uri_encodes_spaces(self):
+        self.assertEqual(
+            build_s3_uri("my-bucket", "cb/file name.pdf"),
+            "s3://my-bucket/cb/file%20name.pdf",
+        )
 
     def test_converts_path_style_url(self):
         uri = https_file_url_to_s3_uri(

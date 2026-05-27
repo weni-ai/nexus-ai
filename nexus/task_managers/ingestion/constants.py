@@ -20,4 +20,4 @@ TRANSIENT_ERROR_CODES = frozenset(
     }
 )
 
-NON_RETRYABLE_ERROR_CODES = frozenset({"AccessDeniedException"})
+NON_RETRYABLE_ERROR_CODES = frozenset({"AccessDeniedException", "ValidationException"})
