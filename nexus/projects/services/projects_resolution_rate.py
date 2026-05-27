@@ -52,9 +52,12 @@ class ResolutionRateQuery:
 
 def parse_calendar_date(value: str, field_name: str) -> pendulum.Date:
     try:
-        return pendulum.parse(str(value).strip(), exact=True).date()
+        parsed = pendulum.parse(str(value).strip(), exact=True)
     except Exception as e:
         raise ValueError(f"Invalid {field_name} format. Use YYYY-MM-DD") from e
+    if isinstance(parsed, pendulum.Date):
+        return parsed
+    return parsed.date()
 
 
 def parse_project_uuids(raw_values: list[str]) -> list[UUID]:

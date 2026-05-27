@@ -16,6 +16,7 @@ from nexus.projects.models import Project
 from nexus.projects.services.projects_resolution_rate import (
     apply_include_blocks,
     build_result_rows,
+    parse_calendar_date,
     parse_page_size,
     sort_result_rows,
 )
@@ -412,6 +413,9 @@ class TestProjectsResolutionRateView(TestCase):
 
 
 class TestProjectsResolutionRateServiceHelpers(TestCase):
+    def test_parse_calendar_date_accepts_iso_date_string(self):
+        self.assertEqual(parse_calendar_date("2026-05-19", "start_date").isoformat(), "2026-05-19")
+
     def test_parse_page_size_truncates_above_100(self):
         self.assertEqual(parse_page_size("500"), 100)
 

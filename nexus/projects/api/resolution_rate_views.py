@@ -48,7 +48,7 @@ class ProjectsResolutionRateView(APIView):
             payload = build_response(query=query, summary_payload={}, projects=[])
             serializer = ProjectsResolutionRateResponseSerializer(data=payload)
             serializer.is_valid(raise_exception=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(payload, status=status.HTTP_200_OK)
 
         project_uuid_strings = [str(project.uuid) for project in projects]
         start_param = query.start_date.isoformat() if query.start_date else None
@@ -83,7 +83,7 @@ class ProjectsResolutionRateView(APIView):
         payload = build_response(query=query, summary_payload=summary_payload, projects=projects)
         serializer = ProjectsResolutionRateResponseSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(payload, status=status.HTTP_200_OK)
 
     def _parse_query(self, request) -> ResolutionRateQuery:
         raw_uuids = request.query_params.getlist("project_uuids")
