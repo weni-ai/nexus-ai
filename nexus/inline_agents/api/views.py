@@ -28,6 +28,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.inline_agents.api.serializers.catalog import (
     build_row_from_project_agent,
+    my_agents_list_prefetches,
     project_agent_assignment_map,
 )
 from nexus.inline_agents.api.services.official_catalog import (
@@ -693,12 +694,7 @@ class AgentsView(APIView):
             )
             agents = agents.filter(query_filter).distinct("uuid")
 
-        agents = agents.prefetch_related(
-            "systems",
-            "agentcredential_set",
-            "mcps__config_options",
-            "mcps__credential_templates",
-        )
+        agents = agents.prefetch_related(*my_agents_list_prefetches())
         assignment = (
             project_agent_assignment_map(str(project_uuid), include_inactive_integrated=False) if project_uuid else None
         )

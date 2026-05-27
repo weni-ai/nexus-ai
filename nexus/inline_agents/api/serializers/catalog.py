@@ -4,6 +4,7 @@ from itertools import groupby
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Prefetch
 
 from nexus.inline_agents.api.official_agents_helpers import (
     _serialize_mcp,
@@ -13,7 +14,26 @@ from nexus.inline_agents.api.official_agents_helpers import (
     get_all_mcps_for_group,
     get_all_systems_for_group,
 )
-from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
+
+
+def my_agents_list_prefetches() -> list:
+    """Prefetch plan for ``AgentsView`` — must match ``_agent_credentials_payload`` / ``_mcps_for_standalone_agent``."""
+    return [
+        "systems",
+        Prefetch(
+            "agentcredential_set",
+            queryset=AgentCredential.objects.order_by("key"),
+        ),
+        Prefetch(
+            "mcps",
+            queryset=MCP.objects.filter(is_active=True)
+            .select_related("system")
+            .prefetch_related("config_options", "credential_templates")
+            .order_by("order", "name"),
+        ),
+    ]
+
 
 # Canonical catalog row (novo retorno) — same keys on every list surface.
 # Official v1: one row per ``AgentGroup`` (group view). My-agents / project official: one row per ``Agent``.
@@ -136,10 +156,31 @@ def _serialize_agent_credential(credential: AgentCredential) -> dict[str, Any]:
     }
 
 
+def _iter_agent_credentials(agent: Agent) -> list[AgentCredential]:
+    """Use prefetched credentials when present; avoid ``.order_by()`` on the related manager (N+1)."""
+    cache = getattr(agent, "_prefetched_objects_cache", None)
+    if isinstance(cache, dict) and "agentcredential_set" in cache:
+        return sorted(cache["agentcredential_set"], key=lambda credential: credential.key or "")
+    return list(agent.agentcredential_set.all().order_by("key"))
+
+
+def _iter_active_agent_mcps(agent: Agent) -> list[MCP]:
+    """Use prefetched active MCPs when present; otherwise fall back to a filtered queryset."""
+    cache = getattr(agent, "_prefetched_objects_cache", None)
+    if isinstance(cache, dict) and "mcps" in cache:
+        return list(cache["mcps"])
+    return list(
+        agent.mcps.filter(is_active=True)
+        .select_related("system")
+        .prefetch_related("config_options", "credential_templates")
+        .order_by("order", "name")
+    )
+
+
 def _agent_credentials_payload(agent: Agent) -> list[dict[str, Any]]:
     seen_keys: set[str] = set()
     rows: list[dict[str, Any]] = []
-    for credential in agent.agentcredential_set.all().order_by("key"):
+    for credential in _iter_agent_credentials(agent):
         key = credential.key
         if not key or key in seen_keys:
             continue
@@ -175,12 +216,7 @@ def _synthetic_mcp_for_agent_credentials(agent: Agent, credentials: list[dict[st
 
 def _mcps_for_standalone_agent(agent: Agent) -> list[dict[str, Any]]:
     agent_credentials = _agent_credentials_payload(agent)
-    mcps = (
-        agent.mcps.filter(is_active=True)
-        .select_related("system")
-        .prefetch_related("config_options", "credential_templates")
-    )
-    serialized = [_serialize_mcp(m) for m in mcps]
+    serialized = [_serialize_mcp(m) for m in _iter_active_agent_mcps(agent)]
     if serialized:
         for mcp_data in serialized:
             _merge_agent_credentials_into_mcp(mcp_data, agent_credentials)
