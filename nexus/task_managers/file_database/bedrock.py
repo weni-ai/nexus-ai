@@ -599,6 +599,38 @@ class BedrockFileDatabase(FileDataBase):
             logger.error("Error invoking supervisor stream: %s", str(e), exc_info=True)
             raise
 
+    def ingest_knowledge_base_documents(
+        self,
+        s3_uri: str,
+        client_token: str,
+        content_base_uuid: str,
+        file_uuid: str,
+    ) -> Dict[str, Any]:
+        logger.info("[Bedrock] Ingesting knowledge base document via direct path")
+        document = {
+            "content": {
+                "dataSourceType": "S3",
+                "s3": {
+                    "s3Location": {"uri": s3_uri},
+                },
+            },
+            "metadata": {
+                "type": "S3_LOCATION",
+                "s3Location": {"uri": s3_uri},
+            },
+        }
+        response = self.bedrock_agent.ingest_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            clientToken=client_token,
+            documents=[document],
+        )
+        details = response.get("documentDetails") or []
+        if not details:
+            return {"document_status": "FAILED", "raw_response": response}
+        status = details[0].get("status", "FAILED")
+        return {"document_status": status, "raw_response": response}
+
     def start_bedrock_ingestion(self) -> str:
         logger.info("[Bedrock] Starting ingestion job")
         response = self.bedrock_agent.start_ingestion_job(

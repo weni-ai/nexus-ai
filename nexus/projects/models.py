@@ -29,6 +29,16 @@ class Project(BaseModel, SoftDeleteModel):
         (BEDROCK, "Bedrock"),
     )
 
+    INGESTION_STRATEGY_JOB = "job"
+    INGESTION_STRATEGY_DIRECT = "direct"
+    INGESTION_STRATEGY_DIRECT_WITH_FALLBACK = "direct_with_fallback"
+
+    BEDROCK_INGESTION_STRATEGY_CHOICES = (
+        (INGESTION_STRATEGY_JOB, "Job only"),
+        (INGESTION_STRATEGY_DIRECT, "Direct only"),
+        (INGESTION_STRATEGY_DIRECT_WITH_FALLBACK, "Direct with fallback"),
+    )
+
     DEFAULT_BACKEND = "OpenAIBackend"
 
     name = models.CharField(max_length=255)
@@ -42,6 +52,11 @@ class Project(BaseModel, SoftDeleteModel):
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
     indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
+    bedrock_ingestion_strategy = models.CharField(
+        max_length=32,
+        choices=BEDROCK_INGESTION_STRATEGY_CHOICES,
+        default=INGESTION_STRATEGY_JOB,
+    )
     agents_backend = models.CharField(max_length=100, default=DEFAULT_BACKEND)
 
     human_support = models.BooleanField(default=False)

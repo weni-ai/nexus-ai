@@ -6,6 +6,8 @@ from rest_framework import status as http_status
 from nexus.projects.models import Project
 from nexus.task_managers import tasks, tasks_bedrock
 from nexus.task_managers.file_database.file_database import FileDataBase
+from nexus.task_managers.ingestion.direct import https_file_url_to_s3_uri
+from nexus.task_managers.ingestion.router import route_file_ingestion
 from nexus.task_managers.tasks_bedrock import start_ingestion_job
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.usecases.intelligences.intelligences_dto import (
@@ -96,13 +98,23 @@ class CeleryFileManager:
         )
         task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
-        try:
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-            project_uuid = str(project.uuid)
-        except Exception:
-            project_uuid = None
+        from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
-        start_ingestion_job(str(task_manager.uuid), project_uuid=project_uuid)
+        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+        file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
+        s3_uri = https_file_url_to_s3_uri(
+            file_database_response.file_url,
+            file_database.bucket_name,
+            file_database.region_name,
+        )
+        route_file_ingestion(
+            task_manager_uuid=str(task_manager.uuid),
+            project=project,
+            project_uuid=str(project.uuid),
+            content_base_uuid=content_base_uuid,
+            content_base_file_uuid=str(content_base_file.uuid),
+            s3_uri=s3_uri,
+        )
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
 
     def upload_and_ingest_inline_file(

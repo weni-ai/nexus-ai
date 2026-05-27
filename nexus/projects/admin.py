@@ -17,6 +17,7 @@ class ProjectAdmin(admin.ModelAdmin):
         "uuid",
         "name",
         "agents_backend",
+        "bedrock_ingestion_strategy",
         "human_support",
         "rationale_switch",
         "inline_agent_switch",
@@ -29,6 +30,7 @@ class ProjectAdmin(admin.ModelAdmin):
         "guardrail",
     )
     list_filter = (
+        "bedrock_ingestion_strategy",
         "agents_backend",
         "human_support",
         "rationale_switch",
@@ -68,6 +70,7 @@ class ProjectAdmin(admin.ModelAdmin):
                     "exclude_previous_thinking_steps",
                     "guardrail",
                     "manager_agent",
+                    "bedrock_ingestion_strategy",
                 )
             },
         ),

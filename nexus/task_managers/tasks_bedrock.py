@@ -8,8 +8,11 @@ from langchain_community.document_transformers import Html2TextTransformer
 
 from nexus.agents.models import Agent
 from nexus.celery import app
-from nexus.intelligences.models import ContentBaseLink, ContentBaseText
+from nexus.intelligences.models import ContentBaseFile, ContentBaseLink, ContentBaseText
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.ingestion.constants import PATH_JOB, PATH_JOB_FALLBACK
+from nexus.task_managers.ingestion.direct import run_direct_ingest
+from nexus.task_managers.ingestion.router import route_file_ingestion
 from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
@@ -50,6 +53,12 @@ def check_ingestion_job_status(
 
             if hasattr(task_manager, "content_base_file") and task_manager.content_base_file:
                 content_base_uuid = str(task_manager.content_base_file.content_base.uuid)
+                _log_job_ingestion_completed(
+                    task_manager=task_manager,
+                    content_base_uuid=content_base_uuid,
+                    project_uuid=project_uuid,
+                    file_type=file_type,
+                )
             elif hasattr(task_manager, "content_base_text") and task_manager.content_base_text:
                 content_base_uuid = str(task_manager.content_base_text.content_base.uuid)
             elif hasattr(task_manager, "content_base_link") and task_manager.content_base_link:
@@ -80,8 +89,119 @@ def check_ingestion_job_status(
             )
     elif ingestion_job_status == "FAILED":
         task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
+        _log_job_ingestion_failed(
+            celery_task_manager_uuid=celery_task_manager_uuid,
+            file_type=file_type,
+            project_uuid=project_uuid,
+            bedrock_status=ingestion_job_status,
+        )
 
     return True
+
+
+def _log_job_ingestion_completed(*, task_manager, content_base_uuid: str, project_uuid: str | None, file_type: str):
+    # Job-path telemetry: emitted on COMPLETE for file uploads (comparability with direct path).
+    import pendulum
+
+    from nexus.task_managers.ingestion.strategy import IngestionStrategyResolver
+    from nexus.task_managers.ingestion.telemetry import log_ingestion_completed
+    from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
+    if file_type != "file" or not project_uuid:
+        return
+    try:
+        project = ProjectsUseCase().get_by_uuid(project_uuid)
+        strategy = IngestionStrategyResolver.requested_strategy(project)
+    except Exception:
+        strategy = "job"
+    file_uuid = None
+    if hasattr(task_manager, "content_base_file") and task_manager.content_base_file:
+        file_uuid = str(task_manager.content_base_file.uuid)
+    now = pendulum.now("UTC").to_iso8601_string()
+    log_ingestion_completed(
+        {
+            "path": PATH_JOB,
+            "strategy": strategy,
+            "status": "success",
+            "submitted_at": now,
+            "api_returned_at": now,
+            "final_status_at": now,
+            "first_search_hit_at": now,
+            "content_base_uuid": content_base_uuid,
+            "file_uuid": file_uuid,
+            "project_uuid": project_uuid,
+            "document_type": "file",
+        }
+    )
+
+
+def _log_job_ingestion_failed(
+    *,
+    celery_task_manager_uuid: str,
+    file_type: str,
+    project_uuid: str | None,
+    bedrock_status: str,
+):
+    from nexus.task_managers.ingestion.telemetry import log_ingestion_failed
+    from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+
+    if file_type != "file":
+        return
+    try:
+        task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
+        content_base_uuid = None
+        file_uuid = None
+        if hasattr(task_manager, "content_base_file") and task_manager.content_base_file:
+            content_base_uuid = str(task_manager.content_base_file.content_base.uuid)
+            file_uuid = str(task_manager.content_base_file.uuid)
+    except Exception:
+        content_base_uuid = None
+        file_uuid = None
+    log_ingestion_failed(
+        {
+            "path": PATH_JOB,
+            "strategy": "job",
+            "status": "fail",
+            "content_base_uuid": content_base_uuid,
+            "file_uuid": file_uuid,
+            "project_uuid": project_uuid,
+            "document_type": "file",
+            "exception_type": bedrock_status,
+        }
+    )
+
+
+@app.task
+def ingest_file_direct(
+    task_manager_uuid: str,
+    project_uuid: str,
+    content_base_uuid: str,
+    content_base_file_uuid: str,
+    s3_uri: str,
+    strategy: str,
+):
+    from nexus.projects.models import Project
+
+    project = Project.objects.get(uuid=project_uuid)
+    content_base_file = ContentBaseFile.objects.get(uuid=content_base_file_uuid)
+    task_manager_usecase = CeleryTaskManagerUseCase()
+    task_manager_usecase.update_task_status(task_manager_uuid, TaskManager.STATUS_PROCESSING, "file")
+
+    success, effective_path = run_direct_ingest(
+        project=project,
+        project_uuid=project_uuid,
+        content_base_uuid=content_base_uuid,
+        content_base_file=content_base_file,
+        s3_uri=s3_uri,
+        strategy=strategy,
+        task_manager_uuid=task_manager_uuid,
+    )
+    if success:
+        return {"path": effective_path, "status": "success"}
+    if effective_path == PATH_JOB_FALLBACK:
+        start_ingestion_job(task_manager_uuid, project_uuid=project_uuid)
+        return {"path": PATH_JOB_FALLBACK, "status": "fallback"}
+    return {"path": effective_path, "status": "fail"}
 
 
 @app.task
@@ -152,7 +272,15 @@ def bedrock_upload_file(
     )
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
-    start_ingestion_job(str(task_manager.uuid), project_uuid=str(project.uuid))
+    s3_uri = f"s3://{file_database.bucket_name}/{content_base_uuid}/{file_database_response.file_name}"
+    route_file_ingestion(
+        task_manager_uuid=str(task_manager.uuid),
+        project=project,
+        project_uuid=str(project.uuid),
+        content_base_uuid=content_base_uuid,
+        content_base_file_uuid=content_base_file_uuid,
+        s3_uri=s3_uri,
+    )
 
     response = {
         "task_uuid": task_manager.uuid,
