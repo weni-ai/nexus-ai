@@ -33,9 +33,25 @@ class BuildClientTokenTest(SimpleTestCase):
 
 
 class HttpsToS3UriTest(SimpleTestCase):
-    def test_converts_https_url(self):
+    def test_converts_regional_virtual_hosted_url(self):
         uri = https_file_url_to_s3_uri(
             "https://my-bucket.s3.us-east-1.amazonaws.com/cb-uuid/file.pdf",
+            "my-bucket",
+            "us-east-1",
+        )
+        self.assertEqual(uri, "s3://my-bucket/cb-uuid/file.pdf")
+
+    def test_converts_global_virtual_hosted_url(self):
+        uri = https_file_url_to_s3_uri(
+            "https://weni-develop-bedrock.s3.amazonaws.com/cb-uuid%2Ffile%20name.pdf",
+            "weni-develop-bedrock",
+            "us-east-1",
+        )
+        self.assertEqual(uri, "s3://weni-develop-bedrock/cb-uuid/file name.pdf")
+
+    def test_converts_path_style_url(self):
+        uri = https_file_url_to_s3_uri(
+            "https://s3.amazonaws.com/my-bucket/cb-uuid/file.pdf",
             "my-bucket",
             "us-east-1",
         )
