@@ -112,6 +112,24 @@ def _exception_details(exc: Exception) -> Dict[str, Any]:
     }
 
 
+def _format_bedrock_debug_context(
+    last_ingest_result: Optional[Dict[str, Any]],
+    last_document_detail: Optional[Dict[str, Any]],
+) -> str:
+    sections = []
+    if last_ingest_result:
+        sections.append(
+            "ingest_knowledge_base_documents response:\n"
+            + json.dumps(last_ingest_result.get("raw_response"), indent=2, default=str)
+        )
+    if last_document_detail:
+        sections.append(
+            "get_knowledge_base_documents response:\n"
+            + json.dumps(last_document_detail, indent=2, default=str)
+        )
+    return "\n\n".join(sections)
+
+
 def _log_direct_ingest_failure(
     *,
     strategy: str,
@@ -153,10 +171,28 @@ def _log_direct_ingest_failure(
         payload.update(_exception_details(last_exception))
 
     log_ingestion_failed(payload)
-    logger.error(
-        "[Bedrock] Direct ingest failed: %s",
-        json.dumps(payload, default=str),
+
+    summary = (
+        f"Direct ingest failed | project={project_uuid} file={file_uuid} "
+        f"bedrock_status={document_status!r} bedrock_status_reason={document_status_reason!r} "
+        f"s3_uri={s3_uri}"
     )
+    debug_context = _format_bedrock_debug_context(last_ingest_result, last_document_detail)
+
+    if last_exception is not None:
+        if debug_context:
+            logger.exception(
+                "[Bedrock] %s\n%s",
+                summary,
+                debug_context,
+                exc_info=last_exception,
+            )
+        else:
+            logger.exception("[Bedrock] %s", summary, exc_info=last_exception)
+    elif debug_context:
+        logger.error("[Bedrock] %s\n%s", summary, debug_context)
+    else:
+        logger.error("[Bedrock] %s", summary)
 
 
 def _wait_for_terminal_document_status(

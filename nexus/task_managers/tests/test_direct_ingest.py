@@ -141,7 +141,7 @@ class LogDirectIngestFailureTest(SimpleTestCase):
         self.assertEqual(payload["bedrock_status_reason"], "metadata invalid")
         self.assertIn("bedrock_ingest_response", payload)
         self.assertIn("bedrock_document_detail", payload)
-        mock_logger.error.assert_called_once()
+        mock_logger.exception.assert_called_once()
 
 
 class RouteFileIngestionTest(SimpleTestCase):
