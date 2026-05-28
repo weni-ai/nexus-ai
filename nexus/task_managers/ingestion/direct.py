@@ -3,7 +3,7 @@ import json
 import logging
 from time import sleep
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import unquote, urlparse
 
 import pendulum
 from botocore.exceptions import ClientError
@@ -38,8 +38,8 @@ def build_client_token(project_uuid: str, content_base_file: ContentBaseFile) ->
 
 
 def build_s3_uri(bucket_name: str, object_key: str) -> str:
-    """Build an S3 URI with a safely encoded object key (spaces and special chars)."""
-    return f"s3://{bucket_name}/{quote(object_key, safe='/')}"
+    """Build s3:// URI using the literal S3 object key (Bedrock expects the real key)."""
+    return f"s3://{bucket_name}/{object_key}"
 
 
 def https_file_url_to_s3_uri(file_url: str, bucket_name: str, region_name: str) -> str:
@@ -225,6 +225,7 @@ def run_direct_ingest(
     submitted_at = _utc_now()
     client_token = build_client_token(project_uuid, content_base_file)
     file_database = BedrockFileDatabase(project_uuid=project_uuid)
+    s3_uri = file_database.normalize_s3_uri(s3_uri)
     max_retries = settings.BEDROCK_DIRECT_INGEST_MAX_RETRIES
     backoff_base = settings.BEDROCK_DIRECT_INGEST_BACKOFF_BASE_SECONDS
 
@@ -243,6 +244,8 @@ def run_direct_ingest(
                 content_base_uuid=str(content_base_uuid),
                 file_uuid=str(content_base_file.uuid),
             )
+            if last_ingest_result.get("content_s3_uri"):
+                s3_uri = last_ingest_result["content_s3_uri"]
             api_returned_at = _utc_now()
             document_status, document_status_reason, last_document_detail = _wait_for_terminal_document_status(
                 file_database,

@@ -607,6 +607,11 @@ class BedrockFileDatabase(FileDataBase):
             raise ValueError(f"S3 URI does not match bucket {self.bucket_name}: {s3_uri}")
         return unquote(s3_uri[len(prefix) :])
 
+    def normalize_s3_uri(self, s3_uri: str) -> str:
+        from nexus.task_managers.ingestion.direct import build_s3_uri
+
+        return build_s3_uri(self.bucket_name, self._object_key_from_s3_uri(s3_uri))
+
     def ingest_knowledge_base_documents(
         self,
         s3_uri: str,
@@ -614,32 +619,25 @@ class BedrockFileDatabase(FileDataBase):
         content_base_uuid: str,
         file_uuid: str,
     ) -> Dict[str, Any]:
-        logger.info("[Bedrock] Ingesting knowledge base document via direct path")
+        from nexus.task_managers.ingestion.direct import build_s3_uri
+
         object_key = self._object_key_from_s3_uri(s3_uri)
-        filename = object_key.rsplit("/", 1)[-1]
+        content_s3_uri = build_s3_uri(self.bucket_name, object_key)
+        metadata_s3_uri = build_s3_uri(self.bucket_name, f"{object_key}.metadata.json")
+        logger.info(
+            "[Bedrock] Ingesting knowledge base document via direct path",
+            extra={"content_s3_uri": content_s3_uri, "metadata_s3_uri": metadata_s3_uri},
+        )
         document = {
             "content": {
                 "dataSourceType": "S3",
                 "s3": {
-                    "s3Location": {"uri": s3_uri},
+                    "s3Location": {"uri": content_s3_uri},
                 },
             },
             "metadata": {
-                "type": "IN_LINE_ATTRIBUTE",
-                "inlineAttributes": [
-                    {
-                        "key": "contentBaseUuid",
-                        "value": {"type": "STRING", "stringValue": content_base_uuid},
-                    },
-                    {
-                        "key": "fileUuid",
-                        "value": {"type": "STRING", "stringValue": file_uuid},
-                    },
-                    {
-                        "key": "filename",
-                        "value": {"type": "STRING", "stringValue": filename},
-                    },
-                ],
+                "type": "S3_LOCATION",
+                "s3Location": {"uri": metadata_s3_uri},
             },
         }
         response = self.bedrock_agent.ingest_knowledge_base_documents(
@@ -650,9 +648,17 @@ class BedrockFileDatabase(FileDataBase):
         )
         details = response.get("documentDetails") or []
         if not details:
-            return {"document_status": "FAILED", "raw_response": response}
+            return {
+                "document_status": "FAILED",
+                "raw_response": response,
+                "content_s3_uri": content_s3_uri,
+            }
         status = details[0].get("status", "FAILED")
-        return {"document_status": status, "raw_response": response}
+        return {
+            "document_status": status,
+            "raw_response": response,
+            "content_s3_uri": content_s3_uri,
+        }
 
     def get_knowledge_base_document_detail(self, s3_uri: str) -> Dict[str, Any]:
         response = self.bedrock_agent.get_knowledge_base_documents(

@@ -52,12 +52,12 @@ class HttpsToS3UriTest(SimpleTestCase):
             "weni-develop-bedrock",
             "us-east-1",
         )
-        self.assertEqual(uri, "s3://weni-develop-bedrock/cb-uuid/file%20name.pdf")
+        self.assertEqual(uri, "s3://weni-develop-bedrock/cb-uuid/file name.pdf")
 
-    def test_build_s3_uri_encodes_spaces(self):
+    def test_build_s3_uri_uses_literal_object_key(self):
         self.assertEqual(
             build_s3_uri("my-bucket", "cb/file name.pdf"),
-            "s3://my-bucket/cb/file%20name.pdf",
+            "s3://my-bucket/cb/file name.pdf",
         )
 
     def test_converts_path_style_url(self):
