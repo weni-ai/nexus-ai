@@ -13,6 +13,7 @@ from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.ingestion.constants import (
     FAILURE_STATUSES,
+    IN_PROGRESS_STATUSES,
     NON_RETRYABLE_ERROR_CODES,
     PARTIAL_STATUSES,
     PATH_DIRECT,
@@ -86,6 +87,32 @@ def _is_terminal_failure_status(status: str) -> bool:
     return status in FAILURE_STATUSES or status in PARTIAL_STATUSES
 
 
+def _wait_for_terminal_document_status(
+    file_database: BedrockFileDatabase,
+    s3_uri: str,
+    initial_status: str,
+) -> str:
+    """Poll GetKnowledgeBaseDocuments until the document leaves in-progress states."""
+    status = initial_status
+    if status not in IN_PROGRESS_STATUSES:
+        return status
+
+    poll_interval = settings.BEDROCK_DIRECT_INGEST_POLL_INTERVAL_SECONDS
+    max_attempts = settings.BEDROCK_DIRECT_INGEST_POLL_MAX_ATTEMPTS
+    for attempt in range(max_attempts):
+        logger.info(
+            "[Bedrock] Direct ingest document status %s (poll %s/%s)",
+            status,
+            attempt + 1,
+            max_attempts,
+        )
+        sleep(poll_interval)
+        status = file_database.get_knowledge_base_document_status(s3_uri)
+        if status not in IN_PROGRESS_STATUSES:
+            return status
+    return status
+
+
 def _validate_search(file_database: BedrockFileDatabase, content_base_uuid: str, max_attempts: int = 3) -> bool:
     for attempt in range(max_attempts):
         try:
@@ -136,11 +163,18 @@ def run_direct_ingest(
                 file_uuid=str(content_base_file.uuid),
             )
             api_returned_at = _utc_now()
-            document_status = result.get("document_status", "")
+            document_status = _wait_for_terminal_document_status(
+                file_database,
+                s3_uri,
+                result.get("document_status", ""),
+            )
             if document_status in SUCCESS_STATUSES:
                 break
             if _is_terminal_failure_status(document_status):
                 last_exception = RuntimeError(f"Bedrock document status: {document_status}")
+                break
+            if document_status in IN_PROGRESS_STATUSES:
+                last_exception = RuntimeError(f"Bedrock document status timed out while {document_status}")
                 break
             last_exception = RuntimeError(f"Unexpected Bedrock document status: {document_status}")
             break

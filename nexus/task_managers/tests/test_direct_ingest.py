@@ -5,7 +5,12 @@ import pendulum
 from django.test import SimpleTestCase
 
 from nexus.task_managers.ingestion.constants import STRATEGY_DIRECT_WITH_FALLBACK
-from nexus.task_managers.ingestion.direct import build_client_token, build_s3_uri, https_file_url_to_s3_uri
+from nexus.task_managers.ingestion.direct import (
+    _wait_for_terminal_document_status,
+    build_client_token,
+    build_s3_uri,
+    https_file_url_to_s3_uri,
+)
 
 
 class BuildClientTokenTest(SimpleTestCase):
@@ -62,6 +67,35 @@ class HttpsToS3UriTest(SimpleTestCase):
             "us-east-1",
         )
         self.assertEqual(uri, "s3://my-bucket/cb-uuid/file.pdf")
+
+
+class WaitForDocumentStatusTest(SimpleTestCase):
+    @patch("nexus.task_managers.ingestion.direct.sleep")
+    @patch("nexus.task_managers.ingestion.direct.settings")
+    def test_polls_until_indexed(self, mock_settings, mock_sleep):
+        mock_settings.BEDROCK_DIRECT_INGEST_POLL_INTERVAL_SECONDS = 1
+        mock_settings.BEDROCK_DIRECT_INGEST_POLL_MAX_ATTEMPTS = 5
+        file_database = MagicMock()
+        file_database.get_knowledge_base_document_status.side_effect = ["IN_PROGRESS", "INDEXED"]
+
+        status = _wait_for_terminal_document_status(
+            file_database,
+            "s3://bucket/cb/file.pdf",
+            "STARTING",
+        )
+
+        self.assertEqual(status, "INDEXED")
+        self.assertEqual(file_database.get_knowledge_base_document_status.call_count, 2)
+
+    def test_returns_immediately_when_already_indexed(self):
+        file_database = MagicMock()
+        status = _wait_for_terminal_document_status(
+            file_database,
+            "s3://bucket/cb/file.pdf",
+            "INDEXED",
+        )
+        self.assertEqual(status, "INDEXED")
+        file_database.get_knowledge_base_document_status.assert_not_called()
 
 
 class RouteFileIngestionTest(SimpleTestCase):
