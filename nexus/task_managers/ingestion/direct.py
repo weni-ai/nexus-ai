@@ -268,7 +268,15 @@ def run_direct_ingest(
         except ClientError as exc:
             api_returned_at = _utc_now()
             last_exception = exc
-            error_code = exc.response.get("Error", {}).get("Code", "")
+            error = exc.response.get("Error", {})
+            error_code = error.get("Code", "")
+            error_message = error.get("Message", "") or ""
+            running_job_conflict = (
+                error_code == "ValidationException" and "running ingestion job" in error_message.lower()
+            )
+            if running_job_conflict and attempt < max_retries:
+                sleep(backoff_base * (2**attempt))
+                continue
             if error_code in NON_RETRYABLE_ERROR_CODES:
                 break
             if error_code in TRANSIENT_ERROR_CODES and attempt < max_retries:

@@ -3,6 +3,7 @@ from time import sleep
 from typing import Dict, List, Optional
 
 from botocore.exceptions import ClientError
+from django.conf import settings
 from langchain_community.document_loaders import AsyncChromiumLoader
 from langchain_community.document_transformers import Html2TextTransformer
 
@@ -208,6 +209,10 @@ def ingest_file_direct(
 def start_ingestion_job(
     celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False, project_uuid: str | None = None
 ):
+    if settings.BEDROCK_DISABLE_GLOBAL_INGESTION_JOB:
+        logger.warning("🦑 BEDROCK: Global ingestion job skipped (BEDROCK_DISABLE_GLOBAL_INGESTION_JOB=true)")
+        return {"skipped": True, "reason": "BEDROCK_DISABLE_GLOBAL_INGESTION_JOB"}
+
     try:
         logger.info("🦑 BEDROCK: Starting Ingestion Job")
 
