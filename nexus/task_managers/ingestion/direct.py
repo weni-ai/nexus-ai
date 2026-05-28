@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import traceback
 from time import sleep
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import unquote, urlparse
@@ -112,6 +113,12 @@ def _exception_details(exc: Exception) -> Dict[str, Any]:
     }
 
 
+def _format_exception_traceback(exc: BaseException) -> str:
+    """Full traceback text (same format as uncaught exceptions)."""
+    lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    return "".join(lines).rstrip()
+
+
 def _format_bedrock_debug_context(
     last_ingest_result: Optional[Dict[str, Any]],
     last_document_detail: Optional[Dict[str, Any]],
@@ -179,20 +186,12 @@ def _log_direct_ingest_failure(
     )
     debug_context = _format_bedrock_debug_context(last_ingest_result, last_document_detail)
 
+    log_parts = [f"[Bedrock] {summary}"]
+    if debug_context:
+        log_parts.append(debug_context)
     if last_exception is not None:
-        if debug_context:
-            logger.exception(
-                "[Bedrock] %s\n%s",
-                summary,
-                debug_context,
-                exc_info=last_exception,
-            )
-        else:
-            logger.exception("[Bedrock] %s", summary, exc_info=last_exception)
-    elif debug_context:
-        logger.error("[Bedrock] %s\n%s", summary, debug_context)
-    else:
-        logger.error("[Bedrock] %s", summary)
+        log_parts.append(_format_exception_traceback(last_exception))
+    logger.error("\n".join(log_parts))
 
 
 def _wait_for_terminal_document_status(
@@ -291,15 +290,16 @@ def run_direct_ingest(
             if document_status in SUCCESS_STATUSES:
                 break
             if _is_terminal_failure_status(document_status):
-                last_exception = RuntimeError(
+                raise RuntimeError(
                     f"Bedrock document status: {document_status}"
                     + (f" ({document_status_reason})" if document_status_reason else "")
                 )
-                break
             if document_status in IN_PROGRESS_STATUSES:
-                last_exception = RuntimeError(f"Bedrock document status timed out while {document_status}")
-                break
-            last_exception = RuntimeError(f"Unexpected Bedrock document status: {document_status}")
+                raise RuntimeError(f"Bedrock document status timed out while {document_status}")
+            raise RuntimeError(f"Unexpected Bedrock document status: {document_status}")
+        except RuntimeError as exc:
+            api_returned_at = _utc_now()
+            last_exception = exc
             break
         except ClientError as exc:
             api_returned_at = _utc_now()
