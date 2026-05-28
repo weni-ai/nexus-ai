@@ -614,11 +614,9 @@ class BedrockFileDatabase(FileDataBase):
         content_base_uuid: str,
         file_uuid: str,
     ) -> Dict[str, Any]:
-        from nexus.task_managers.ingestion.direct import build_s3_uri
-
         logger.info("[Bedrock] Ingesting knowledge base document via direct path")
         object_key = self._object_key_from_s3_uri(s3_uri)
-        metadata_uri = build_s3_uri(self.bucket_name, f"{object_key}.metadata.json")
+        filename = object_key.rsplit("/", 1)[-1]
         document = {
             "content": {
                 "dataSourceType": "S3",
@@ -627,8 +625,21 @@ class BedrockFileDatabase(FileDataBase):
                 },
             },
             "metadata": {
-                "type": "S3_LOCATION",
-                "s3Location": {"uri": metadata_uri},
+                "type": "IN_LINE_ATTRIBUTE",
+                "inlineAttributes": [
+                    {
+                        "key": "contentBaseUuid",
+                        "value": {"type": "STRING", "stringValue": content_base_uuid},
+                    },
+                    {
+                        "key": "fileUuid",
+                        "value": {"type": "STRING", "stringValue": file_uuid},
+                    },
+                    {
+                        "key": "filename",
+                        "value": {"type": "STRING", "stringValue": filename},
+                    },
+                ],
             },
         }
         response = self.bedrock_agent.ingest_knowledge_base_documents(
@@ -643,7 +654,7 @@ class BedrockFileDatabase(FileDataBase):
         status = details[0].get("status", "FAILED")
         return {"document_status": status, "raw_response": response}
 
-    def get_knowledge_base_document_status(self, s3_uri: str) -> str:
+    def get_knowledge_base_document_detail(self, s3_uri: str) -> Dict[str, Any]:
         response = self.bedrock_agent.get_knowledge_base_documents(
             knowledgeBaseId=self.knowledge_base_id,
             dataSourceId=self.data_source_id,
@@ -656,8 +667,17 @@ class BedrockFileDatabase(FileDataBase):
         )
         details = response.get("documentDetails") or []
         if not details:
-            return "NOT_FOUND"
-        return details[0].get("status", "FAILED")
+            return {"status": "NOT_FOUND", "statusReason": "", "raw_detail": {}, "raw_response": response}
+        detail = details[0]
+        return {
+            "status": detail.get("status", "FAILED"),
+            "statusReason": detail.get("statusReason") or "",
+            "raw_detail": detail,
+            "raw_response": response,
+        }
+
+    def get_knowledge_base_document_status(self, s3_uri: str) -> str:
+        return self.get_knowledge_base_document_detail(s3_uri)["status"]
 
     def start_bedrock_ingestion(self) -> str:
         logger.info("[Bedrock] Starting ingestion job")

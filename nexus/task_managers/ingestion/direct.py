@@ -1,7 +1,8 @@
 import hashlib
+import json
 import logging
 from time import sleep
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 
 import pendulum
@@ -87,15 +88,88 @@ def _is_terminal_failure_status(status: str) -> bool:
     return status in FAILURE_STATUSES or status in PARTIAL_STATUSES
 
 
+def _client_error_details(exc: ClientError) -> Dict[str, Any]:
+    response = exc.response or {}
+    error = response.get("Error", {})
+    metadata = response.get("ResponseMetadata", {})
+    return {
+        "exception_type": error.get("Code") or type(exc).__name__,
+        "error_message": str(exc),
+        "bedrock_error_code": error.get("Code"),
+        "bedrock_error_message": error.get("Message"),
+        "bedrock_error": error,
+        "bedrock_response_metadata": {
+            "request_id": metadata.get("RequestId"),
+            "http_status_code": metadata.get("HTTPStatusCode"),
+        },
+    }
+
+
+def _exception_details(exc: Exception) -> Dict[str, Any]:
+    return {
+        "exception_type": type(exc).__name__,
+        "error_message": str(exc),
+    }
+
+
+def _log_direct_ingest_failure(
+    *,
+    strategy: str,
+    submitted_at: pendulum.DateTime,
+    api_returned_at: Optional[pendulum.DateTime],
+    final_status_at: pendulum.DateTime,
+    content_base_uuid: str,
+    file_uuid: str,
+    project_uuid: str,
+    s3_uri: str,
+    last_exception: Optional[Exception],
+    document_status: str,
+    document_status_reason: str,
+    last_ingest_result: Optional[Dict[str, Any]],
+    last_document_detail: Optional[Dict[str, Any]],
+) -> None:
+    payload: Dict[str, Any] = {
+        "path": PATH_DIRECT,
+        "strategy": strategy,
+        "status": "fail",
+        "submitted_at": _iso(submitted_at),
+        "api_returned_at": _iso(api_returned_at),
+        "final_status_at": _iso(final_status_at),
+        "content_base_uuid": content_base_uuid,
+        "file_uuid": file_uuid,
+        "project_uuid": project_uuid,
+        "document_type": "file",
+        "s3_uri": s3_uri,
+        "bedrock_document_status": document_status or None,
+        "bedrock_status_reason": document_status_reason or None,
+    }
+    if last_ingest_result:
+        payload["bedrock_ingest_response"] = last_ingest_result.get("raw_response")
+    if last_document_detail:
+        payload["bedrock_document_detail"] = last_document_detail
+    if isinstance(last_exception, ClientError):
+        payload.update(_client_error_details(last_exception))
+    elif last_exception:
+        payload.update(_exception_details(last_exception))
+
+    log_ingestion_failed(payload)
+    logger.error(
+        "[Bedrock] Direct ingest failed: %s",
+        json.dumps(payload, default=str),
+    )
+
+
 def _wait_for_terminal_document_status(
     file_database: BedrockFileDatabase,
     s3_uri: str,
     initial_status: str,
-) -> str:
+) -> Tuple[str, str, Dict[str, Any]]:
     """Poll GetKnowledgeBaseDocuments until the document leaves in-progress states."""
     status = initial_status
+    status_reason = ""
+    last_detail: Dict[str, Any] = {}
     if status not in IN_PROGRESS_STATUSES:
-        return status
+        return status, status_reason, last_detail
 
     poll_interval = settings.BEDROCK_DIRECT_INGEST_POLL_INTERVAL_SECONDS
     max_attempts = settings.BEDROCK_DIRECT_INGEST_POLL_MAX_ATTEMPTS
@@ -107,10 +181,14 @@ def _wait_for_terminal_document_status(
             max_attempts,
         )
         sleep(poll_interval)
-        status = file_database.get_knowledge_base_document_status(s3_uri)
+        last_detail = file_database.get_knowledge_base_document_detail(s3_uri)
+        status = last_detail["status"]
+        status_reason = last_detail.get("statusReason") or ""
         if status not in IN_PROGRESS_STATUSES:
-            return status
-    return status
+            if status_reason:
+                logger.info("[Bedrock] Direct ingest terminal status reason: %s", status_reason)
+            return status, status_reason, last_detail
+    return status, status_reason, last_detail
 
 
 def _validate_search(file_database: BedrockFileDatabase, content_base_uuid: str, max_attempts: int = 3) -> bool:
@@ -152,26 +230,32 @@ def run_direct_ingest(
 
     last_exception: Optional[Exception] = None
     document_status = ""
+    document_status_reason = ""
+    last_ingest_result: Optional[Dict[str, Any]] = None
+    last_document_detail: Optional[Dict[str, Any]] = None
     api_returned_at: Optional[pendulum.DateTime] = None
 
     for attempt in range(max_retries + 1):
         try:
-            result = file_database.ingest_knowledge_base_documents(
+            last_ingest_result = file_database.ingest_knowledge_base_documents(
                 s3_uri=s3_uri,
                 client_token=client_token,
                 content_base_uuid=str(content_base_uuid),
                 file_uuid=str(content_base_file.uuid),
             )
             api_returned_at = _utc_now()
-            document_status = _wait_for_terminal_document_status(
+            document_status, document_status_reason, last_document_detail = _wait_for_terminal_document_status(
                 file_database,
                 s3_uri,
-                result.get("document_status", ""),
+                last_ingest_result.get("document_status", ""),
             )
             if document_status in SUCCESS_STATUSES:
                 break
             if _is_terminal_failure_status(document_status):
-                last_exception = RuntimeError(f"Bedrock document status: {document_status}")
+                last_exception = RuntimeError(
+                    f"Bedrock document status: {document_status}"
+                    + (f" ({document_status_reason})" if document_status_reason else "")
+                )
                 break
             if document_status in IN_PROGRESS_STATUSES:
                 last_exception = RuntimeError(f"Bedrock document status timed out while {document_status}")
@@ -180,25 +264,8 @@ def run_direct_ingest(
             break
         except ClientError as exc:
             api_returned_at = _utc_now()
-            error = exc.response.get("Error", {})
-            error_code = error.get("Code", "")
-            error_message = error.get("Message", "")
             last_exception = exc
-            log_ingestion_failed(
-                {
-                    "path": PATH_DIRECT,
-                    "strategy": strategy,
-                    "status": "fail",
-                    "submitted_at": _iso(submitted_at),
-                    "api_returned_at": _iso(api_returned_at),
-                    "content_base_uuid": str(content_base_uuid),
-                    "file_uuid": str(content_base_file.uuid),
-                    "project_uuid": project_uuid,
-                    "document_type": "file",
-                    "exception_type": error_code,
-                    "bedrock_error_message": error_message or None,
-                }
-            )
+            error_code = exc.response.get("Error", {}).get("Code", "")
             if error_code in NON_RETRYABLE_ERROR_CODES:
                 break
             if error_code in TRANSIENT_ERROR_CODES and attempt < max_retries:
@@ -241,24 +308,39 @@ def run_direct_ingest(
         return True, PATH_DIRECT
 
     if _should_fallback(strategy):
+        if last_exception or document_status:
+            _log_direct_ingest_failure(
+                strategy=strategy,
+                submitted_at=submitted_at,
+                api_returned_at=api_returned_at,
+                final_status_at=final_status_at,
+                content_base_uuid=str(content_base_uuid),
+                file_uuid=str(content_base_file.uuid),
+                project_uuid=project_uuid,
+                s3_uri=s3_uri,
+                last_exception=last_exception,
+                document_status=document_status,
+                document_status_reason=document_status_reason,
+                last_ingest_result=last_ingest_result,
+                last_document_detail=last_document_detail,
+            )
         return False, PATH_JOB_FALLBACK
 
     task_manager_usecase.update_task_status(task_manager_uuid, TaskManager.STATUS_FAIL, "file")
-    if last_exception and not isinstance(last_exception, ClientError):
-        log_ingestion_failed(
-            {
-                "path": PATH_DIRECT,
-                "strategy": strategy,
-                "status": "fail",
-                "submitted_at": _iso(submitted_at),
-                "api_returned_at": _iso(api_returned_at),
-                "final_status_at": _iso(final_status_at),
-                "content_base_uuid": str(content_base_uuid),
-                "file_uuid": str(content_base_file.uuid),
-                "project_uuid": project_uuid,
-                "document_type": "file",
-                "exception_type": type(last_exception).__name__,
-                "bedrock_document_status": document_status or None,
-            }
+    if last_exception or document_status:
+        _log_direct_ingest_failure(
+            strategy=strategy,
+            submitted_at=submitted_at,
+            api_returned_at=api_returned_at,
+            final_status_at=final_status_at,
+            content_base_uuid=str(content_base_uuid),
+            file_uuid=str(content_base_file.uuid),
+            project_uuid=project_uuid,
+            s3_uri=s3_uri,
+            last_exception=last_exception,
+            document_status=document_status,
+            document_status_reason=document_status_reason,
+            last_ingest_result=last_ingest_result,
+            last_document_detail=last_document_detail,
         )
     return False, PATH_DIRECT
