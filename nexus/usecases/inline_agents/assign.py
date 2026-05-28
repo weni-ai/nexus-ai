@@ -41,6 +41,19 @@ def resolve_assignment_mcp_fields(
     return mcp, config, system
 
 
+def _clear_agent_credential_values_on_unassign(agent: Agent, project: Project) -> None:
+    """Clear stored secret values for credentials linked to the agent, keeping schema rows."""
+    for cred in AgentCredential.objects.filter(agents=agent, project=project):
+        other_agents_still_assigned = IntegratedAgent.objects.filter(
+            project=project,
+            agent__in=cred.agents.exclude(pk=agent.pk),
+        ).exists()
+        if other_agents_still_assigned or not cred.value:
+            continue
+        cred.value = ""
+        cred.save(update_fields=["value"])
+
+
 def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedAgent, agent: Agent) -> bool:
     """When the agent has exactly one active MCP, set metadata mcp/system (same keys as v1 official assign)."""
     prefetched = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
@@ -100,11 +113,7 @@ class AssignAgentsUsecase:
                 integrated_agent = IntegratedAgent.objects.get(agent=agent, project=project)
                 deleted_agent = integrated_agent
                 integrated_agent.delete()
-
-                for cred in AgentCredential.objects.filter(agents=agent, project=project):
-                    cred.agents.remove(agent)
-                    if len(cred.agents.all()) == 0:
-                        cred.delete()
+                _clear_agent_credential_values_on_unassign(agent, project)
 
                 return True, deleted_agent
             except IntegratedAgent.DoesNotExist:
