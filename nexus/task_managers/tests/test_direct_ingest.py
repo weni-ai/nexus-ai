@@ -76,26 +76,72 @@ class WaitForDocumentStatusTest(SimpleTestCase):
         mock_settings.BEDROCK_DIRECT_INGEST_POLL_INTERVAL_SECONDS = 1
         mock_settings.BEDROCK_DIRECT_INGEST_POLL_MAX_ATTEMPTS = 5
         file_database = MagicMock()
-        file_database.get_knowledge_base_document_status.side_effect = ["IN_PROGRESS", "INDEXED"]
+        file_database.get_knowledge_base_document_detail.side_effect = [
+            {"status": "IN_PROGRESS", "statusReason": "", "raw_detail": {}, "raw_response": {}},
+            {"status": "INDEXED", "statusReason": "", "raw_detail": {}, "raw_response": {}},
+        ]
 
-        status = _wait_for_terminal_document_status(
+        status, reason, detail = _wait_for_terminal_document_status(
             file_database,
             "s3://bucket/cb/file.pdf",
             "STARTING",
         )
 
         self.assertEqual(status, "INDEXED")
-        self.assertEqual(file_database.get_knowledge_base_document_status.call_count, 2)
+        self.assertEqual(reason, "")
+        self.assertEqual(file_database.get_knowledge_base_document_detail.call_count, 2)
 
     def test_returns_immediately_when_already_indexed(self):
         file_database = MagicMock()
-        status = _wait_for_terminal_document_status(
+        status, reason, detail = _wait_for_terminal_document_status(
             file_database,
             "s3://bucket/cb/file.pdf",
             "INDEXED",
         )
         self.assertEqual(status, "INDEXED")
-        file_database.get_knowledge_base_document_status.assert_not_called()
+        self.assertEqual(reason, "")
+        self.assertEqual(detail, {})
+        file_database.get_knowledge_base_document_detail.assert_not_called()
+
+
+class LogDirectIngestFailureTest(SimpleTestCase):
+    @patch("nexus.task_managers.ingestion.direct.logger")
+    @patch("nexus.task_managers.ingestion.direct.log_ingestion_failed")
+    def test_logs_full_client_error_payload(self, mock_log_failed, mock_logger):
+        from botocore.exceptions import ClientError
+
+        from nexus.task_managers.ingestion.direct import _log_direct_ingest_failure
+
+        exc = ClientError(
+            {
+                "Error": {"Code": "ValidationException", "Message": "Invalid document metadata"},
+                "ResponseMetadata": {"RequestId": "req-1", "HTTPStatusCode": 400},
+            },
+            "IngestKnowledgeBaseDocuments",
+        )
+        now = pendulum.now("UTC")
+        _log_direct_ingest_failure(
+            strategy="direct",
+            submitted_at=now,
+            api_returned_at=now,
+            final_status_at=now,
+            content_base_uuid="cb-1",
+            file_uuid="f-1",
+            project_uuid="p-1",
+            s3_uri="s3://bucket/cb/file.pdf",
+            last_exception=exc,
+            document_status="FAILED",
+            document_status_reason="metadata invalid",
+            last_ingest_result={"raw_response": {"documentDetails": []}},
+            last_document_detail={"raw_detail": {"status": "FAILED"}},
+        )
+        mock_log_failed.assert_called_once()
+        payload = mock_log_failed.call_args[0][0]
+        self.assertEqual(payload["bedrock_error_code"], "ValidationException")
+        self.assertEqual(payload["bedrock_status_reason"], "metadata invalid")
+        self.assertIn("bedrock_ingest_response", payload)
+        self.assertIn("bedrock_document_detail", payload)
+        mock_logger.error.assert_called_once()
 
 
 class RouteFileIngestionTest(SimpleTestCase):
