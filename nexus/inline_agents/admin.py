@@ -18,6 +18,7 @@ from nexus.inline_agents.models import (
     MCP,
     Agent,
     AgentCategory,
+    AgentCredential,
     AgentGroup,
     AgentGroupModal,
     AgentSystem,
@@ -209,6 +210,43 @@ class VersionInline(admin.TabularInline):
         return qs.order_by("-created_on")
 
 
+class AgentCredentialInline(admin.TabularInline):
+    """Read-only list of AgentCredential entries linked to this Agent."""
+
+    model = AgentCredential.agents.through
+    extra = 0
+    can_delete = False
+    show_change_link = False
+    verbose_name = "Credential"
+    verbose_name_plural = "Credentials"
+    fields = ("credential_key", "credential_label", "credential_placeholder", "credential_is_confidential", "view_link")
+    readonly_fields = fields
+
+    def credential_key(self, obj):
+        return getattr(obj.agentcredential, "key", None)
+
+    def credential_label(self, obj):
+        return getattr(obj.agentcredential, "label", None)
+
+    def credential_placeholder(self, obj):
+        return getattr(obj.agentcredential, "placeholder", None)
+
+    def credential_is_confidential(self, obj):
+        return getattr(obj.agentcredential, "is_confidential", None)
+
+    def view_link(self, obj):
+        if getattr(obj, "agentcredential_id", None):
+            url = reverse("admin:inline_agents_agentcredential_change", args=[obj.agentcredential_id])
+            return format_html('<a href="{}" target="_blank">View</a>', url)
+        return "-"
+
+    credential_key.short_description = "Key"
+    credential_label.short_description = "Label"
+    credential_placeholder.short_description = "Placeholder"
+    credential_is_confidential.short_description = "Confidential"
+    view_link.short_description = "Actions"
+
+
 @admin.register(Version)
 class VersionAdmin(admin.ModelAdmin):
     """Admin interface for Version model - shows skills and display_skills"""
@@ -237,7 +275,7 @@ class AgentAdmin(admin.ModelAdmin):
     search_fields = ("name", "project__name", "project__uuid", "slug", "uuid")
     ordering = ("project__name",)
     autocomplete_fields = ["project", "group", "systems", "agent_type", "category", "mcps"]
-    inlines = [VersionInline]
+    inlines = [VersionInline, AgentCredentialInline]
     readonly_fields = ("mcps_list",)
 
     fieldsets = (
@@ -350,6 +388,16 @@ class AgentAdmin(admin.ModelAdmin):
         return format_html(html)
 
     mcps_list.short_description = "Associated MCPs"
+
+
+@admin.register(AgentCredential)
+class AgentCredentialAdmin(admin.ModelAdmin):
+    list_display = ("key", "label", "project", "is_confidential")
+    list_filter = ("is_confidential",)
+    search_fields = ("key", "label", "project__name", "project__uuid")
+    ordering = ("project__name", "key")
+    autocomplete_fields = ["project", "agents"]
+    readonly_fields = ()
 
 
 class AgentGroupModalInline(admin.StackedInline):
