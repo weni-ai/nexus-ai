@@ -643,6 +643,22 @@ class BedrockFileDatabase(FileDataBase):
         status = details[0].get("status", "FAILED")
         return {"document_status": status, "raw_response": response}
 
+    def get_knowledge_base_document_status(self, s3_uri: str) -> str:
+        response = self.bedrock_agent.get_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            documentIdentifiers=[
+                {
+                    "dataSourceType": "S3",
+                    "s3": {"uri": s3_uri},
+                },
+            ],
+        )
+        details = response.get("documentDetails") or []
+        if not details:
+            return "NOT_FOUND"
+        return details[0].get("status", "FAILED")
+
     def start_bedrock_ingestion(self) -> str:
         logger.info("[Bedrock] Starting ingestion job")
         response = self.bedrock_agent.start_ingestion_job(
