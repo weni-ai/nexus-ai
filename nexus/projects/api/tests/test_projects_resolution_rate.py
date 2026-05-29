@@ -336,6 +336,56 @@ class TestProjectsResolutionRateView(TestCase):
         self.assertEqual(response.data["results"][0]["project_uuid"], str(other.uuid))
         self.assertEqual(response.data["average_resolution_rate"], 0.5)
 
+    def test_without_project_uuids_does_not_send_all_uuids_to_conversations(self, mock_summary):
+        inactive = Project.objects.create(
+            name="Inactive AB2",
+            org=self.eligible_project.org,
+            created_by=self.eligible_project.created_by,
+            inline_agent_switch=True,
+        )
+        mock_summary.return_value = _summary_for_projects(
+            [
+                {
+                    "project_uuid": str(self.eligible_project.uuid),
+                    "conversation_count": 3,
+                    "resolved_count": 1,
+                    "unresolved_count": 1,
+                    "human_support_count": 0,
+                    "resolution_rate": 0.3333,
+                    "csat": None,
+                    "csat_responses_count": 0,
+                    "nps": None,
+                    "nps_responses_count": 0,
+                },
+                {
+                    "project_uuid": str(inactive.uuid),
+                    "conversation_count": 0,
+                    "resolved_count": 0,
+                    "unresolved_count": 0,
+                    "human_support_count": 0,
+                    "resolution_rate": 0.0,
+                    "csat": None,
+                    "csat_responses_count": 0,
+                    "nps": None,
+                    "nps_responses_count": 0,
+                },
+            ]
+        )
+        response = self._get(
+            {
+                "start_date": "2026-05-19",
+                "end_date": "2026-05-25",
+                "page": 1,
+                "page_size": 20,
+            }
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_summary.assert_called_once()
+        self.assertIsNone(mock_summary.call_args.kwargs["project_uuids"])
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["project_uuid"], str(self.eligible_project.uuid))
+
     def test_conversations_failure_returns_503(self, mock_summary):
         import requests
 

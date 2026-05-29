@@ -10,7 +10,9 @@ from nexus.internals.conversations import ConversationsRESTClient
 from nexus.projects.services.projects_resolution_rate import (
     ResolutionRateQuery,
     build_response,
+    conversations_fetch_project_uuids,
     eligible_projects_queryset,
+    empty_summary_averages,
     log_conversations_failure,
     parse_calendar_date,
     parse_include_blocks,
@@ -18,6 +20,7 @@ from nexus.projects.services.projects_resolution_rate import (
     parse_page_size,
     parse_project_uuids,
     resolve_calendar_range,
+    resolve_projects_for_response,
 )
 from nexus.users.api.authentication import UserGlobalTokenAuthentication
 
@@ -43,26 +46,33 @@ class ProjectsResolutionRateView(APIView):
         except ValueError as exc:
             return self._validation_error_response(str(exc))
 
-        projects = list(eligible_projects_queryset(query.project_uuids))
-        if not projects:
-            payload = build_response(query=query, summary_payload={}, projects=[])
+        eligible_projects = list(eligible_projects_queryset(query.project_uuids))
+        if not eligible_projects:
+            payload = build_response(
+                query=query,
+                summary_payload={},
+                projects=[],
+                period_averages=empty_summary_averages(),
+            )
             serializer = ProjectsResolutionRateResponseSerializer(data=payload)
             serializer.is_valid(raise_exception=True)
             return Response(payload, status=status.HTTP_200_OK)
 
-        project_uuid_strings = [str(project.uuid) for project in projects]
+        fetch_uuids = conversations_fetch_project_uuids(query, eligible_projects)
         start_param = query.start_date.isoformat() if query.start_date else None
         end_param = query.end_date.isoformat() if query.end_date else None
+        log_uuids = fetch_uuids or []
 
         try:
             summary_payload = ConversationsRESTClient().get_projects_resolution_summary(
-                project_uuids=project_uuid_strings,
+                project_uuids=fetch_uuids,
                 start_date=start_param,
                 end_date=end_param,
+                timeout=120 if fetch_uuids is None else 60,
             )
         except requests.HTTPError as exc:
             log_conversations_failure(
-                project_uuids=project_uuid_strings,
+                project_uuids=log_uuids,
                 start_date=start_param,
                 end_date=end_param,
                 exc=exc,
@@ -70,7 +80,7 @@ class ProjectsResolutionRateView(APIView):
             return self._downstream_error_response(exc)
         except requests.RequestException as exc:
             log_conversations_failure(
-                project_uuids=project_uuid_strings,
+                project_uuids=log_uuids,
                 start_date=start_param,
                 end_date=end_param,
                 exc=exc,
@@ -80,7 +90,17 @@ class ProjectsResolutionRateView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        payload = build_response(query=query, summary_payload=summary_payload, projects=projects)
+        projects, period_averages = resolve_projects_for_response(
+            query=query,
+            summary_payload=summary_payload,
+            eligible_projects=eligible_projects,
+        )
+        payload = build_response(
+            query=query,
+            summary_payload=summary_payload,
+            projects=projects,
+            period_averages=period_averages,
+        )
         serializer = ProjectsResolutionRateResponseSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
         return Response(payload, status=status.HTTP_200_OK)
