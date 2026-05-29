@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -15,7 +16,7 @@ from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
 
-AB2_BACKEND = "BedrockBackend"
+CONVERSATIONS_METRICS_EARLIEST_DATE = date(2026, 3, 28)
 MANAGER_FALLBACK = "2.5"
 
 OPTIONAL_INCLUDE_BLOCKS = frozenset(
@@ -114,6 +115,19 @@ def parse_include_blocks(raw: str | None) -> set[str] | None:
     return blocks
 
 
+def _calendar_date_to_date(value: pendulum.Date) -> date:
+    return date(value.year, value.month, value.day)
+
+
+def _validate_metrics_earliest_date(field_name: str, value: pendulum.Date) -> None:
+    day = _calendar_date_to_date(value)
+    if day < CONVERSATIONS_METRICS_EARLIEST_DATE:
+        raise ValueError(
+            f"{field_name} must be on or after {CONVERSATIONS_METRICS_EARLIEST_DATE.isoformat()} "
+            "(conversations metrics are only available from that date)"
+        )
+
+
 def resolve_calendar_range(
     start_date: pendulum.Date | None,
     end_date: pendulum.Date | None,
@@ -122,13 +136,16 @@ def resolve_calendar_range(
         return None, None
     if start_date is None or end_date is None:
         raise ValueError("start_date and end_date must both be provided or both omitted")
+    _validate_metrics_earliest_date("start_date", start_date)
+    _validate_metrics_earliest_date("end_date", end_date)
     if start_date > end_date:
         raise ValueError("start_date must be before or equal to end_date")
     return start_date, end_date
 
 
 def eligible_projects_queryset(project_uuids: list[UUID] | None):
-    qs = Project.objects.filter(is_active=True, agents_backend=AB2_BACKEND).select_related("manager_agent")
+    """AB 2 projects only: inline_agent_switch=True (AB 1 uses inline_agent_switch=False)."""
+    qs = Project.objects.filter(is_active=True, inline_agent_switch=True).select_related("manager_agent")
     if project_uuids:
         qs = qs.filter(uuid__in=project_uuids)
     return qs.order_by("name")
