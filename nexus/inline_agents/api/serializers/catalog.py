@@ -4,6 +4,7 @@ from itertools import groupby
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Prefetch
 
 from nexus.inline_agents.api.official_agents_helpers import (
     _serialize_mcp,
@@ -13,7 +14,26 @@ from nexus.inline_agents.api.official_agents_helpers import (
     get_all_mcps_for_group,
     get_all_systems_for_group,
 )
-from nexus.inline_agents.models import Agent, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
+
+
+def my_agents_list_prefetches() -> list:
+    """Prefetch plan for ``AgentsView`` — must match ``_agent_credentials_payload`` / ``_mcps_for_standalone_agent``."""
+    return [
+        "systems",
+        Prefetch(
+            "agentcredential_set",
+            queryset=AgentCredential.objects.order_by("key"),
+        ),
+        Prefetch(
+            "mcps",
+            queryset=MCP.objects.filter(is_active=True)
+            .select_related("system")
+            .prefetch_related("config_options", "credential_templates")
+            .order_by("order", "name"),
+        ),
+    ]
+
 
 # Canonical catalog row (novo retorno) — same keys on every list surface.
 # Official v1: one row per ``AgentGroup`` (group view). My-agents / project official: one row per ``Agent``.
@@ -126,13 +146,84 @@ def _flatten_group_mcps(group_slug: str) -> list[dict[str, Any]]:
     return _sort_mcps(out)
 
 
-def _mcps_for_standalone_agent(agent: Agent) -> list[dict[str, Any]]:
-    mcps = (
+def _serialize_agent_credential(credential: AgentCredential) -> dict[str, Any]:
+    """Same shape as ``_serialize_mcp`` credential templates (schema only, no values)."""
+    return {
+        "name": credential.key,
+        "label": credential.label,
+        "placeholder": credential.placeholder,
+        "is_confidential": credential.is_confidential,
+    }
+
+
+def _iter_agent_credentials(agent: Agent) -> list[AgentCredential]:
+    """Use prefetched credentials when present; avoid ``.order_by()`` on the related manager (N+1)."""
+    cache = getattr(agent, "_prefetched_objects_cache", None)
+    if isinstance(cache, dict) and "agentcredential_set" in cache:
+        return sorted(cache["agentcredential_set"], key=lambda credential: credential.key or "")
+    return list(agent.agentcredential_set.all().order_by("key"))
+
+
+def _iter_active_agent_mcps(agent: Agent) -> list[MCP]:
+    """Use prefetched active MCPs when present; otherwise fall back to a filtered queryset."""
+    cache = getattr(agent, "_prefetched_objects_cache", None)
+    if isinstance(cache, dict) and "mcps" in cache:
+        return list(cache["mcps"])
+    return list(
         agent.mcps.filter(is_active=True)
         .select_related("system")
         .prefetch_related("config_options", "credential_templates")
+        .order_by("order", "name")
     )
-    return _sort_mcps([_serialize_mcp(m) for m in mcps])
+
+
+def _agent_credentials_payload(agent: Agent) -> list[dict[str, Any]]:
+    seen_keys: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    for credential in _iter_agent_credentials(agent):
+        key = credential.key
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        rows.append(_serialize_agent_credential(credential))
+    return rows
+
+
+def _merge_agent_credentials_into_mcp(mcp_data: dict[str, Any], agent_credentials: list[dict[str, Any]]) -> None:
+    """Fill ``mcp_data['credentials']`` from agent credentials when MCP templates are missing or partial."""
+    if not agent_credentials:
+        return
+    if not mcp_data.get("credentials"):
+        mcp_data["credentials"] = list(agent_credentials)
+        return
+    existing_names = {item["name"] for item in mcp_data["credentials"]}
+    for credential in agent_credentials:
+        if credential["name"] not in existing_names:
+            mcp_data["credentials"].append(credential)
+
+
+def _synthetic_mcp_for_agent_credentials(agent: Agent, credentials: list[dict[str, Any]]) -> dict[str, Any]:
+    """Carrier row for ``mcps[].credentials`` when the agent has no linked MCP (not a DB MCP)."""
+    description = (agent.collaboration_instructions or "").strip() or None
+    return {
+        "name": None,
+        "description": {"en": description, "pt": None, "es": None},
+        "system": None,
+        "config": [],
+        "credentials": credentials,
+    }
+
+
+def _mcps_for_standalone_agent(agent: Agent) -> list[dict[str, Any]]:
+    agent_credentials = _agent_credentials_payload(agent)
+    serialized = [_serialize_mcp(m) for m in _iter_active_agent_mcps(agent)]
+    if serialized:
+        for mcp_data in serialized:
+            _merge_agent_credentials_into_mcp(mcp_data, agent_credentials)
+        return _sort_mcps(serialized)
+    if agent_credentials:
+        return [_synthetic_mcp_for_agent_credentials(agent, agent_credentials)]
+    return []
 
 
 def _mcps_for_agent(agent: Agent, group_slug: str | None) -> list[dict[str, Any]]:
