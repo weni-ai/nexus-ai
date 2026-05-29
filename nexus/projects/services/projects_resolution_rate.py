@@ -182,6 +182,75 @@ def _metrics_by_project_uuid(summary_payload: dict[str, Any]) -> dict[str, dict[
     return {str(row["project_uuid"]): row for row in summary_payload.get("projects", [])}
 
 
+def _period_averages_from_metric_rows(project_metrics: list[dict[str, Any]]) -> dict[str, Any]:
+    """Recompute period averages for a filtered project subset (FDD rules)."""
+    if not project_metrics:
+        return empty_summary_averages()
+
+    rates = [float(row.get("resolution_rate") or 0.0) for row in project_metrics]
+    average_resolution_rate = round(float(sum(rates) / len(rates)), 4)
+
+    csat_den = sum(int(row.get("csat_responses_count") or 0) for row in project_metrics)
+    csat_num = sum(
+        float(row["csat"]) * int(row["csat_responses_count"])
+        for row in project_metrics
+        if row.get("csat") is not None and int(row.get("csat_responses_count") or 0) > 0
+    )
+    nps_den = sum(int(row.get("nps_responses_count") or 0) for row in project_metrics)
+    nps_num = sum(
+        float(row["nps"]) * int(row["nps_responses_count"])
+        for row in project_metrics
+        if row.get("nps") is not None and int(row.get("nps_responses_count") or 0) > 0
+    )
+
+    return {
+        "average_resolution_rate": average_resolution_rate,
+        "average_csat": round(csat_num / csat_den, 4) if csat_den else None,
+        "average_nps": round(nps_num / nps_den, 4) if nps_den else None,
+    }
+
+
+def resolve_projects_for_response(
+    *,
+    query: ResolutionRateQuery,
+    summary_payload: dict[str, Any],
+    eligible_projects: list[Project],
+) -> tuple[list[Project], dict[str, Any]]:
+    """
+    When project_uuids are omitted, keep only eligible AB2 projects with conversations in range.
+    Recompute period averages for that filtered set.
+    """
+    if query.project_uuids is not None:
+        return eligible_projects, {
+            "average_resolution_rate": summary_payload.get("average_resolution_rate", 0.0),
+            "average_csat": summary_payload.get("average_csat"),
+            "average_nps": summary_payload.get("average_nps"),
+        }
+
+    metrics_map = _metrics_by_project_uuid(summary_payload)
+    eligible_by_uuid = {str(project.uuid): project for project in eligible_projects}
+    active_metrics: list[dict[str, Any]] = []
+    active_projects: list[Project] = []
+
+    for project_uuid, project in eligible_by_uuid.items():
+        metrics = metrics_map.get(project_uuid)
+        if not metrics:
+            continue
+        if int(metrics.get("conversation_count") or 0) < 1:
+            continue
+        active_metrics.append(metrics)
+        active_projects.append(project)
+
+    return active_projects, _period_averages_from_metric_rows(active_metrics)
+
+
+def conversations_fetch_project_uuids(query: ResolutionRateQuery, eligible_projects: list[Project]) -> list[str] | None:
+    """Omit UUID list when the client did not filter by project (avoids oversized query strings)."""
+    if query.project_uuids is None:
+        return None
+    return [str(project.uuid) for project in eligible_projects]
+
+
 def _resolution_rate_from_metrics(
     metrics: dict[str, Any],
     *,
@@ -302,6 +371,7 @@ def build_response(
     query: ResolutionRateQuery,
     summary_payload: dict[str, Any],
     projects: list[Project],
+    period_averages: dict[str, Any],
 ) -> dict[str, Any]:
     start_date, end_date = _response_dates(query, summary_payload)
 
@@ -326,9 +396,7 @@ def build_response(
         "page_size": query.page_size,
         "start_date": start_date,
         "end_date": end_date,
-        "average_resolution_rate": summary_payload.get("average_resolution_rate", 0.0),
-        "average_csat": summary_payload.get("average_csat"),
-        "average_nps": summary_payload.get("average_nps"),
+        **period_averages,
         "results": results,
     }
 
