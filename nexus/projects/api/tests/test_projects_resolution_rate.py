@@ -14,10 +14,12 @@ from nexus.inline_agents.models import Agent
 from nexus.projects.api.resolution_rate_views import ProjectsResolutionRateView
 from nexus.projects.models import Project
 from nexus.projects.services.projects_resolution_rate import (
+    CONVERSATIONS_METRICS_EARLIEST_DATE,
     apply_include_blocks,
     build_result_rows,
     parse_calendar_date,
     parse_page_size,
+    resolve_calendar_range,
     sort_result_rows,
 )
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
@@ -45,15 +47,15 @@ def _summary_for_projects(projects_metrics):
 class TestProjectsResolutionRateView(TestCase):
     def setUp(self):
         integrated = IntegratedIntelligenceFactory()
-        self.ab2_project = integrated.project
-        self.ab2_project.agents_backend = "BedrockBackend"
-        self.ab2_project.save(update_fields=["agents_backend"])
+        self.eligible_project = integrated.project
+        self.eligible_project.inline_agent_switch = True
+        self.eligible_project.save(update_fields=["inline_agent_switch"])
 
-        self.ab25_project = Project.objects.create(
-            name="AB 2.5 Project",
-            org=self.ab2_project.org,
-            created_by=self.ab2_project.created_by,
-            agents_backend="OpenAIBackend",
+        self.ab1_project = Project.objects.create(
+            name="AB 1 Project",
+            org=self.eligible_project.org,
+            created_by=self.eligible_project.created_by,
+            inline_agent_switch=False,
         )
 
         self.manager = ManagerAgent.objects.create(
@@ -65,14 +67,14 @@ class TestProjectsResolutionRateView(TestCase):
             collaborators_foundation_model="gpt-4o-mini",
             formatter_agent_foundation_model="gpt-4o-mini",
         )
-        self.ab2_project.manager_agent = self.manager
-        self.ab2_project.use_components = True
-        self.ab2_project.save(update_fields=["manager_agent", "use_components"])
+        self.eligible_project.manager_agent = self.manager
+        self.eligible_project.use_components = True
+        self.eligible_project.save(update_fields=["manager_agent", "use_components"])
 
         Agent.objects.create(
             name="Official",
             slug="official-agent",
-            project=self.ab2_project,
+            project=self.eligible_project,
             instruction="i",
             collaboration_instructions="c",
             is_official=True,
@@ -80,7 +82,7 @@ class TestProjectsResolutionRateView(TestCase):
         Agent.objects.create(
             name="Custom",
             slug="custom-agent",
-            project=self.ab2_project,
+            project=self.eligible_project,
             instruction="i",
             collaboration_instructions="c",
             is_official=False,
@@ -125,8 +127,32 @@ class TestProjectsResolutionRateView(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         mock_summary.assert_not_called()
 
+    def test_start_date_before_go_live_returns_400(self, mock_summary):
+        response = self._get(
+            {
+                "project_uuids": str(self.eligible_project.uuid),
+                "start_date": "2026-03-27",
+                "end_date": "2026-05-25",
+            }
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        assert "start_date" in response.data
+        mock_summary.assert_not_called()
+
+    def test_end_date_before_go_live_returns_400(self, mock_summary):
+        response = self._get(
+            {
+                "project_uuids": str(self.eligible_project.uuid),
+                "start_date": "2026-04-01",
+                "end_date": "2026-03-27",
+            }
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        assert "end_date" in response.data
+        mock_summary.assert_not_called()
+
     def test_invalid_page_size_returns_400(self, mock_summary):
-        response = self._get({"project_uuids": str(self.ab2_project.uuid), "page_size": "0"})
+        response = self._get({"project_uuids": str(self.eligible_project.uuid), "page_size": "0"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         assert "page_size" in response.data
         mock_summary.assert_not_called()
@@ -134,14 +160,14 @@ class TestProjectsResolutionRateView(TestCase):
     def test_client_called_with_single_batch_not_per_project(self, mock_summary):
         other = Project.objects.create(
             name="Batch Other",
-            org=self.ab2_project.org,
-            created_by=self.ab2_project.created_by,
-            agents_backend="BedrockBackend",
+            org=self.eligible_project.org,
+            created_by=self.eligible_project.created_by,
+            inline_agent_switch=True,
         )
         mock_summary.return_value = _summary_for_projects([])
         self._get(
             {
-                "project_uuids": f"{self.ab2_project.uuid},{other.uuid}",
+                "project_uuids": f"{self.eligible_project.uuid},{other.uuid}",
                 "start_date": "2026-05-19",
                 "end_date": "2026-05-25",
             }
@@ -150,14 +176,14 @@ class TestProjectsResolutionRateView(TestCase):
         called_uuids = set(mock_summary.call_args.kwargs["project_uuids"])
         self.assertEqual(
             called_uuids,
-            {str(self.ab2_project.uuid), str(other.uuid)},
+            {str(self.eligible_project.uuid), str(other.uuid)},
         )
 
     def test_success_merges_conversations_and_local_metadata(self, mock_summary):
         mock_summary.return_value = _summary_for_projects(
             [
                 {
-                    "project_uuid": str(self.ab2_project.uuid),
+                    "project_uuid": str(self.eligible_project.uuid),
                     "conversation_count": 10,
                     "resolved_count": 8,
                     "unresolved_count": 1,
@@ -172,14 +198,14 @@ class TestProjectsResolutionRateView(TestCase):
         )
         response = self._get(
             {
-                "project_uuids": str(self.ab2_project.uuid),
+                "project_uuids": str(self.eligible_project.uuid),
                 "start_date": "2026-05-19",
                 "end_date": "2026-05-25",
             }
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         row = response.data["results"][0]
-        self.assertEqual(row["project_name"], self.ab2_project.name)
+        self.assertEqual(row["project_name"], self.eligible_project.name)
         self.assertEqual(row["manager"], "Manager X")
         self.assertTrue(row["uses_components"])
         self.assertEqual(row["agents_count"], 2)
@@ -188,11 +214,11 @@ class TestProjectsResolutionRateView(TestCase):
         self.assertEqual(response.data["average_resolution_rate"], 0.5)
         mock_summary.assert_called_once()
 
-    def test_filters_only_ab2_projects(self, mock_summary):
+    def test_filters_only_ab2_inline_agent_switch_projects(self, mock_summary):
         mock_summary.return_value = _summary_for_projects(
             [
                 {
-                    "project_uuid": str(self.ab2_project.uuid),
+                    "project_uuid": str(self.eligible_project.uuid),
                     "conversation_count": 1,
                     "resolved_count": 1,
                     "unresolved_count": 0,
@@ -207,7 +233,7 @@ class TestProjectsResolutionRateView(TestCase):
         )
         response = self._get(
             {
-                "project_uuids": f"{self.ab2_project.uuid},{self.ab25_project.uuid}",
+                "project_uuids": f"{self.eligible_project.uuid},{self.ab1_project.uuid}",
                 "start_date": "2026-05-19",
                 "end_date": "2026-05-25",
             }
@@ -215,15 +241,15 @@ class TestProjectsResolutionRateView(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
         called_uuids = mock_summary.call_args.kwargs["project_uuids"]
-        self.assertEqual(called_uuids, [str(self.ab2_project.uuid)])
+        self.assertEqual(called_uuids, [str(self.eligible_project.uuid)])
 
     def test_manager_fallback_when_missing(self, mock_summary):
-        self.ab2_project.manager_agent = None
-        self.ab2_project.save(update_fields=["manager_agent"])
+        self.eligible_project.manager_agent = None
+        self.eligible_project.save(update_fields=["manager_agent"])
         mock_summary.return_value = _summary_for_projects(
             [
                 {
-                    "project_uuid": str(self.ab2_project.uuid),
+                    "project_uuid": str(self.eligible_project.uuid),
                     "conversation_count": 0,
                     "resolved_count": 0,
                     "unresolved_count": 0,
@@ -236,14 +262,14 @@ class TestProjectsResolutionRateView(TestCase):
                 }
             ]
         )
-        response = self._get({"project_uuids": str(self.ab2_project.uuid)})
+        response = self._get({"project_uuids": str(self.eligible_project.uuid)})
         self.assertEqual(response.data["results"][0]["manager"], "2.5")
 
     def test_include_limits_optional_blocks(self, mock_summary):
         mock_summary.return_value = _summary_for_projects(
             [
                 {
-                    "project_uuid": str(self.ab2_project.uuid),
+                    "project_uuid": str(self.eligible_project.uuid),
                     "conversation_count": 1,
                     "resolved_count": 1,
                     "unresolved_count": 0,
@@ -258,7 +284,7 @@ class TestProjectsResolutionRateView(TestCase):
         )
         response = self._get(
             {
-                "project_uuids": str(self.ab2_project.uuid),
+                "project_uuids": str(self.eligible_project.uuid),
                 "include": "manager,agents",
             }
         )
@@ -272,14 +298,14 @@ class TestProjectsResolutionRateView(TestCase):
     def test_pagination_and_sorting(self, mock_summary):
         other = Project.objects.create(
             name="AAA Other",
-            org=self.ab2_project.org,
-            created_by=self.ab2_project.created_by,
-            agents_backend="BedrockBackend",
+            org=self.eligible_project.org,
+            created_by=self.eligible_project.created_by,
+            inline_agent_switch=True,
         )
         mock_summary.return_value = _summary_for_projects(
             [
                 {
-                    "project_uuid": str(self.ab2_project.uuid),
+                    "project_uuid": str(self.eligible_project.uuid),
                     "conversation_count": 5,
                     "resolved_count": 2,
                     "unresolved_count": 0,
@@ -314,7 +340,7 @@ class TestProjectsResolutionRateView(TestCase):
         import requests
 
         mock_summary.side_effect = requests.ConnectionError("down")
-        response = self._get({"project_uuids": str(self.ab2_project.uuid)})
+        response = self._get({"project_uuids": str(self.eligible_project.uuid)})
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
 
     def test_conversations_http_502_returns_502(self, mock_summary):
@@ -323,14 +349,14 @@ class TestProjectsResolutionRateView(TestCase):
         exc = requests.HTTPError("bad gateway")
         exc.response = mock.Mock(status_code=status.HTTP_502_BAD_GATEWAY)
         mock_summary.side_effect = exc
-        response = self._get({"project_uuids": str(self.ab2_project.uuid)})
+        response = self._get({"project_uuids": str(self.eligible_project.uuid)})
         self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
 
     def test_page_size_over_100_is_truncated_in_response(self, mock_summary):
         mock_summary.return_value = _summary_for_projects(
             [
                 {
-                    "project_uuid": str(self.ab2_project.uuid),
+                    "project_uuid": str(self.eligible_project.uuid),
                     "conversation_count": 1,
                     "resolved_count": 1,
                     "unresolved_count": 0,
@@ -345,7 +371,7 @@ class TestProjectsResolutionRateView(TestCase):
         )
         response = self._get(
             {
-                "project_uuids": str(self.ab2_project.uuid),
+                "project_uuids": str(self.eligible_project.uuid),
                 "page_size": "150",
             }
         )
@@ -355,14 +381,14 @@ class TestProjectsResolutionRateView(TestCase):
     def test_period_averages_stable_across_pages(self, mock_summary):
         other = Project.objects.create(
             name="ZZZ Other",
-            org=self.ab2_project.org,
-            created_by=self.ab2_project.created_by,
-            agents_backend="BedrockBackend",
+            org=self.eligible_project.org,
+            created_by=self.eligible_project.created_by,
+            inline_agent_switch=True,
         )
         summary = _summary_for_projects(
             [
                 {
-                    "project_uuid": str(self.ab2_project.uuid),
+                    "project_uuid": str(self.eligible_project.uuid),
                     "conversation_count": 1,
                     "resolved_count": 0,
                     "unresolved_count": 1,
@@ -423,8 +449,16 @@ class TestProjectsResolutionRateServiceHelpers(TestCase):
         with self.assertRaises(ValueError):
             parse_page_size("0")
 
+    def test_resolve_calendar_range_rejects_dates_before_go_live(self):
+        with self.assertRaises(ValueError) as ctx:
+            resolve_calendar_range(
+                parse_calendar_date("2026-03-27", "start_date"),
+                parse_calendar_date("2026-05-25", "end_date"),
+            )
+        self.assertIn(CONVERSATIONS_METRICS_EARLIEST_DATE.isoformat(), str(ctx.exception))
+
     def test_build_result_rows_handles_null_resolution_rate(self):
-        project = ProjectFactory(agents_backend="BedrockBackend")
+        project = ProjectFactory(inline_agent_switch=True)
         rows = build_result_rows(
             [project],
             {
