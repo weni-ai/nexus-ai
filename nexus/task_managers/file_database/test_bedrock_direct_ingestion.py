@@ -300,5 +300,44 @@ class DirectIngestTaskTestCase(SimpleTestCase):
             file_type="file",
             project_uuid=None,
             waiting_time=30,
+            ingest_submitted=True,
+            poll_count=1,
         )
         file_database.search_data.assert_not_called()
+        file_database.get_direct_ingest_document_status.assert_not_called()
+
+    @patch("nexus.task_managers.tasks_bedrock.direct_ingest.delay")
+    @patch("nexus.task_managers.tasks_bedrock.BedrockFileDatabase")
+    @patch("nexus.task_managers.tasks_bedrock.CeleryTaskManagerUseCase")
+    def test_direct_ingest_polls_status_without_resubmitting_ingest(
+        self, mock_task_manager_usecase_cls, mock_bedrock_cls, mock_direct_ingest_delay
+    ):
+        from nexus.task_managers.models import TaskManager
+        from nexus.task_managers.tasks_bedrock import direct_ingest
+
+        task_manager = MagicMock()
+        content_base_file = MagicMock()
+        content_base_file.content_base.uuid = "content-base-uuid"
+        content_base_file.file_name = "test-file.txt"
+        task_manager.content_base_file = content_base_file
+        task_manager.content_base_text = None
+        task_manager.content_base_link = None
+
+        task_manager_usecase = MagicMock()
+        task_manager_usecase.get_task_manager_by_uuid.return_value = task_manager
+        mock_task_manager_usecase_cls.return_value = task_manager_usecase
+
+        file_database = MagicMock()
+        file_database.get_direct_ingest_document_status.return_value = [{"status": "INDEXED"}]
+        mock_bedrock_cls.return_value = file_database
+
+        direct_ingest("task-uuid", file_type="file", ingest_submitted=True, poll_count=3)
+
+        file_database.direct_ingest.assert_not_called()
+        file_database.get_direct_ingest_document_status.assert_called_once()
+        task_manager_usecase.update_task_status.assert_called_with(
+            "task-uuid",
+            TaskManager.status_map.get("COMPLETE"),
+            "file",
+        )
+        mock_direct_ingest_delay.assert_not_called()

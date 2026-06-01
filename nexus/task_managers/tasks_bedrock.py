@@ -112,17 +112,53 @@ def check_ingestion_job_status(
     return True
 
 
+DIRECT_INGEST_IN_PROGRESS_STATUSES = {"STARTING", "PENDING", "IN_PROGRESS"}
+DIRECT_INGEST_MAX_POLLS = 40
+DIRECT_INGEST_POLL_WAIT_SECONDS = 30
+
+
+def _mark_direct_ingest_success(
+    task_manager_usecase: CeleryTaskManagerUseCase,
+    celery_task_manager_uuid: str,
+    file_type: str,
+    file_database: BedrockFileDatabase,
+    content_base_uuid: str,
+) -> bool:
+    file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
+    logger.info(
+        f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid " f"{content_base_uuid}, marking as success"
+    )
+    task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.status_map.get("COMPLETE"), file_type)
+    return True
+
+
+def _schedule_direct_ingest_poll(
+    celery_task_manager_uuid: str,
+    file_type: str,
+    project_uuid: str | None,
+    poll_count: int,
+) -> None:
+    direct_ingest.delay(
+        celery_task_manager_uuid,
+        file_type=file_type,
+        project_uuid=project_uuid,
+        waiting_time=DIRECT_INGEST_POLL_WAIT_SECONDS,
+        ingest_submitted=True,
+        poll_count=poll_count,
+    )
+
+
 @app.task
 def direct_ingest(
     celery_task_manager_uuid: str,
     file_type: str = "file",
     project_uuid: str | None = None,
     waiting_time: int = 0,
+    ingest_submitted: bool = False,
+    poll_count: int = 0,
 ):
     if waiting_time:
         sleep(waiting_time)
-
-    logger.info("🦑 BEDROCK: Direct ingesting document")
 
     task_manager_usecase = CeleryTaskManagerUseCase()
     task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
@@ -132,47 +168,73 @@ def direct_ingest(
         task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
         return True
 
-    file_database = BedrockFileDatabase(project_uuid=project_uuid)
-    document_details = file_database.direct_ingest(content_base_uuid, filename)
-    doc_status = document_details[0].get("status") if document_details else None
+    if poll_count >= DIRECT_INGEST_MAX_POLLS:
+        logger.error(
+            "🦑 BEDROCK: Direct ingest polling exceeded max attempts",
+            extra={"poll_count": poll_count, "filename": filename},
+        )
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
+        return True
 
-    logger.info(f"🦑 BEDROCK: Direct ingest document status: {doc_status}")
+    file_database = BedrockFileDatabase(project_uuid=project_uuid)
+
+    if ingest_submitted:
+        logger.info("🦑 BEDROCK: Polling direct ingest document status")
+        document_details = file_database.get_direct_ingest_document_status(content_base_uuid, filename)
+    else:
+        logger.info("🦑 BEDROCK: Submitting direct ingest document")
+        document_details = file_database.direct_ingest(content_base_uuid, filename)
+        ingest_submitted = True
+
+    doc_detail = document_details[0] if document_details else {}
+    doc_status = doc_detail.get("status")
+    doc_status_reason = doc_detail.get("statusReason")
+
+    logger.info(
+        f"🦑 BEDROCK: Direct ingest document status: {doc_status}, statusReason: {doc_status_reason}",
+        extra={
+            "doc_status": doc_status,
+            "status_reason": doc_status_reason,
+            "ingest_submitted": ingest_submitted,
+            "poll_count": poll_count,
+        },
+    )
 
     if doc_status in DIRECT_INGEST_FAILED_STATUSES:
+        if doc_status == "IGNORED":
+            try:
+                return _mark_direct_ingest_success(
+                    task_manager_usecase,
+                    celery_task_manager_uuid,
+                    file_type,
+                    file_database,
+                    content_base_uuid,
+                )
+            except Exception as e:
+                logger.warning(f"🦑 BEDROCK: Document ignored and not searchable. Error: {e}")
         task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
         return True
 
     if doc_status in DIRECT_INGEST_IN_PROGRESS_STATUSES or doc_status is None:
         processing_status = TaskManager.status_map.get("IN_PROGRESS")
         task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
-        direct_ingest.delay(
-            celery_task_manager_uuid,
-            file_type=file_type,
-            project_uuid=project_uuid,
-            waiting_time=30,
-        )
+        _schedule_direct_ingest_poll(celery_task_manager_uuid, file_type, project_uuid, poll_count + 1)
         return True
 
     if doc_status == DIRECT_INGEST_SUCCESS_STATUS:
         try:
-            file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
-            logger.info(
-                f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid "
-                f"{content_base_uuid}, marking as success"
-            )
-            task_manager_usecase.update_task_status(
-                celery_task_manager_uuid, TaskManager.status_map.get("COMPLETE"), file_type
+            return _mark_direct_ingest_success(
+                task_manager_usecase,
+                celery_task_manager_uuid,
+                file_type,
+                file_database,
+                content_base_uuid,
             )
         except Exception as e:
             logger.warning(f"🦑 BEDROCK: Document indexed but not yet searchable, will retry. Error: {e}")
             processing_status = TaskManager.status_map.get("IN_PROGRESS")
             task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
-            direct_ingest.delay(
-                celery_task_manager_uuid,
-                file_type=file_type,
-                project_uuid=project_uuid,
-                waiting_time=30,
-            )
+            _schedule_direct_ingest_poll(celery_task_manager_uuid, file_type, project_uuid, poll_count + 1)
         return True
 
     logger.warning(f"🦑 BEDROCK: Unknown direct ingest status: {doc_status}")
