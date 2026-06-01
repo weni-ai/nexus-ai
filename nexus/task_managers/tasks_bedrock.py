@@ -134,9 +134,14 @@ def direct_ingest(
 
     file_database = BedrockFileDatabase(project_uuid=project_uuid)
     document_details = file_database.direct_ingest(content_base_uuid, filename)
-    doc_status = document_details[0].get("status") if document_details else None
+    doc_detail = document_details[0] if document_details else {}
+    doc_status = doc_detail.get("status")
+    doc_status_reason = doc_detail.get("statusReason")
 
-    logger.info(f"🦑 BEDROCK: Direct ingest document status: {doc_status}")
+    logger.info(
+        f"🦑 BEDROCK: Direct ingest document status: {doc_status}, statusReason: {doc_status_reason}",
+        extra={"doc_status": doc_status, "status_reason": doc_status_reason},
+    )
 
     if doc_status in DIRECT_INGEST_FAILED_STATUSES:
         task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
