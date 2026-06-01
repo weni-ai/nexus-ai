@@ -60,7 +60,7 @@ from nexus.task_managers.tasks import (
 from nexus.task_managers.tasks_bedrock import (
     bedrock_send_link,
     bedrock_upload_text_file,
-    start_ingestion_job,
+    trigger_bedrock_ingestion,
 )
 from nexus.usecases import intelligences
 from nexus.usecases.intelligences.exceptions import (
@@ -826,10 +826,17 @@ class ContentBaseFileViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_file.file_name
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -931,10 +938,17 @@ class InlineContentBaseFileViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_file.file_name
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -1017,6 +1031,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_link.name if content_base_link.name else content_base_link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1024,7 +1039,13 @@ class ContentBaseLinkViewset(ModelViewSet):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_link_activity", action_type="D", content_base_link=content_base_link, user=user
@@ -1120,6 +1141,7 @@ class InlineContentBaseLinkViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_link.name if content_base_link.name else content_base_link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1127,7 +1149,13 @@ class InlineContentBaseLinkViewset(ModelViewSet):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_link_activity",
@@ -1324,6 +1352,7 @@ class RouterRetailViewSet(views.APIView):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = link.name if link.name else link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1331,7 +1360,13 @@ class RouterRetailViewSet(views.APIView):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=str(content_base_uuid),
+                    filename=filename,
+                )
 
             event_manager.notify(event="contentbase_link_activity", action_type="D", content_base_link=link, user=user)
 
