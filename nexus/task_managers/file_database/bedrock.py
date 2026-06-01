@@ -607,6 +607,48 @@ class BedrockFileDatabase(FileDataBase):
         ingestion_job_id = response.get("ingestionJob").get("ingestionJobId")
         return ingestion_job_id
 
+    def _build_s3_uri(self, content_base_uuid: str, filename: str) -> str:
+        return f"s3://{self.bucket_name}/{content_base_uuid}/{filename}"
+
+    def direct_ingest(self, content_base_uuid: str, filename: str) -> dict:
+        logger.info("[Bedrock] Direct ingesting document", extra={"document_filename": filename})
+        s3_uri = self._build_s3_uri(content_base_uuid, filename)
+        metadata_uri = self._build_s3_uri(content_base_uuid, f"{filename}.metadata.json")
+
+        response = self.bedrock_agent.ingest_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            documents=[
+                {
+                    "content": {
+                        "dataSourceType": "S3",
+                        "s3": {"s3Location": {"uri": s3_uri}},
+                    },
+                    "metadata": {
+                        "type": "S3_LOCATION",
+                        "s3Location": {"uri": metadata_uri},
+                    },
+                }
+            ],
+        )
+        return response.get("documentDetails", [])
+
+    def direct_delete(self, content_base_uuid: str, filename: str) -> dict:
+        logger.info("[Bedrock] Direct deleting document", extra={"document_filename": filename})
+        s3_uri = self._build_s3_uri(content_base_uuid, filename)
+
+        response = self.bedrock_agent.delete_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            documentIdentifiers=[
+                {
+                    "dataSourceType": "S3",
+                    "s3": {"uri": s3_uri},
+                }
+            ],
+        )
+        return response.get("documentDetails", [])
+
     def get_agent(self, agent_id: str):
         return self.bedrock_agent.get_agent(agentId=agent_id)
 
