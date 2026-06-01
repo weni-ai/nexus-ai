@@ -633,6 +633,16 @@ class BedrockFileDatabase(FileDataBase):
         )
         return response.get("documentDetails", [])
 
+    def get_direct_ingest_document_status(self, content_base_uuid: str, filename: str) -> list:
+        """Consulta status do documento sem reenviar ingestão."""
+        s3_uri = self._build_s3_uri(content_base_uuid, filename)
+        response = self.bedrock_agent.get_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            documentIdentifiers=[{"dataSourceType": "S3", "s3": {"uri": s3_uri}}],
+        )
+        return response.get("documentDetails", [])
+
     def direct_delete(self, content_base_uuid: str, filename: str) -> dict:
         logger.info("[Bedrock] Direct deleting document", extra={"document_filename": filename})
         s3_uri = self._build_s3_uri(content_base_uuid, filename)
