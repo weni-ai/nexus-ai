@@ -330,11 +330,19 @@ class TestProjectsResolutionRateView(TestCase):
                 },
             ]
         )
-        response = self._get({"page": 1, "page_size": 1})
+        response = self._get(
+            {
+                "start_date": "2026-05-19",
+                "end_date": "2026-05-25",
+                "page": 1,
+                "page_size": 1,
+            }
+        )
         self.assertEqual(response.data["count"], 2)
         self.assertEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["project_uuid"], str(other.uuid))
-        self.assertEqual(response.data["average_resolution_rate"], 0.5)
+        # Period average is recomputed from eligible AB2 rows with activity (not mock envelope).
+        self.assertEqual(response.data["average_resolution_rate"], 0.65)
 
     def test_without_project_uuids_does_not_send_all_uuids_to_conversations(self, mock_summary):
         inactive = Project.objects.create(
@@ -463,20 +471,23 @@ class TestProjectsResolutionRateView(TestCase):
                 },
             ]
         )
-        summary["average_resolution_rate"] = 0.5
-        summary["average_csat"] = 4.0
-        summary["average_nps"] = 8.0
         mock_summary.return_value = summary
 
-        page_one = self._get({"page": 1, "page_size": 1})
-        page_two = self._get({"page": 2, "page_size": 1})
+        query = {
+            "start_date": "2026-05-19",
+            "end_date": "2026-05-25",
+            "page": 1,
+            "page_size": 1,
+        }
+        page_one = self._get(query)
+        page_two = self._get({**query, "page": 2})
         self.assertEqual(page_one.status_code, status.HTTP_200_OK)
         self.assertEqual(page_two.status_code, status.HTTP_200_OK)
         self.assertEqual(page_one.data["count"], 2)
         self.assertEqual(page_one.data["average_resolution_rate"], 0.5)
         self.assertEqual(page_two.data["average_resolution_rate"], 0.5)
-        self.assertEqual(page_one.data["average_csat"], 4.0)
-        self.assertEqual(page_two.data["average_csat"], 4.0)
+        self.assertIsNone(page_one.data["average_csat"])
+        self.assertIsNone(page_two.data["average_csat"])
 
     def test_no_visible_projects_returns_empty_payload(self, mock_summary):
         response = self._get({"project_uuids": str(uuid4())})
