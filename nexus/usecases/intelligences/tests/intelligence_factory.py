@@ -60,6 +60,8 @@ class ContentBaseTextFactory(factory.django.DjangoModelFactory):
     created_by = factory.SubFactory(UserFactory)
     content_base = factory.SubFactory(ContentBaseFactory, created_by=factory.SelfAttribute("..created_by"))
     text = factory.Sequence(lambda n: "test%d" % n)
+    title = "Untitled"
+    last_updated_at = None
 
 
 class ContentBaseFileFactory(factory.django.DjangoModelFactory):

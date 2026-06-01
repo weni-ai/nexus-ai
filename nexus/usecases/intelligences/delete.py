@@ -123,10 +123,11 @@ class DeleteContentBaseTextUseCase:
     def delete_content_base_text_from_index(
         self, contentbasetext_uuid: str, content_base_uuid: str, content_base_file_name: str
     ):
+        filename = content_base_file_name or str(contentbasetext_uuid)
         self.file_database.delete(
             content_base_uuid=content_base_uuid,
             content_base_file_uuid=contentbasetext_uuid,
-            filename=content_base_file_name,
+            filename=filename,
         )
         return True
 
