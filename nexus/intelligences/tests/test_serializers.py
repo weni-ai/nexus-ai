@@ -169,7 +169,7 @@ class IntelligencesSerializersTestCase(TestCase):
     def test_content_base_instruction_serializer(self):
         serializer = ContentBaseInstructionSerializer(self.content_base_instruction)
         serializer_fields = list(serializer.data.keys())
-        fields = ["instruction"]
+        fields = ["instruction", "suggested_category"]
         self.assertListEqual(serializer_fields, fields)
 
     def test_content_base_agent_serializer(self):
@@ -186,7 +186,7 @@ class IntelligencesSerializersTestCase(TestCase):
         instructions = serializer.get_instructions(self.content_base)
 
         self.assertListEqual(serializer_fields, fields)
-        self.assertListEqual(list(instructions[0].keys()), ["id", "instruction"])
+        self.assertListEqual(list(instructions[0].keys()), ["id", "instruction", "suggested_category"])
         self.assertEqual(len(instructions), 1)
 
     def test_content_base_personalization_update_serializer(self):

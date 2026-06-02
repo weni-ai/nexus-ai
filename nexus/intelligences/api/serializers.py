@@ -187,7 +187,7 @@ class LLMConfigSerializer(serializers.ModelSerializer):
 class ContentBaseInstructionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseInstruction
-        fields = ["instruction"]
+        fields = ["instruction", "suggested_category"]
 
 
 class ContentBaseAgentSerializer(serializers.ModelSerializer):
@@ -218,6 +218,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 {
                     "id": instruction.id,
                     "instruction": instruction.instruction,
+                    "suggested_category": instruction.suggested_category or "",
                 }
             )
         return instructions
@@ -355,6 +356,8 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                         old_instruction_data = model_to_dict(instruction)
 
                         instruction.instruction = instruction_data.get("instruction")
+                        if "suggested_category" in instruction_data:
+                            instruction.suggested_category = instruction_data.get("suggested_category") or ""
                         instruction.save()
                         instruction.refresh_from_db()
 
@@ -370,7 +373,8 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 
                     else:
                         created_instruction = instance.instructions.create(
-                            instruction=instruction_data.get("instruction")
+                            instruction=instruction_data.get("instruction"),
+                            suggested_category=instruction_data.get("suggested_category") or "",
                         )
                         event_manager.notify(
                             event="contentbase_instruction_activity",
@@ -492,6 +496,13 @@ class InstructionClassificationRequestSerializer(serializers.Serializer):
         required=True,
         help_text=("Instruction text to classify against existing content base instructions."),
     )
+    instructions_categories = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+        allow_empty=True,
+        help_text="Instruction category names available for classification.",
+    )
     language = serializers.CharField(
         required=True,
         help_text=("Language code for classification context (e.g., pt-br, en, es)."),
@@ -517,6 +528,11 @@ class InstructionClassificationResponseSerializer(serializers.Serializer):
     classification = ClassificationItemSerializer(
         many=True,
         help_text="Classifications for the instruction; each has category and optional reason.",
+    )
+    suggested_category = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Suggested instruction category returned by classification",
     )
     suggestion = serializers.CharField(
         required=False,

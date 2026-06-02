@@ -385,7 +385,9 @@ class TestContentBasePersonalizationViewSet(TestCase):
         from nexus.intelligences.models import ContentBaseInstruction
 
         self.instruction_1 = ContentBaseInstruction.objects.create(
-            content_base=actual_content_base, instruction="Test instruction"
+            content_base=actual_content_base,
+            instruction="Test instruction",
+            suggested_category="greeting",
         )
 
         self.team = Team.objects.create(
@@ -432,6 +434,8 @@ class TestContentBasePersonalizationViewSet(TestCase):
         self.assertIsNotNone(team_data)
         self.assertEqual(team_data["human_support"], True)
         self.assertEqual(team_data["human_support_prompt"], "Test human support prompt")
+        self.assertIn("instructions", content)
+        self.assertEqual(content["instructions"][0]["suggested_category"], "greeting")
 
     def test_get_personalization_without_team(self):
         # Delete existing team
@@ -479,13 +483,21 @@ class TestContentBasePersonalizationViewSet(TestCase):
         self.assertIsNotNone(team_data)
         self.assertEqual(team_data["human_support"], True)
         self.assertEqual(team_data["human_support_prompt"], "Test human support prompt")
+        self.assertIn("instructions", content)
+        self.assertEqual(content["instructions"][0]["suggested_category"], "greeting")
 
     def test_update_personalization(self):
         url_update = f"{self.url}/"
 
         data = {
             "agent": {"name": "Doris Update", "role": "Sales", "personality": "Creative", "goal": "Sell"},
-            "instructions": [{"id": self.instruction_1.id, "instruction": "Be friendly"}],
+            "instructions": [
+                {
+                    "id": self.instruction_1.id,
+                    "instruction": "Be friendly",
+                    "suggested_category": "policy",
+                }
+            ],
         }
         request = self.factory.put(url_update, data=data, format="json")
         force_authenticate(request, user=self.user)
@@ -497,6 +509,10 @@ class TestContentBasePersonalizationViewSet(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 200)
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(content["instructions"][0]["suggested_category"], "policy")
 
     def test_delete_personalization(self):
         url_update = f"{self.url}/?id={self.instruction_1.id}"
