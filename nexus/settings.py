@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "nexus.inline_agents",
     "nexus.reports",
     "nexus.analytics",
+    "weni.feature_flags",
     # Observer registration - MUST be last to ensure all apps are loaded first
     "nexus.observers",
 ]
@@ -685,6 +686,14 @@ PROJECTS_WITH_SPECIAL_SESSION_ID = env.list("PROJECTS_WITH_SPECIAL_SESSION_ID", 
 PROJECTS_WITH_LARGE_DATASOURCE = env.list("PROJECTS_WITH_LARGE_DATASOURCE", [])
 
 WORKFLOW_ARCHITECTURE_PROJECTS = env.list("WORKFLOW_ARCHITECTURE_PROJECTS", default=[])
+
+# Feature flags (GrowthBook via weni-feature-flags)
+_growthbook_client_key_default = "test" if TESTING else ""
+_growthbook_host_default = "https://cdn.growthbook.io"
+GROWTHBOOK_CLIENT_KEY = env.str("GROWTHBOOK_CLIENT_KEY", default=_growthbook_client_key_default)
+GROWTHBOOK_HOST_BASE_URL = env.str("GROWTHBOOK_HOST_BASE_URL", default=_growthbook_host_default)
+GROWTHBOOK_WEBHOOK_SECRET = env.str("GROWTHBOOK_WEBHOOK_SECRET", default="")
+GROWTHBOOK_REQUESTS_TIMEOUT = env.int("GROWTHBOOK_REQUESTS_TIMEOUT", default=60)
 
 # ManagerAgent UUIDs that must run the legacy ("2.6") inline-agent formatter pipeline.
 # Source of truth for the legacy/new code path; admins cannot change this from Django admin.
