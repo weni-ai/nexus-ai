@@ -19,6 +19,7 @@ from nexus.zeroshot.api.routers import urlpatterns as zeroshot_routes
 
 url_api = []
 
+url_api += feature_flags_routes
 url_api += intelligence_routes
 url_api += actions_routes
 url_api += projects_routes
@@ -26,7 +27,6 @@ url_api += logs_routes
 url_api += agent_routes
 url_api += users_routes
 url_api += analytics_routes
-url_api += feature_flags_routes
 
 urlpatterns = [
     path("", lambda _: HttpResponse()),
