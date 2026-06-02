@@ -20,6 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
+from weni.feature_flags.shortcuts import is_feature_active
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
@@ -1797,6 +1798,9 @@ class SupervisorViewset(ModelViewSet):
             )
 
 
+INSTRUCTION_CLASSIFY_ENHANCED_FEATURE_FLAG = "validateInstructionByAI"
+
+
 class InstructionsClassificationAPIView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
@@ -1835,7 +1839,6 @@ class InstructionsClassificationAPIView(APIView):
             serializer = InstructionClassificationRequestSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             instruction = serializer.validated_data["instruction"]
-            instructions_categories = serializer.validated_data.get("instructions_categories", [])
             language = serializer.validated_data["language"]
 
             user = request.user
@@ -1845,7 +1848,6 @@ class InstructionsClassificationAPIView(APIView):
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
             project, content_base, _ = get_project_and_content_base_data(project_uuid)
-            project_description = content_base.intelligence.description or ""
 
             goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
             adjective = content_base.agent.personality if content_base.agent else "friendly"
@@ -1858,24 +1860,49 @@ class InstructionsClassificationAPIView(APIView):
 
             lambda_usecase = LambdaUseCase()
 
-            classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
+            use_enhanced_classification = is_feature_active(
+                INSTRUCTION_CLASSIFY_ENHANCED_FEATURE_FLAG,
+                user_email=user.email,
+                project_uuid=project_uuid,
+            )
+
+            if use_enhanced_classification:
+                instructions_categories = serializer.validated_data.get("instructions_categories", [])
+                project_description = content_base.intelligence.description or ""
+
+                classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
+                    name=name,
+                    occupation=occupation,
+                    goal=goal,
+                    adjective=adjective,
+                    instructions=instructions,
+                    instruction_to_classify=instruction,
+                    instructions_categories=instructions_categories,
+                    language=language,
+                    project_description=project_description,
+                )
+
+                return Response(
+                    {
+                        "classification": classification,
+                        "suggested_category": suggested_category,
+                        "suggestion": suggestion,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            classification, suggestion = lambda_usecase.instruction_classify_legacy(
                 name=name,
                 occupation=occupation,
                 goal=goal,
                 adjective=adjective,
                 instructions=instructions,
                 instruction_to_classify=instruction,
-                instructions_categories=instructions_categories,
                 language=language,
-                project_description=project_description,
             )
 
             return Response(
-                {
-                    "classification": classification,
-                    "suggested_category": suggested_category,
-                    "suggestion": suggestion,
-                },
+                {"classification": classification, "suggestion": suggestion},
                 status=status.HTTP_200_OK,
             )
 
