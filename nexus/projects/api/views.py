@@ -15,11 +15,20 @@ from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.api.serializers import ConversationSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
+from nexus.projects.models import Project
+from nexus.projects.services.projects_resolution_rate import parse_page_size
+from nexus.task_managers.file_database.opensearch_knowledge_base import (
+    OpenSearchKnowledgeBaseError,
+    list_chunks,
+)
+from nexus.usecases.intelligences.exceptions import ContentBaseDoesNotExist
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.projects.retrieve import get_project
 from nexus.usecases.projects.update import ProjectUpdateUseCase
+from nexus.utils import get_datasource_id
 
 from .serializers import ProjectSerializer
 
@@ -696,3 +705,54 @@ class FlowsDbCohortReconcileProxyView(APIView):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class KnowledgeBaseChunksView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            page_size = parse_page_size(request.query_params.get("page_size"), default=50)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        cursor = request.query_params.get("cursor") or None
+
+        try:
+            project = ProjectsUseCase().get_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(
+                {"error": f"Project with uuid `{project_uuid}` does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if project.indexer_database != Project.BEDROCK:
+            return Response(
+                {"error": "Project does not use Bedrock knowledge base indexer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            content_base = get_default_content_base_by_project(project_uuid)
+        except ContentBaseDoesNotExist:
+            return Response(
+                {"error": f"Content base for project `{project_uuid}` does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data_source_id = get_datasource_id(project_uuid)
+
+        try:
+            payload = list_chunks(
+                content_base_uuid=str(content_base.uuid),
+                data_source_id=data_source_id,
+                page_size=page_size,
+                cursor=cursor,
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except OpenSearchKnowledgeBaseError as exc:
+            logger.exception("Knowledge base chunks search failed for project %s", project_uuid)
+            return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(payload, status=status.HTTP_200_OK)
