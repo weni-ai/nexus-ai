@@ -265,6 +265,10 @@ def generate_env():
         "TURN_SERVER_USERNAME": "",
         "TURN_SERVER_PASSWORD": "",
         "CONVERSATIONS_TOKEN": "",
+        "GROWTHBOOK_CLIENT_KEY": "",
+        "GROWTHBOOK_HOST_BASE_URL": "https://cdn.growthbook.io",
+        "GROWTHBOOK_WEBHOOK_SECRET": "",
+        "GROWTHBOOK_REQUESTS_TIMEOUT": "60",
     }
 
     with open(env_path, "w") as configfile:

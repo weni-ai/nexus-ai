@@ -671,7 +671,7 @@ description = "Foreign Function Interface for Python calling C code."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "platform_python_implementation != \"PyPy\" or python_version == \"3.11\""
+markers = "python_version == \"3.10\" and platform_python_implementation != \"PyPy\" or python_version == \"3.11\""
 files = [
     {file = "cffi-2.0.0-cp310-cp310-macosx_10_13_x86_64.whl", hash = "sha256:0cf2d91ecc3fcc0625c2c530fe004f82c110405f101548512cce44322fa8ac44"},
     {file = "cffi-2.0.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:f73b96c41e3b2adedc34a7356e64c8eb96e03a3782b535e043a986276ce12a49"},
@@ -2749,6 +2749,24 @@ typing-extensions = ">=4.10,<5"
 
 [package.extras]
 aiohttp = ["aiohttp", "httpx-aiohttp (>=0.1.9)"]
+
+[[package]]
+name = "growthbook"
+version = "1.4.10"
+description = "Powerful Feature flagging and A/B testing for Python apps"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "growthbook-1.4.10-py2.py3-none-any.whl", hash = "sha256:80db3f649303fb56ba411287e5cad36ad1e87cb3a099cd19c481c38ad559f898"},
+    {file = "growthbook-1.4.10.tar.gz", hash = "sha256:9f0c69f41e65c7e66cfdedde08bb656e7e3ddac883dbd17ca755b52cdeef1d37"},
+]
+
+[package.dependencies]
+aiohttp = ">=3.6.0"
+cryptography = "*"
+typing_extensions = "*"
+urllib3 = "*"
 
 [[package]]
 name = "grpcio"
@@ -8383,7 +8401,7 @@ description = "A portable, lightweight MessagePack serializer and deserializer w
 optional = false
 python-versions = "*"
 groups = ["main"]
-markers = "platform_python_implementation != \"CPython\" and python_version == \"3.11\""
+markers = "python_version == \"3.11\" and platform_python_implementation != \"CPython\""
 files = [
     {file = "u-msgpack-python-2.8.0.tar.gz", hash = "sha256:b801a83d6ed75e6df41e44518b4f2a9c221dc2da4bcd5380e3a0feda520bc61a"},
     {file = "u_msgpack_python-2.8.0-py2.py3-none-any.whl", hash = "sha256:1d853d33e78b72c4228a2025b4db28cda81214076e5b0422ed0ae1b1b2bb586a"},
@@ -8699,6 +8717,26 @@ grpcio-health-checking = ">=1.71.0,<2.0.0"
 grpcio-tools = ">=1.71.0,<2.0.0"
 moto = ">=4.1,<5.0"
 pytest = ">=8.4.0,<9.0.0"
+
+[[package]]
+name = "weni-feature-flags"
+version = "2.1.2"
+description = "Weni's feature flags SDK for Python backends"
+optional = false
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+files = [
+    {file = "weni_feature_flags-2.1.2-py3-none-any.whl", hash = "sha256:ce8ef0b8b0a78fa75c2399469b6deaeb4518cc4568b85111663080992536a3c4"},
+    {file = "weni_feature_flags-2.1.2.tar.gz", hash = "sha256:f38544ab5a8ec08d6257127769c2aa7dc64c709c75ffe613be82188aa29f7404"},
+]
+
+[package.dependencies]
+celery = ">=5.0.0,<6.0"
+django = ">=3.2.22,<6.0"
+django-redis = ">=4.0.0,<=6.0"
+djangorestframework = ">=3.12.0,<4.0"
+growthbook = ">=1.0.0,<2.0"
+requests = ">=2.25.0,<3.0"
 
 [[package]]
 name = "werkzeug"
@@ -9329,4 +9367,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "559a530e1a2a4d4b55ecac5ff6537eb1abbfcf620d8d1452d9157a45e226ebbf"
+content-hash = "86aad17e46d40314053357f13afc036f3d46e2705458cc65dc29a433ba8e5150"
