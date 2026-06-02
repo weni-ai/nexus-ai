@@ -66,7 +66,7 @@ class TestFeatureFlagsViewSet(TestCase):
         )
         response = self.view(request)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_list_requires_project_uuid(self):
         request = self.factory.get("/api/feature_flags/")

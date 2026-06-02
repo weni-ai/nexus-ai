@@ -568,6 +568,102 @@ class LambdaUseCase:
             {"name": classification_value, "reason": default_reason} for classification_value in classification_data
         ]
 
+    def instruction_classify_legacy(
+        self,
+        name: str,
+        occupation: str,
+        goal: str,
+        adjective: str,
+        instructions: list,
+        instruction_to_classify: str,
+        language: str,
+    ):
+        """Legacy instruction classification payload and response (pre-enhanced Lambda contract)."""
+        try:
+            instructions_payload = {
+                "name": name,
+                "ocupation": occupation,
+                "goal": goal,
+                "adjective": adjective,
+                "instructions": instructions,
+                "instruction_to_classify": instruction_to_classify,
+                "language": language,
+            }
+
+            response = self.invoke_lambda(
+                lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME), payload=instructions_payload
+            )
+
+            if "FunctionError" in response:
+                error_payload = json.loads(response.get("Payload").read())
+                error_type = error_payload.get("errorType", "Unknown")
+                error_message = error_payload.get("errorMessage", "Unknown error")
+
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
+                        "full_error_payload": error_payload,
+                        "error_type": error_type,
+                        "error_message": error_message,
+                        "stack_trace": error_payload.get("stackTrace", []),
+                        "request_payload": instructions_payload,
+                    },
+                )
+                sentry_sdk.capture_message(
+                    f"Lambda FunctionError in instruction_classify_legacy: {error_payload}", level="error"
+                )
+
+                raise Exception(f"Lambda error ({error_type}): {error_message}")
+
+            response_data = json.loads(response.get("Payload").read())
+
+            if "body" in response_data:
+                body_data = response_data.get("body")
+                if isinstance(body_data, str):
+                    body_data = json.loads(body_data)
+                response_data = body_data
+
+            status_code = response_data.get("statusCode")
+            if status_code and status_code >= 400:
+                error_message = response_data.get("error") or response_data.get("message", "Unknown error from lambda")
+
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
+                        "status_code": status_code,
+                        "error_message": error_message,
+                        "full_response": response_data,
+                        "request_payload": instructions_payload,
+                    },
+                )
+                sentry_sdk.capture_message(
+                    f"Lambda returned error status {status_code} in instruction_classify_legacy: {error_message}",
+                    level="error",
+                )
+
+                raise Exception(f"Lambda error (status {status_code}): {error_message}")
+
+            classification_data = response_data.get("classifications") or response_data.get("classification", [])
+            suggestion = response_data.get("suggestion")
+            reason = response_data.get("reason", "")
+
+            classification = self._normalize_classification_data(classification_data, reason)
+
+            if isinstance(classification, list) and len(classification) == 1:
+                item = classification[0]
+                if isinstance(item, dict):
+                    name = item.get("name") or item.get("classification")
+                    if isinstance(name, str) and name.strip().lower() == "correct":
+                        classification = []
+
+            return classification, suggestion
+
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            raise e
+
     def instruction_classify(
         self,
         name: str,
