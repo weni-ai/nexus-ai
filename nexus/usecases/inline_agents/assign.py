@@ -6,6 +6,54 @@ from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAg
 from nexus.projects.models import Project
 
 
+def infer_single_active_mcp_selection(agent: Agent) -> tuple[str | None, str | None]:
+    """Return (mcp_name, system_slug) when the agent has exactly one active MCP."""
+    prefetched = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
+    if prefetched is None:
+        mcps = list(agent.mcps.filter(is_active=True).select_related("system"))
+    else:
+        mcps = [mcp for mcp in prefetched if mcp.is_active]
+
+    if len(mcps) != 1:
+        return None, None
+
+    mcp = mcps[0]
+    system_slug = mcp.system.slug if mcp.system_id else None
+    return mcp.name, system_slug
+
+
+def resolve_assignment_mcp_fields(
+    agent: Agent,
+    mcp: str | None,
+    mcp_config: dict | None,
+    system: str | None,
+) -> tuple[str | None, dict | None, str | None]:
+    """Infer MCP/system when only constants (``mcp_config``) are sent for a single-MCP agent."""
+    config = mcp_config or {}
+    if mcp or not config:
+        return mcp, config or None, system
+
+    inferred_mcp, inferred_system = infer_single_active_mcp_selection(agent)
+    if inferred_mcp:
+        mcp = inferred_mcp
+        if not system and inferred_system:
+            system = inferred_system
+    return mcp, config, system
+
+
+def _clear_agent_credential_values_on_unassign(agent: Agent, project: Project) -> None:
+    """Clear stored secret values for credentials linked to the agent, keeping schema rows."""
+    for cred in AgentCredential.objects.filter(agents=agent, project=project):
+        other_agents_still_assigned = IntegratedAgent.objects.filter(
+            project=project,
+            agent__in=cred.agents.exclude(pk=agent.pk),
+        ).exists()
+        if other_agents_still_assigned or not cred.value:
+            continue
+        cred.value = ""
+        cred.save(update_fields=["value"])
+
+
 def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedAgent, agent: Agent) -> bool:
     """When the agent has exactly one active MCP, set metadata mcp/system (same keys as v1 official assign)."""
     prefetched = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
@@ -65,11 +113,7 @@ class AssignAgentsUsecase:
                 integrated_agent = IntegratedAgent.objects.get(agent=agent, project=project)
                 deleted_agent = integrated_agent
                 integrated_agent.delete()
-
-                for cred in AgentCredential.objects.filter(agents=agent, project=project):
-                    cred.agents.remove(agent)
-                    if len(cred.agents.all()) == 0:
-                        cred.delete()
+                _clear_agent_credential_values_on_unassign(agent, project)
 
                 return True, deleted_agent
             except IntegratedAgent.DoesNotExist:

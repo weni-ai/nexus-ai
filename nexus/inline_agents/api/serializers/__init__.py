@@ -10,6 +10,7 @@ from nexus.inline_agents.api.official_agents_helpers import (
 )
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.usecases.inline_agents.assign import infer_single_active_mcp_selection
 
 
 def agent_modal_about_locale_map(agent: Agent) -> dict | None:
@@ -25,6 +26,17 @@ def agent_modal_about_locale_map(agent: Agent) -> dict | None:
         }
     except ObjectDoesNotExist:
         return None
+
+
+def team_roster_about_locale_map(agent: Agent) -> dict | None:
+    """About for team roster: group modal when present, else collaboration instructions in ``en``."""
+    modal_about = agent_modal_about_locale_map(agent)
+    if modal_about is not None:
+        return modal_about
+    text = (agent.collaboration_instructions or "").strip()
+    if not text:
+        return None
+    return {"en": text, "pt": None, "es": None}
 
 
 def official_agent_modal_presentation_payload(modal) -> dict:
@@ -122,6 +134,76 @@ def inline_agent_list_display_name(agent: Agent) -> str:
     return group.name
 
 
+def integrated_agent_skills_payload(agent: Agent) -> list:
+    """Display skills for team roster rows (matches ``IntegratedAgentSerializer.get_skills``)."""
+    if hasattr(agent, "latest_display_skills"):
+        return agent.latest_display_skills
+    if agent.current_version:
+        return agent.current_version.display_skills
+    return []
+
+
+def integrated_agent_mcp_payload(integrated: IntegratedAgent) -> dict | None:
+    """MCP payload from ``IntegratedAgent`` metadata (matches ``IntegratedAgentSerializer.get_mcp``)."""
+    if not integrated.metadata:
+        return None
+
+    mcp_name = integrated.metadata.get("mcp")
+    mcp_config = integrated.metadata.get("mcp_config", {})
+    system_slug = integrated.metadata.get("system")
+
+    if not mcp_name:
+        return None
+
+    config_with_labels: dict = {}
+
+    mcp = None
+    if system_slug:
+        try:
+            system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
+            mcp = (
+                integrated.agent.mcps.filter(system=system_obj, name=mcp_name, is_active=True)
+                .select_related("system")
+                .prefetch_related("config_options")
+                .first()
+            )
+        except AgentSystem.DoesNotExist:
+            pass
+
+    if not mcp:
+        mcp = (
+            integrated.agent.mcps.filter(name=mcp_name, is_active=True)
+            .select_related("system")
+            .prefetch_related("config_options")
+            .first()
+        )
+
+    if mcp:
+        if mcp_config:
+            name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
+            for name, value in mcp_config.items():
+                label = name_to_label.get(name, name)
+                config_with_labels[label] = value
+        else:
+            config_with_labels = mcp_config
+
+        result: dict = {"name": mcp_name, "config": config_with_labels}
+        result["description"] = {
+            "en": (mcp.description_en or "").strip(),
+            "pt": (mcp.description_pt or "").strip(),
+            "es": (mcp.description_es or "").strip(),
+        }
+        if mcp.system:
+            result["system"] = {
+                "name": mcp.system.name,
+                "slug": mcp.system.slug,
+                "logo": mcp.system.logo.url if mcp.system.logo else None,
+            }
+        return result
+
+    return {"name": mcp_name, "config": mcp_config}
+
+
 class AgentSystemSerializer(serializers.ModelSerializer):
     logo = serializers.SerializerMethodField()
 
@@ -133,6 +215,12 @@ class AgentSystemSerializer(serializers.ModelSerializer):
         if not obj.logo:
             return None
         return s3FileDatabase().create_presigned_url(obj.logo.name)
+
+
+class OfficialAvailableSystemsEnvelopeSerializer(serializers.Serializer):
+    """Envelope for GET /api/v1/official/available-systems (OpenAPI)."""
+
+    available_systems = AgentSystemSerializer(many=True, read_only=True)
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
@@ -164,77 +252,131 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return obj.agent.collaboration_instructions
 
     def get_skills(self, obj):
-        if hasattr(obj.agent, "latest_display_skills"):
-            return obj.agent.latest_display_skills
-        if obj.agent.current_version:
-            return obj.agent.current_version.display_skills
-        return []
+        return integrated_agent_skills_payload(obj.agent)
 
     def get_is_official(self, obj):
         return obj.agent.is_official
 
     def get_mcp(self, obj):
         """Return MCP name and config from IntegratedAgent metadata"""
-        if not obj.metadata:
-            return None
+        return integrated_agent_mcp_payload(obj)
 
-        mcp_name = obj.metadata.get("mcp")
-        mcp_config = obj.metadata.get("mcp_config", {})
-        system_slug = obj.metadata.get("system")
 
-        if not mcp_name:
-            return None
+def _resolve_agent_mcp(agent: Agent, mcp_name: str, system_slug: str | None) -> tuple:
+    """Return (mcp, resolved AgentSystem | None) using at most one system lookup."""
+    system_obj = None
+    if system_slug:
+        try:
+            system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
+        except AgentSystem.DoesNotExist:
+            pass
 
-        config_with_labels = {}
+    mcp_qs = (
+        agent.mcps.filter(name=mcp_name, is_active=True).select_related("system").prefetch_related("config_options")
+    )
+    if system_obj:
+        return mcp_qs.filter(system=system_obj).first() or mcp_qs.first(), system_obj
+    return mcp_qs.first(), None
 
-        # Try to find MCP with system if available in metadata, or fallback to name lookup
-        mcp = None
-        if system_slug:
-            try:
-                system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
-                mcp = (
-                    obj.agent.mcps.filter(system=system_obj, name=mcp_name, is_active=True)
-                    .select_related("system")
-                    .prefetch_related("config_options")
-                    .first()
-                )
-            except AgentSystem.DoesNotExist:
-                pass
 
-        # Fallback: find MCP by name within agent's MCPs if not found via system
-        if not mcp:
-            mcp = (
-                obj.agent.mcps.filter(name=mcp_name, is_active=True)
-                .select_related("system")
-                .prefetch_related("config_options")
-                .first()
-            )
+def _labeled_mcp_config(mcp, mcp_config: dict) -> dict | None:
+    if not mcp_config:
+        return None
+    name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
+    return {name_to_label.get(name, name): value for name, value in mcp_config.items()}
 
-        if mcp:
-            if mcp_config:
-                name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
-                for name, value in mcp_config.items():
-                    label = name_to_label.get(name, name)
-                    config_with_labels[label] = value
-            else:
-                config_with_labels = mcp_config
 
-            result = {"name": mcp_name, "config": config_with_labels}
-            result["description"] = {
-                "en": (mcp.description_en or "").strip(),
-                "pt": (mcp.description_pt or "").strip(),
-                "es": (mcp.description_es or "").strip(),
-            }
-            if mcp.system:
-                result["system"] = {
-                    "name": mcp.system.name,
-                    "slug": mcp.system.slug,
-                    "logo": mcp.system.logo.url if mcp.system.logo else None,
-                }
-        else:
-            result = {"name": mcp_name, "config": mcp_config}
+def _mcp_description_locale_map(mcp) -> dict:
+    return {
+        "en": (mcp.description_en or "").strip(),
+        "pt": (mcp.description_pt or "").strip(),
+        "es": (mcp.description_es or "").strip(),
+    }
 
-        return result
+
+def _system_display_name(mcp, system_obj: AgentSystem | None) -> str | None:
+    if mcp and mcp.system:
+        return mcp.system.name
+    if system_obj:
+        return system_obj.name
+    return None
+
+
+def team_roster_selected_mcp_payload(integrated: IntegratedAgent) -> dict | None:
+    """Selected MCP for one integrated agent (from assignment metadata), not the full agent catalog."""
+    if not integrated.metadata:
+        return None
+
+    mcp_config = integrated.metadata.get("mcp_config") or {}
+    mcp_name = integrated.metadata.get("mcp")
+    system_slug = integrated.metadata.get("system")
+
+    if not mcp_name and mcp_config:
+        inferred_mcp, inferred_system = infer_single_active_mcp_selection(integrated.agent)
+        if inferred_mcp:
+            mcp_name = inferred_mcp
+            if not system_slug and inferred_system:
+                system_slug = inferred_system
+
+    if not mcp_name:
+        return None
+    mcp, system_obj = _resolve_agent_mcp(integrated.agent, mcp_name, system_slug)
+
+    if mcp:
+        config = _labeled_mcp_config(mcp, mcp_config)
+    else:
+        config = None if not mcp_config else mcp_config
+    result: dict = {"name": mcp_name, "config": config}
+    if mcp:
+        result["description"] = _mcp_description_locale_map(mcp)
+
+    system_name = _system_display_name(mcp, system_obj)
+    if system_name:
+        result["system"] = system_name
+    return result
+
+
+def team_roster_mcps_payload(integrated: IntegratedAgent) -> list | None:
+    """Configured MCP only: one-element array when selected, ``null`` when none."""
+    selected = team_roster_selected_mcp_payload(integrated)
+    return [selected] if selected else None
+
+
+class TeamRosterAgentSerializer(serializers.ModelSerializer):
+    """GET /api/agents/teams/{project_uuid} agent rows."""
+
+    class Meta:
+        model = IntegratedAgent
+        fields = ["uuid", "slug", "name", "about", "group", "is_official", "mcps", "active"]
+
+    active = serializers.BooleanField(source="is_active", read_only=True)
+    uuid = serializers.UUIDField(source="agent.uuid")
+    slug = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    about = serializers.SerializerMethodField()
+    group = serializers.SerializerMethodField()
+    is_official = serializers.SerializerMethodField()
+    mcps = serializers.SerializerMethodField()
+
+    def get_slug(self, obj):
+        return obj.agent.slug
+
+    def get_name(self, obj):
+        return inline_agent_list_display_name(obj.agent)
+
+    def get_about(self, obj):
+        return team_roster_about_locale_map(obj.agent)
+
+    def get_group(self, obj):
+        if getattr(obj.agent, "group_id", None):
+            return obj.agent.group.slug
+        return None
+
+    def get_is_official(self, obj):
+        return obj.agent.is_official
+
+    def get_mcps(self, obj):
+        return team_roster_mcps_payload(obj)
 
 
 class AgentSerializer(serializers.ModelSerializer):
@@ -247,7 +389,6 @@ class AgentSerializer(serializers.ModelSerializer):
             "skills",
             "assigned",
             "active",
-            # "external_id",
             "slug",
             "model",
             "is_official",
@@ -304,7 +445,6 @@ class AgentSerializer(serializers.ModelSerializer):
         return self._mcp_definitions(obj)
 
     def get_credentials(self, obj):
-        # Use .all() so prefetched agentcredential_set is used; de-dupe by key in Python (.distinct("key") re-queries).
         credentials = list(obj.agentcredential_set.all())
         seen_keys = set()
         rows = []
@@ -314,7 +454,7 @@ class AgentSerializer(serializers.ModelSerializer):
                 continue
             seen_keys.add(k)
             rows.append(credential)
-        result = [
+        return [
             {
                 "name": credential.key,
                 "label": credential.label,
@@ -323,41 +463,12 @@ class AgentSerializer(serializers.ModelSerializer):
             }
             for credential in rows
         ]
-        return result
-
-
-class ProjectCredentialsListSerializer(serializers.ModelSerializer):
-    agents_using = serializers.SerializerMethodField("get_agents_using")
-    name = serializers.CharField(source="key")
-    value = serializers.SerializerMethodField("get_value")
-
-    class Meta:
-        model = AgentCredential
-        fields = ["name", "label", "placeholder", "is_confidential", "value", "agents_using"]
-
-    def get_agents_using(self, obj):
-        qs = IntegratedAgent.objects.filter(project=obj.project)
-        if not self.context.get("include_inactive_integrated"):
-            qs = qs.filter(is_active=True)
-        return [
-            {
-                "uuid": integrated_agent.agent.uuid,
-                "name": inline_agent_list_display_name(integrated_agent.agent),
-            }
-            for integrated_agent in qs
-        ]
-
-    def get_value(self, obj):
-        if obj.is_confidential:
-            return obj.value
-        return obj.decrypted_value
 
 
 class OfficialAgentListSerializer(serializers.Serializer):
     uuid = serializers.UUIDField()
     name = serializers.CharField()
     description = serializers.CharField()
-    type = serializers.CharField()
     group = serializers.CharField(allow_null=True)
     category = serializers.CharField(allow_blank=True)
     systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
@@ -378,13 +489,9 @@ class OfficialAgentListSerializer(serializers.Serializer):
         if group_name:
             agent_mcps = get_all_mcps_for_group(group_name)
 
-        has_multiple_mcps = False
-
-        for system_slug in systems:
-            system_mcps = agent_mcps.get(system_slug, [])
-            if isinstance(system_mcps, list) and len(system_mcps) > 1:
-                has_multiple_mcps = True
-                break
+        has_multiple_mcps = any(
+            isinstance(system_mcps, list) and len(system_mcps) > 1 for system_mcps in agent_mcps.values()
+        )
 
         credentials = []
 
@@ -405,7 +512,6 @@ class OfficialAgentListSerializer(serializers.Serializer):
             "uuid": obj.uuid,
             "name": obj.name,
             "description": obj.collaboration_instructions,
-            "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
             "group": group_name,
             "category": (obj.category.slug if getattr(obj, "category", None) else ""),
             "systems": systems,
@@ -420,6 +526,35 @@ class OfficialAgentListSerializer(serializers.Serializer):
     def _get_meta(self, agent: Agent) -> dict:
         mapper = self.context.get("official_mapper", {})
         return mapper.get(agent.slug, {})
+
+
+class ProjectCredentialsListSerializer(serializers.ModelSerializer):
+    agents_using = serializers.SerializerMethodField("get_agents_using")
+    name = serializers.CharField(source="key")
+    value = serializers.SerializerMethodField("get_value")
+
+    class Meta:
+        model = AgentCredential
+        fields = ["name", "label", "placeholder", "is_confidential", "value", "agents_using"]
+
+    def get_agents_using(self, obj):
+        qs = IntegratedAgent.objects.filter(project=obj.project, agent__in=obj.agents.all()).select_related(
+            "agent", "agent__group", "agent__group__modal"
+        )
+        if not self.context.get("include_inactive_integrated"):
+            qs = qs.filter(is_active=True)
+        return [
+            {
+                "uuid": integrated_agent.agent.uuid,
+                "name": inline_agent_list_display_name(integrated_agent.agent),
+            }
+            for integrated_agent in qs
+        ]
+
+    def get_value(self, obj):
+        if obj.is_confidential:
+            return obj.value
+        return obj.decrypted_value
 
 
 class OfficialAgentDetailSerializer(serializers.Serializer):
@@ -485,10 +620,15 @@ class OfficialAgentsAssignRequestSerializer(serializers.Serializer):
     """
 
     assigned = serializers.BooleanField(required=False)
-    system = serializers.CharField(required=False)
+    system = serializers.CharField(required=False, allow_blank=True)
     mcp = serializers.CharField(required=False)
     mcp_config = serializers.DictField(required=False)
     credentials = serializers.ListField(child=CredentialItemSerializer(), required=False)
+
+    def validate_system(self, value):
+        if value == "":
+            return None
+        return value
 
 
 class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
@@ -496,6 +636,16 @@ class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
     assigned_created = serializers.BooleanField(required=False)
     assigned_deleted = serializers.BooleanField(required=False)
     created_credentials = serializers.ListField(child=serializers.CharField(), required=False)
+    agent = serializers.DictField(required=False)
+
+
+class OfficialAgentsV1CatalogPageSerializer(serializers.Serializer):
+    """OpenAPI envelope for paginated GET /api/v1/official/agents."""
+
+    count = serializers.IntegerField()
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    results = serializers.ListField(child=serializers.DictField())
 
 
 class ProviderCredentialSerializer(serializers.Serializer):

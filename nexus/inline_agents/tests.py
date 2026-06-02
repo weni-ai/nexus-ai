@@ -10,6 +10,8 @@ from django.urls import reverse
 from django.utils.datastructures import MultiValueDict
 from rest_framework.test import APIClient
 
+from nexus.agents.encryption import encrypt_value
+from nexus.inline_agents.api.serializers import ProjectCredentialsListSerializer
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
@@ -97,6 +99,58 @@ class TestAgentsUsecase(TestCase):
         deleted, integrated_agent = self.usecase.unassign_agent(self.agent.uuid, self.project.uuid)
         self.assertFalse(deleted)
         self.assertIsNone(integrated_agent)
+
+    def test_unassign_agent_preserves_credentials_and_clears_values(self):
+        credential = AgentCredential.objects.create(
+            key="vtex_app_key",
+            label="VTEX App Key",
+            placeholder="vtexappkey-example",
+            is_confidential=True,
+            value=encrypt_value("secret-key"),
+            project=self.project,
+        )
+        credential.agents.add(self.agent)
+
+        self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
+        deleted, _ = self.usecase.unassign_agent(self.agent.uuid, self.project.uuid)
+
+        self.assertTrue(deleted)
+        self.assertFalse(IntegratedAgent.objects.filter(agent=self.agent, project=self.project).exists())
+        credential.refresh_from_db()
+        self.assertEqual(credential.value, "")
+        self.assertTrue(credential.agents.filter(pk=self.agent.pk).exists())
+
+    def test_unassign_agent_does_not_clear_shared_credential_while_other_agent_assigned(self):
+        other_agent = Agent.objects.create(
+            name="Other Agent",
+            slug="other-agent",
+            collaboration_instructions="Lorem Ipsum dolor sit amet",
+            project=self.project,
+            instruction="Lorem Ipsum dolor sit amet",
+            foundation_model="claude",
+        )
+        other_agent.versions.create(skills=[], display_skills=[])
+
+        credential = AgentCredential.objects.create(
+            key="shared_api_key",
+            label="Shared API Key",
+            placeholder="your-api-key-here",
+            is_confidential=True,
+            value=encrypt_value("shared-secret"),
+            project=self.project,
+        )
+        credential.agents.add(self.agent, other_agent)
+
+        self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
+        self.usecase.assign_agent(other_agent.uuid, self.project.uuid)
+        original_value = credential.value
+
+        self.usecase.unassign_agent(self.agent.uuid, self.project.uuid)
+
+        credential.refresh_from_db()
+        self.assertEqual(credential.value, original_value)
+        self.assertTrue(credential.agents.filter(pk=self.agent.pk).exists())
+        self.assertTrue(IntegratedAgent.objects.filter(agent=other_agent, project=self.project).exists())
 
     def test_set_agent_active_activate(self):
         self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
@@ -458,6 +512,53 @@ class TestGetInlineCredentials(TestCase):
         official_credentials, custom_credentials = self.usecase.get_credentials_by_project(self.project.uuid)
         self.assertEqual(len(official_credentials), 1)
         self.assertEqual(len(custom_credentials), 0)
+
+
+class TestProjectCredentialsListSerializerAgentsUsing(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory(name="Credentials Project", brain_on=True)
+        self.agent_a = Agent.objects.create(
+            name="Agent A",
+            slug="agent-a",
+            project=self.project,
+        )
+        self.agent_b = Agent.objects.create(
+            name="Agent B",
+            slug="agent-b",
+            project=self.project,
+        )
+        IntegratedAgent.objects.create(agent=self.agent_a, project=self.project)
+        IntegratedAgent.objects.create(agent=self.agent_b, project=self.project)
+        self.credential = AgentCredential.objects.create(
+            key="API_KEY",
+            label="API Key",
+            placeholder="your-api-key-here",
+            is_confidential=True,
+            project=self.project,
+        )
+        self.credential.agents.add(self.agent_a)
+
+    def test_agents_using_returns_only_linked_agents(self):
+        data = ProjectCredentialsListSerializer(self.credential).data
+
+        self.assertEqual(len(data["agents_using"]), 1)
+        self.assertEqual(data["agents_using"][0]["uuid"], self.agent_a.uuid)
+
+    def test_agents_using_excludes_inactive_integrated_by_default(self):
+        IntegratedAgent.objects.filter(agent=self.agent_a, project=self.project).update(is_active=False)
+
+        data = ProjectCredentialsListSerializer(self.credential).data
+
+        self.assertEqual(data["agents_using"], [])
+
+    def test_agents_using_includes_inactive_when_requested(self):
+        IntegratedAgent.objects.filter(agent=self.agent_a, project=self.project).update(is_active=False)
+        context = {"include_inactive_integrated": True}
+
+        data = ProjectCredentialsListSerializer(self.credential, context=context).data
+
+        self.assertEqual(len(data["agents_using"]), 1)
+        self.assertEqual(data["agents_using"][0]["uuid"], self.agent_a.uuid)
 
 
 class MockLogGroupBedrockClient:
