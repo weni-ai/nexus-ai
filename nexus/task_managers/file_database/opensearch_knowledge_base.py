@@ -85,16 +85,41 @@ def _decode_cursor(cursor: str) -> list[Any]:
         raise ValueError("Invalid cursor") from e
 
 
+def _extract_filename(source: dict[str, Any]) -> str | None:
+    filename = source.get("filename")
+    if filename:
+        return filename
+
+    source_uri = source.get("x-amz-bedrock-kb-source-uri")
+    if source_uri:
+        return source_uri.rstrip("/").split("/")[-1]
+
+    return None
+
+
 def _format_chunk(hit: dict[str, Any], text_field: str, metadata_field: str) -> dict[str, Any]:
     source = hit.get("_source", {})
-    metadata = source.get(metadata_field, {}) or {}
     return {
         "id": hit.get("_id"),
         "text": source.get(text_field, ""),
-        "filename": metadata.get("filename"),
-        "file_uuid": metadata.get("fileUuid"),
-        "metadata": metadata,
+        "filename": _extract_filename(source),
+        "file_uuid": source.get("fileUuid"),
+        "metadata": {
+            "contentBaseUuid": source.get("contentBaseUuid"),
+            "fileUuid": source.get("fileUuid"),
+            "x-amz-bedrock-kb-data-source-id": source.get("x-amz-bedrock-kb-data-source-id"),
+            "x-amz-bedrock-kb-source-uri": source.get("x-amz-bedrock-kb-source-uri"),
+            metadata_field: source.get(metadata_field),
+        },
     }
+
+
+def _build_chunk_filters(content_base_uuid: str, data_source_id: str) -> list[dict[str, Any]]:
+    # Custom metadata attributes and Bedrock-managed fields are top-level in the index.
+    return [
+        {"term": {"contentBaseUuid.keyword": content_base_uuid}},
+        {"term": {"x-amz-bedrock-kb-data-source-id.keyword": data_source_id}},
+    ]
 
 
 def list_chunks(
@@ -106,11 +131,7 @@ def list_chunks(
     config = get_opensearch_kb_config()
     client = get_opensearch_client()
     metadata_field = config["metadata_field"]
-
-    filters = [
-        {"term": {f"{metadata_field}.contentBaseUuid.keyword": content_base_uuid}},
-        {"term": {f"{metadata_field}.x-amz-bedrock-kb-data-source-id.keyword": data_source_id}},
-    ]
+    filters = _build_chunk_filters(content_base_uuid, data_source_id)
 
     body: dict[str, Any] = {
         "size": page_size,
