@@ -53,10 +53,7 @@ class TestFeatureFlagsViewSet(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["active_features"], ["flag-a", "flag-b"])
         mock_get_active.assert_called_once_with(
-            attributes={
-                "userEmail": self.user.email,
-                "projectUUID": str(self.project.uuid),
-            },
+            attributes={"weni_project": str(self.project.uuid)},
         )
 
     def test_list_requires_authentication(self):

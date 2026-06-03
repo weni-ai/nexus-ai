@@ -64,7 +64,7 @@ class TestInstructionsClassificationAPIView(TestCase):
         )
 
         self._feature_flag_patcher = mock.patch(
-            "nexus.intelligences.api.views.is_feature_active",
+            "nexus.intelligences.api.views.is_feature_active_for_attributes",
             return_value=True,
         )
         self._feature_flag_patcher.start()
@@ -130,7 +130,7 @@ class TestInstructionsClassificationAPIView(TestCase):
         content = json.loads(response.content)
         self.assertEqual(content["suggested_category"], "")
 
-    @mock.patch("nexus.intelligences.api.views.is_feature_active", return_value=False)
+    @mock.patch("nexus.intelligences.api.views.is_feature_active_for_attributes", return_value=False)
     def test_post_uses_legacy_path_when_feature_flag_is_inactive(self, _mock_is_feature_active):
         request = self.factory.post(
             self.url,

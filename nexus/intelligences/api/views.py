@@ -20,7 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
-from weni.feature_flags.shortcuts import is_feature_active
+from weni.feature_flags.shortcuts import is_feature_active_for_attributes
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
@@ -1873,7 +1873,7 @@ class SupervisorViewset(ModelViewSet):
             )
 
 
-INSTRUCTION_CLASSIFY_ENHANCED_FEATURE_FLAG = "validateInstructionByAI"
+INSTRUCTION_CLASSIFY_ENHANCED_FEATURE_FLAG = "categorization_of_instructions"
 
 
 class InstructionsClassificationAPIView(APIView):
@@ -1935,10 +1935,9 @@ class InstructionsClassificationAPIView(APIView):
 
             lambda_usecase = LambdaUseCase()
 
-            use_enhanced_classification = is_feature_active(
+            use_enhanced_classification = is_feature_active_for_attributes(
                 INSTRUCTION_CLASSIFY_ENHANCED_FEATURE_FLAG,
-                user_email=user.email,
-                project_uuid=project_uuid,
+                {"weni_project": str(project_uuid)},
             )
 
             if use_enhanced_classification:
