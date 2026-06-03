@@ -46,7 +46,7 @@ class ProjectInstructionsUseCase:
             payload_category_ids.add(category.id)
             self._sync_category_instructions(content_base, category, category_data.get("instructions", []), user)
 
-        content_base.instruction_categories.exclude(id__in=payload_category_ids).delete()
+        self._delete_categories_not_in_payload(content_base, payload_category_ids)
 
         notify_async(
             event="cache_invalidation:content_base_instruction",
@@ -54,6 +54,27 @@ class ProjectInstructionsUseCase:
         )
 
         return self.get_grouped_instructions(content_base)
+
+    def delete_category(self, content_base: ContentBase, category_id: int, project_uuid: str) -> dict[str, list]:
+        category = content_base.instruction_categories.get(id=category_id)
+        self._uncategorize_instructions_for_category(category)
+        category.delete()
+
+        notify_async(
+            event="cache_invalidation:content_base_instruction",
+            project_uuid=project_uuid,
+        )
+
+        return self.get_grouped_instructions(content_base)
+
+    def _delete_categories_not_in_payload(self, content_base: ContentBase, payload_category_ids: set[int]) -> None:
+        categories_to_remove = content_base.instruction_categories.exclude(id__in=payload_category_ids)
+        for category in categories_to_remove:
+            self._uncategorize_instructions_for_category(category)
+        categories_to_remove.delete()
+
+    def _uncategorize_instructions_for_category(self, category: InstructionCategory) -> None:
+        ContentBaseInstruction.objects.filter(category=category).update(category=None, suggested_category="")
 
     def _upsert_category(self, content_base: ContentBase, category_data: dict[str, Any]) -> InstructionCategory:
         name = (category_data.get("name") or "").strip()

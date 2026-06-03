@@ -214,7 +214,7 @@ class ContentBaseInstruction(models.Model):
         related_name="instructions",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
     )
     content_base = models.ForeignKey(ContentBase, related_name="instructions", on_delete=models.CASCADE)
 

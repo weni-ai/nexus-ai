@@ -100,7 +100,7 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertEqual(instruction.instruction, "Always greet the customer")
 
     def test_update_removes_category_not_in_payload(self):
-        InstructionCategory.objects.create(content_base=self.content_base, name="legacy")
+        legacy = InstructionCategory.objects.create(content_base=self.content_base, name="legacy")
 
         request = self.factory.put(
             f"{self.url}",
@@ -114,7 +114,37 @@ class TestProjectInstructionsViewSet(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertFalse(InstructionCategory.objects.filter(content_base=self.content_base, name="legacy").exists())
+        self.assertFalse(InstructionCategory.objects.filter(id=legacy.id).exists())
+
+    def test_update_removes_category_and_moves_instructions_to_uncategorized(self):
+        legacy = InstructionCategory.objects.create(content_base=self.content_base, name="legacy")
+        instruction = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=legacy,
+            instruction="Keep this instruction",
+            suggested_category="legacy",
+        )
+
+        request = self.factory.put(
+            f"{self.url}",
+            {"categories": [{"name": "greeting", "instructions": []}]},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"put": "update"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        instruction.refresh_from_db()
+        self.assertIsNone(instruction.category_id)
+        self.assertEqual(instruction.suggested_category, "")
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(len(content["uncategorized_instructions"]), 1)
+        self.assertEqual(content["uncategorized_instructions"][0]["id"], instruction.id)
 
     @mock.patch("nexus.feature_flags.permissions.is_feature_active_for_attributes", return_value=False)
     def test_list_returns_403_when_feature_flag_is_inactive(self, _mock_feature_flag):
@@ -147,3 +177,44 @@ class TestProjectInstructionsViewSet(TestCase):
         response.render()
         content = json.loads(response.content)
         self.assertEqual(content["categories"][0]["instructions"], [])
+
+    def test_destroy_category_moves_instructions_to_uncategorized(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        instruction = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=category,
+            instruction="Always greet the customer",
+            suggested_category="greeting",
+        )
+        category_url = f"{self.project.uuid}/instructions/categories/{category.id}/"
+
+        request = self.factory.delete(category_url)
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"delete": "destroy_category"})(
+            request,
+            project_uuid=str(self.project.uuid),
+            category_id=category.id,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(InstructionCategory.objects.filter(id=category.id).exists())
+        instruction.refresh_from_db()
+        self.assertIsNone(instruction.category_id)
+        self.assertEqual(instruction.suggested_category, "")
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(content["categories"], [])
+        self.assertEqual(len(content["uncategorized_instructions"]), 1)
+        self.assertEqual(content["uncategorized_instructions"][0]["instruction"], "Always greet the customer")
+
+    def test_destroy_category_returns_404_for_unknown_category(self):
+        request = self.factory.delete(f"{self.project.uuid}/instructions/categories/99999/")
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"delete": "destroy_category"})(
+            request,
+            project_uuid=str(self.project.uuid),
+            category_id=99999,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

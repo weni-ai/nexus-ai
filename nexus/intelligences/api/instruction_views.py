@@ -13,7 +13,7 @@ from nexus.intelligences.api.instruction_serializers import (
     ProjectInstructionsUpdateSerializer,
 )
 from nexus.intelligences.constants import INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
-from nexus.intelligences.models import ContentBase
+from nexus.intelligences.models import ContentBase, InstructionCategory
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.usecases.intelligences import get_default_content_base_by_project
 from nexus.usecases.intelligences.delete import DeleteContentBaseUseCase
@@ -135,4 +135,49 @@ class ProjectInstructionsViewSet(ModelViewSet):
 
         self.delete_use_case.bulk_delete_instruction_by_id(content_base, [instruction_id], request.user)
         data = self.use_case.get_grouped_instructions(content_base)
+        return Response(data=data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        operation_id="delete_project_instruction_category",
+        summary="Delete a project instruction category",
+        description=(
+            "Deletes the category and moves its instructions to uncategorized_instructions "
+            "(instructions are not deleted)."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.PATH,
+                description="Project UUID",
+                required=True,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(
+                name="category_id",
+                location=OpenApiParameter.PATH,
+                description="Category ID",
+                required=True,
+                type=OpenApiTypes.INT,
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
+            403: OpenApiResponse(description="Forbidden"),
+            404: OpenApiResponse(description="Category not found"),
+        },
+        tags=["Instructions"],
+    )
+    def destroy_category(self, request, category_id, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        content_base = self._get_content_base(project_uuid)
+
+        try:
+            data = self.use_case.delete_category(
+                content_base=content_base,
+                category_id=category_id,
+                project_uuid=str(project_uuid),
+            )
+        except InstructionCategory.DoesNotExist:
+            return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
+
         return Response(data=data, status=status.HTTP_200_OK)

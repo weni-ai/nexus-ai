@@ -1,22 +1,10 @@
-from django.db import migrations, models
 import django.db.models.deletion
+from django.db import migrations, models
 
 
-def migrate_suggested_categories_to_instruction_categories(apps, schema_editor):
+def reset_existing_instructions_to_uncategorized(apps, schema_editor):
     ContentBaseInstruction = apps.get_model("intelligences", "ContentBaseInstruction")
-    InstructionCategory = apps.get_model("intelligences", "InstructionCategory")
-
-    for instruction in ContentBaseInstruction.objects.exclude(suggested_category="").iterator():
-        category_name = instruction.suggested_category.strip()
-        if not category_name:
-            continue
-
-        category, _ = InstructionCategory.objects.get_or_create(
-            content_base_id=instruction.content_base_id,
-            name=category_name,
-        )
-        instruction.category_id = category.id
-        instruction.save(update_fields=["category_id"])
+    ContentBaseInstruction.objects.all().update(suggested_category="")
 
 
 class Migration(migrations.Migration):
@@ -53,13 +41,13 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 blank=True,
                 null=True,
-                on_delete=django.db.models.deletion.CASCADE,
+                on_delete=django.db.models.deletion.SET_NULL,
                 related_name="instructions",
                 to="intelligences.instructioncategory",
             ),
         ),
         migrations.RunPython(
-            migrate_suggested_categories_to_instruction_categories,
+            reset_existing_instructions_to_uncategorized,
             migrations.RunPython.noop,
         ),
     ]
