@@ -20,10 +20,7 @@ class FeatureFlagsViewSet(GenericViewSet):
         query_params.is_valid(raise_exception=True)
 
         project = query_params.validated_data["project"]
-        attributes = {
-            "userEmail": request.user.email,
-            "projectUUID": str(project.uuid),
-        }
+        attributes = {"weni_project": str(project.uuid)}
 
         active_features = self.service.get_active_feature_flags_for_attributes(
             attributes=attributes,
