@@ -26,6 +26,7 @@ from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
+from nexus.intelligences.constants import INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseFile,
@@ -1798,9 +1799,6 @@ class SupervisorViewset(ModelViewSet):
             )
 
 
-INSTRUCTION_CLASSIFY_ENHANCED_FEATURE_FLAG = "categorization_of_instructions"
-
-
 class InstructionsClassificationAPIView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
@@ -1861,7 +1859,7 @@ class InstructionsClassificationAPIView(APIView):
             lambda_usecase = LambdaUseCase()
 
             use_enhanced_classification = is_feature_active_for_attributes(
-                INSTRUCTION_CLASSIFY_ENHANCED_FEATURE_FLAG,
+                INSTRUCTION_CATEGORIZATION_FEATURE_FLAG,
                 {"weni_project": str(project_uuid)},
             )
 
