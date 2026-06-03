@@ -193,9 +193,31 @@ class ContentBaseAgent(models.Model):
         return f"ContentBaseAgent - {self.name}"
 
 
+class InstructionCategory(models.Model):
+    name = models.CharField(max_length=255)
+    content_base = models.ForeignKey(ContentBase, related_name="instruction_categories", on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["content_base", "name"], name="unique_instruction_category_per_content_base"
+            )
+        ]
+
+    def __str__(self):
+        return f"InstructionCategory - {self.name}"
+
+
 class ContentBaseInstruction(models.Model):
     instruction = models.TextField()
     suggested_category = models.CharField(max_length=255, blank=True, default="")
+    category = models.ForeignKey(
+        InstructionCategory,
+        related_name="instructions",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+    )
     content_base = models.ForeignKey(ContentBase, related_name="instructions", on_delete=models.CASCADE)
 
     def __str__(self):

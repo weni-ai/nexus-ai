@@ -187,7 +187,7 @@ class LLMConfigSerializer(serializers.ModelSerializer):
 class ContentBaseInstructionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseInstruction
-        fields = ["instruction", "suggested_category"]
+        fields = ["instruction"]
 
 
 class ContentBaseAgentSerializer(serializers.ModelSerializer):
@@ -218,7 +218,6 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 {
                     "id": instruction.id,
                     "instruction": instruction.instruction,
-                    "suggested_category": instruction.suggested_category or "",
                 }
             )
         return instructions
@@ -356,8 +355,6 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                         old_instruction_data = model_to_dict(instruction)
 
                         instruction.instruction = instruction_data.get("instruction")
-                        if "suggested_category" in instruction_data:
-                            instruction.suggested_category = instruction_data.get("suggested_category") or ""
                         instruction.save()
                         instruction.refresh_from_db()
 
@@ -374,7 +371,6 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     else:
                         created_instruction = instance.instructions.create(
                             instruction=instruction_data.get("instruction"),
-                            suggested_category=instruction_data.get("suggested_category") or "",
                         )
                         event_manager.notify(
                             event="contentbase_instruction_activity",
