@@ -44,6 +44,22 @@ class TestProjectInstructionsViewSet(TestCase):
         self._feature_flag_patcher.stop()
         self._patcher.stop()
 
+    def _post(self, data):
+        request = self.factory.post(f"{self.url}", data, format="json")
+        force_authenticate(request, user=self.user)
+        return ProjectInstructionsViewSet.as_view({"post": "create"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+    def _patch(self, data):
+        request = self.factory.patch(f"{self.url}", data, format="json")
+        force_authenticate(request, user=self.user)
+        return ProjectInstructionsViewSet.as_view({"patch": "partial_update"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
     def test_list_returns_grouped_categories_including_empty_category(self):
         greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
         InstructionCategory.objects.create(content_base=self.content_base, name="policy")
@@ -70,26 +86,15 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertEqual(content["categories"][1]["name"], "policy")
         self.assertEqual(content["categories"][1]["instructions"], [])
 
-    def test_update_creates_category_and_instruction(self):
-        request = self.factory.put(
-            f"{self.url}",
+    def test_post_creates_instruction_in_new_category_by_name(self):
+        response = self._post(
             {
-                "categories": [
-                    {
-                        "name": "greeting",
-                        "instructions": [{"instruction": "Always greet the customer"}],
-                    }
-                ]
-            },
-            format="json",
-        )
-        force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"put": "update"})(
-            request,
-            project_uuid=str(self.project.uuid),
+                "instruction": "Always greet the customer",
+                "category": {"name": "greeting"},
+            }
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response.render()
         content = json.loads(response.content)
         self.assertEqual(content["categories"][0]["name"], "greeting")
@@ -99,52 +104,108 @@ class TestProjectInstructionsViewSet(TestCase):
         instruction = ContentBaseInstruction.objects.get(category=category)
         self.assertEqual(instruction.instruction, "Always greet the customer")
 
-    def test_update_removes_category_not_in_payload(self):
-        legacy = InstructionCategory.objects.create(content_base=self.content_base, name="legacy")
+    def test_post_creates_uncategorized_instruction_when_category_omitted(self):
+        response = self._post({"instruction": "Legacy instruction without category"})
 
-        request = self.factory.put(
-            f"{self.url}",
-            {"categories": [{"name": "greeting", "instructions": []}]},
-            format="json",
-        )
-        force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"put": "update"})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertFalse(InstructionCategory.objects.filter(id=legacy.id).exists())
-
-    def test_update_removes_category_and_moves_instructions_to_uncategorized(self):
-        legacy = InstructionCategory.objects.create(content_base=self.content_base, name="legacy")
-        instruction = ContentBaseInstruction.objects.create(
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        instruction = ContentBaseInstruction.objects.get(
             content_base=self.content_base,
-            category=legacy,
-            instruction="Keep this instruction",
-            suggested_category="legacy",
+            instruction="Legacy instruction without category",
         )
-
-        request = self.factory.put(
-            f"{self.url}",
-            {"categories": [{"name": "greeting", "instructions": []}]},
-            format="json",
-        )
-        force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"put": "update"})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        instruction.refresh_from_db()
         self.assertIsNone(instruction.category_id)
-        self.assertEqual(instruction.suggested_category, "")
 
         response.render()
         content = json.loads(response.content)
         self.assertEqual(len(content["uncategorized_instructions"]), 1)
-        self.assertEqual(content["uncategorized_instructions"][0]["id"], instruction.id)
+
+    def test_post_creates_instruction_in_existing_category_by_id(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="policy")
+
+        response = self._post(
+            {
+                "instruction": "Never promise refunds without approval",
+                "category": {"id": category.id},
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(category.instructions.count(), 1)
+
+    def test_post_returns_404_for_unknown_category_id(self):
+        response = self._post(
+            {
+                "instruction": "Some instruction",
+                "category": {"id": 99999},
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_patch_updates_instruction_without_creating(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        existing = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=category,
+            instruction="Old text",
+        )
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "id": category.id,
+                        "instructions": [{"id": existing.id, "instruction": "Updated text"}],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(category.instructions.count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.instruction, "Updated text")
+
+    def test_patch_rejects_create_without_id(self):
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "name": "greeting",
+                        "instructions": [{"instruction": "Always greet the customer"}],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_patch_leaves_other_categories_unchanged(self):
+        legacy = InstructionCategory.objects.create(content_base=self.content_base, name="legacy")
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        instruction = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=greeting,
+            instruction="Greeting instruction",
+        )
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "id": greeting.id,
+                        "instructions": [{"id": instruction.id, "instruction": "Updated greeting"}],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(InstructionCategory.objects.filter(id=legacy.id).exists())
+
+    def test_patch_empty_body_returns_400(self):
+        response = self._patch({})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @mock.patch("nexus.feature_flags.permissions.is_feature_active_for_attributes", return_value=False)
     def test_list_returns_403_when_feature_flag_is_inactive(self, _mock_feature_flag):

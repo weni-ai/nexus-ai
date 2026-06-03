@@ -9,11 +9,12 @@ from rest_framework.viewsets import ModelViewSet
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.feature_flags.permissions import FeatureFlagPermission
 from nexus.intelligences.api.instruction_serializers import (
+    ProjectInstructionsCreateSerializer,
+    ProjectInstructionsPatchSerializer,
     ProjectInstructionsResponseSerializer,
-    ProjectInstructionsUpdateSerializer,
 )
 from nexus.intelligences.constants import INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
-from nexus.intelligences.models import ContentBase, InstructionCategory
+from nexus.intelligences.models import ContentBase, ContentBaseInstruction, InstructionCategory
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.usecases.intelligences import get_default_content_base_by_project
 from nexus.usecases.intelligences.delete import DeleteContentBaseUseCase
@@ -62,9 +63,64 @@ class ProjectInstructionsViewSet(ModelViewSet):
         return Response(data=data, status=status.HTTP_200_OK)
 
     @extend_schema(
-        operation_id="sync_project_instructions",
-        summary="Sync project instructions grouped by category",
-        request=ProjectInstructionsUpdateSerializer,
+        operation_id="create_project_instruction",
+        summary="Create a project instruction",
+        description=(
+            "Creates one instruction. Omit category or send null to store as uncategorized. "
+            "Send category.id for an existing category, or category.name to create or reuse a category by name."
+        ),
+        request=ProjectInstructionsCreateSerializer,
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.PATH,
+                description="Project UUID",
+                required=True,
+                type=OpenApiTypes.STR,
+            )
+        ],
+        responses={
+            201: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
+            400: OpenApiResponse(description="Bad request"),
+            403: OpenApiResponse(description="Forbidden"),
+            404: OpenApiResponse(description="Category not found"),
+        },
+        tags=["Instructions"],
+    )
+    def create(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        content_base = self._get_content_base(project_uuid)
+
+        serializer = ProjectInstructionsCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            data = self.use_case.create_instruction(
+                content_base=content_base,
+                instruction_text=serializer.validated_data["instruction"],
+                category_data=serializer.validated_data.get("category"),
+                user=request.user,
+                project_uuid=str(project_uuid),
+            )
+        except ValueError as error:
+            return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        except InstructionCategory.DoesNotExist:
+            return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as error:
+            logger.error("Error creating project instruction: %s", str(error), exc_info=True)
+            return Response({"error": str(error)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(data=data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        operation_id="patch_project_instructions",
+        summary="Update existing project instructions and categories",
+        description=(
+            "Updates only existing categories and instructions (id required). "
+            "Use POST to create and DELETE endpoints to remove. "
+            "Omitted categories and instructions are left unchanged."
+        ),
+        request=ProjectInstructionsPatchSerializer,
         parameters=[
             OpenApiParameter(
                 name="project_uuid",
@@ -81,24 +137,29 @@ class ProjectInstructionsViewSet(ModelViewSet):
         },
         tags=["Instructions"],
     )
-    def update(self, request, *args, **kwargs):
+    def partial_update(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         content_base = self._get_content_base(project_uuid)
 
-        serializer = ProjectInstructionsUpdateSerializer(data=request.data)
+        serializer = ProjectInstructionsPatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
-            data = self.use_case.sync_grouped_instructions(
+            data = self.use_case.patch_grouped_instructions(
                 content_base=content_base,
-                categories_data=serializer.validated_data["categories"],
+                categories_data=serializer.validated_data.get("categories"),
+                uncategorized_data=serializer.validated_data.get("uncategorized_instructions"),
                 user=request.user,
                 project_uuid=str(project_uuid),
             )
         except ValueError as error:
             return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        except ContentBaseInstruction.DoesNotExist:
+            return Response({"error": "Instruction not found"}, status=status.HTTP_404_NOT_FOUND)
+        except InstructionCategory.DoesNotExist:
+            return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as error:
-            logger.error("Error syncing project instructions: %s", str(error), exc_info=True)
+            logger.error("Error patching project instructions: %s", str(error), exc_info=True)
             return Response({"error": str(error)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(data=data, status=status.HTTP_200_OK)

@@ -32,21 +32,64 @@ class ProjectInstructionsUseCase:
 
         return payload
 
-    def sync_grouped_instructions(
+    def create_instruction(
         self,
         content_base: ContentBase,
-        categories_data: list[dict[str, Any]],
+        instruction_text: str,
+        category_data: dict[str, Any] | None,
         user,
         project_uuid: str,
     ) -> dict[str, list[dict[str, Any]]]:
-        payload_category_ids: set[int] = set()
+        instruction_text = (instruction_text or "").strip()
+        if not instruction_text:
+            raise ValueError("Instruction text is required")
 
-        for category_data in categories_data:
-            category = self._upsert_category(content_base, category_data)
-            payload_category_ids.add(category.id)
-            self._sync_category_instructions(content_base, category, category_data.get("instructions", []), user)
+        category = self._resolve_category_for_create(content_base, category_data)
 
-        self._delete_categories_not_in_payload(content_base, payload_category_ids)
+        if category:
+            created_instruction = ContentBaseInstruction.objects.create(
+                content_base=content_base,
+                instruction=instruction_text,
+                category=category,
+                suggested_category=category.name,
+            )
+        else:
+            created_instruction = ContentBaseInstruction.objects.create(
+                content_base=content_base,
+                instruction=instruction_text,
+            )
+
+        event_manager.notify(
+            event="contentbase_instruction_activity",
+            content_base_instruction=created_instruction,
+            action_type="C",
+            action_details={"old": "", "new": instruction_text},
+            user=user,
+        )
+
+        notify_async(
+            event="cache_invalidation:content_base_instruction",
+            project_uuid=project_uuid,
+        )
+
+        return self.get_grouped_instructions(content_base)
+
+    def patch_grouped_instructions(
+        self,
+        content_base: ContentBase,
+        categories_data: list[dict[str, Any]] | None,
+        uncategorized_data: list[dict[str, Any]] | None,
+        user,
+        project_uuid: str,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if categories_data:
+            for category_data in categories_data:
+                category = self._update_category(content_base, category_data)
+                if "instructions" in category_data:
+                    self._patch_category_instructions(content_base, category, category_data["instructions"], user)
+
+        if uncategorized_data:
+            self._patch_uncategorized_instructions(content_base, uncategorized_data, user)
 
         notify_async(
             event="cache_invalidation:content_base_instruction",
@@ -67,80 +110,91 @@ class ProjectInstructionsUseCase:
 
         return self.get_grouped_instructions(content_base)
 
-    def _delete_categories_not_in_payload(self, content_base: ContentBase, payload_category_ids: set[int]) -> None:
-        categories_to_remove = content_base.instruction_categories.exclude(id__in=payload_category_ids)
-        for category in categories_to_remove:
-            self._uncategorize_instructions_for_category(category)
-        categories_to_remove.delete()
-
-    def _uncategorize_instructions_for_category(self, category: InstructionCategory) -> None:
-        ContentBaseInstruction.objects.filter(category=category).update(category=None, suggested_category="")
-
-    def _upsert_category(self, content_base: ContentBase, category_data: dict[str, Any]) -> InstructionCategory:
-        name = (category_data.get("name") or "").strip()
-        if not name:
-            raise ValueError("Category name is required")
+    def _resolve_category_for_create(
+        self, content_base: ContentBase, category_data: dict[str, Any] | None
+    ) -> InstructionCategory | None:
+        if not category_data:
+            return None
 
         category_id = category_data.get("id")
-        if category_id:
-            category = content_base.instruction_categories.get(id=category_id)
-            if category.name != name:
-                category.name = name
-                category.save(update_fields=["name"])
-            return category
+        if category_id is not None:
+            return content_base.instruction_categories.get(id=category_id)
+
+        name = (category_data.get("name") or "").strip()
+        if not name:
+            raise ValueError("Category id or name is required when category is provided")
 
         category, _ = InstructionCategory.objects.get_or_create(content_base=content_base, name=name)
         return category
 
-    def _sync_category_instructions(
+    def _uncategorize_instructions_for_category(self, category: InstructionCategory) -> None:
+        ContentBaseInstruction.objects.filter(category=category).update(category=None, suggested_category="")
+
+    def _update_category(self, content_base: ContentBase, category_data: dict[str, Any]) -> InstructionCategory:
+        category_id = category_data["id"]
+        category = content_base.instruction_categories.get(id=category_id)
+
+        name = (category_data.get("name") or "").strip()
+        if name and category.name != name:
+            category.name = name
+            category.save(update_fields=["name"])
+
+        return category
+
+    def _patch_category_instructions(
         self,
         content_base: ContentBase,
         category: InstructionCategory,
         instructions_data: list[dict[str, Any]],
         user,
     ) -> None:
-        payload_instruction_ids: set[int] = set()
-
         for instruction_data in instructions_data:
             instruction_text = (instruction_data.get("instruction") or "").strip()
             if not instruction_text:
                 continue
 
-            instruction_id = instruction_data.get("id")
-            if instruction_id:
-                instruction = content_base.instructions.get(id=instruction_id)
-                old_instruction_data = model_to_dict(instruction)
+            instruction = content_base.instructions.get(id=instruction_data["id"])
+            old_instruction_data = model_to_dict(instruction)
 
-                instruction.instruction = instruction_text
-                instruction.category = category
-                instruction.suggested_category = category.name
-                instruction.save(update_fields=["instruction", "category", "suggested_category"])
-                instruction.refresh_from_db()
+            instruction.instruction = instruction_text
+            instruction.category = category
+            instruction.suggested_category = category.name
+            instruction.save(update_fields=["instruction", "category", "suggested_category"])
+            instruction.refresh_from_db()
 
-                payload_instruction_ids.add(instruction.id)
-                event_manager.notify(
-                    event="contentbase_instruction_activity",
-                    content_base_instruction=instruction,
-                    action_type="U",
-                    old_instruction_data=old_instruction_data,
-                    new_instruction_data=model_to_dict(instruction),
-                    user=user,
-                )
-                continue
-
-            created_instruction = ContentBaseInstruction.objects.create(
-                content_base=content_base,
-                instruction=instruction_text,
-                category=category,
-                suggested_category=category.name,
-            )
-            payload_instruction_ids.add(created_instruction.id)
             event_manager.notify(
                 event="contentbase_instruction_activity",
-                content_base_instruction=created_instruction,
-                action_type="C",
-                action_details={"old": "", "new": instruction_text},
+                content_base_instruction=instruction,
+                action_type="U",
+                old_instruction_data=old_instruction_data,
+                new_instruction_data=model_to_dict(instruction),
                 user=user,
             )
 
-        category.instructions.exclude(id__in=payload_instruction_ids).delete()
+    def _patch_uncategorized_instructions(
+        self,
+        content_base: ContentBase,
+        instructions_data: list[dict[str, Any]],
+        user,
+    ) -> None:
+        for instruction_data in instructions_data:
+            instruction_text = (instruction_data.get("instruction") or "").strip()
+            if not instruction_text:
+                continue
+
+            instruction = content_base.instructions.get(id=instruction_data["id"], category__isnull=True)
+            old_instruction_data = model_to_dict(instruction)
+
+            instruction.instruction = instruction_text
+            instruction.suggested_category = ""
+            instruction.save(update_fields=["instruction", "suggested_category"])
+            instruction.refresh_from_db()
+
+            event_manager.notify(
+                event="contentbase_instruction_activity",
+                content_base_instruction=instruction,
+                action_type="U",
+                old_instruction_data=old_instruction_data,
+                new_instruction_data=model_to_dict(instruction),
+                user=user,
+            )
