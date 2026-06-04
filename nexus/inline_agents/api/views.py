@@ -803,8 +803,14 @@ class AgentProjectsView(APIView):
         )
 
 
+class InternalCommunicationPermission(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return user.has_perm("users.can_communicate_internally")
+
+
 class TeamView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
@@ -893,12 +899,6 @@ class ProjectCredentialsView(APIView):
             )
 
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
-
-
-class InternalCommunicationPermission(BasePermission):
-    def has_permission(self, request, view):
-        user = request.user
-        return user.has_perm("users.can_communicate_internally")
 
 
 class ActivateAgentView(APIView):
