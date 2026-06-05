@@ -26,6 +26,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
     TeamRosterAgentSerializer,
 )
+from nexus.inline_agents.api.serializers.agent_config import AgentConfigSerializer
 from nexus.inline_agents.api.serializers.catalog import (
     build_row_from_project_agent,
     enrich_my_agents_row,
@@ -825,6 +826,28 @@ class TeamView(APIView):
         serializer = TeamRosterAgentSerializer(agents, many=True)
 
         data = {"manager": {"external_id": ""}, "agents": serializer.data}
+        return Response(data)
+
+
+class ProjectActiveAgentsConfigView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    @extend_schema(
+        operation_id="active_agents_config_list",
+        summary="List active integrated agents configuration",
+        description=(
+            "Returns active integrated agents for the project with name, description, "
+            "instructions, and tools derived from the latest agent version."
+        ),
+        responses={
+            200: OpenApiResponse(description="List of agent configuration objects"),
+        },
+    )
+    def get(self, request, project_uuid):
+        integrated_agents = (
+            GetInlineAgentsUsecase().get_active_agents(project_uuid).prefetch_related("agent__versions")
+        )
+        data = AgentConfigSerializer(integrated_agents, many=True).data
         return Response(data)
 
 
