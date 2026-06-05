@@ -227,7 +227,7 @@ class TestProjectsResolutionRateView(TestCase):
         self.assertEqual(row["project_name"], self.eligible_project.name)
         self.assertEqual(row["manager"], "Manager X")
         self.assertTrue(row["uses_components"])
-        self.assertEqual(row["agents_count"], 2)
+        self.assertEqual(row["custom_agents_count"], 1)
         self.assertEqual(row["official_agents_count"], 1)
         self.assertEqual(row["conversation_count"], 10)
         self.assertEqual(response.data["average_resolution_rate"], 0.8)
@@ -312,7 +312,7 @@ class TestProjectsResolutionRateView(TestCase):
         row = response.data["results"][0]
         self.assertIn("resolution_rate", row)
         self.assertIn("manager", row)
-        self.assertIn("agents_count", row)
+        self.assertIn("custom_agents_count", row)
         self.assertNotIn("conversation_count", row)
         self.assertNotIn("csat", row)
 
@@ -585,7 +585,7 @@ class TestProjectsResolutionRateServiceHelpers(TestCase):
         IntegratedAgent.objects.create(agent=official_agent, project=project, is_active=True)
 
         counts = _agent_counts([project])[project.uuid]
-        self.assertEqual(counts["agents_count"], 2)
+        self.assertEqual(counts["custom_agents_count"], 1)
         self.assertEqual(counts["official_agents_count"], 1)
 
     def test_build_result_rows_handles_null_resolution_rate(self):

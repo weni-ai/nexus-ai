@@ -37,7 +37,7 @@ CONVERSATION_METRIC_FIELDS = (
 )
 CSAT_FIELDS = ("csat", "csat_responses_count")
 NPS_FIELDS = ("nps", "nps_responses_count")
-AGENT_FIELDS = ("agents_count", "official_agents_count")
+AGENT_FIELDS = ("custom_agents_count", "official_agents_count")
 
 
 @dataclass(frozen=True)
@@ -168,20 +168,21 @@ def _agent_counts(projects: list[Project]) -> dict[UUID, dict[str, int]]:
         return {}
 
     project_uuids = [project.uuid for project in projects]
-    team_ids_by_project: dict[UUID, set[int]] = {project_uuid: set() for project_uuid in project_uuids}
+    custom_ids_by_project: dict[UUID, set[int]] = {project_uuid: set() for project_uuid in project_uuids}
     official_ids_by_project: dict[UUID, set[int]] = {project_uuid: set() for project_uuid in project_uuids}
 
     for project_uuid, agent_id, is_official in IntegratedAgent.objects.filter(
         project_id__in=project_uuids,
         is_active=True,
     ).values_list("project_id", "agent_id", "agent__is_official"):
-        team_ids_by_project[project_uuid].add(agent_id)
         if is_official:
             official_ids_by_project[project_uuid].add(agent_id)
+        else:
+            custom_ids_by_project[project_uuid].add(agent_id)
 
     return {
         project_uuid: {
-            "agents_count": len(team_ids_by_project[project_uuid]),
+            "custom_agents_count": len(custom_ids_by_project[project_uuid]),
             "official_agents_count": len(official_ids_by_project[project_uuid]),
         }
         for project_uuid in project_uuids
@@ -300,7 +301,7 @@ def build_result_rows(
 
     for project in projects:
         metrics = metrics_map.get(str(project.uuid), {})
-        agent_row = agent_map.get(project.uuid, {"agents_count": 0, "official_agents_count": 0})
+        agent_row = agent_map.get(project.uuid, {"custom_agents_count": 0, "official_agents_count": 0})
         conversation_count = int(metrics.get("conversation_count") or 0)
         resolved_count = int(metrics.get("resolved_count") or 0)
         unresolved_count = int(metrics.get("unresolved_count") or 0)
@@ -325,7 +326,7 @@ def build_result_rows(
                 "nps_responses_count": int(metrics.get("nps_responses_count") or 0),
                 "manager": _manager_name(project),
                 "uses_components": bool(project.use_components),
-                "agents_count": agent_row["agents_count"],
+                "custom_agents_count": agent_row["custom_agents_count"],
                 "official_agents_count": agent_row["official_agents_count"],
             }
         )
