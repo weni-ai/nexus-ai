@@ -15,7 +15,7 @@ class ProjectsResolutionRateItemSerializer(serializers.Serializer):
     nps_responses_count = serializers.IntegerField(required=False)
     manager = serializers.CharField(required=False)
     uses_components = serializers.BooleanField(required=False)
-    agents_count = serializers.IntegerField(required=False)
+    custom_agents_count = serializers.IntegerField(required=False)
     official_agents_count = serializers.IntegerField(required=False)
 
 
