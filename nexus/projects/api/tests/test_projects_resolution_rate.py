@@ -73,13 +73,18 @@ class TestProjectsResolutionRateView(TestCase):
         self.eligible_project.use_components = True
         self.eligible_project.save(update_fields=["manager_agent", "use_components"])
 
-        Agent.objects.create(
+        self.custom_agent = Agent.objects.create(
             name="Custom",
             slug="custom-agent",
             project=self.eligible_project,
             instruction="i",
             collaboration_instructions="c",
             is_official=False,
+        )
+        IntegratedAgent.objects.create(
+            agent=self.custom_agent,
+            project=self.eligible_project,
+            is_active=True,
         )
 
         self.catalog_project = Project.objects.create(
@@ -539,16 +544,35 @@ class TestProjectsResolutionRateServiceHelpers(TestCase):
         self.assertEqual(resolution_rate_from_counts(resolved_count=1, unresolved_count=1), 0.5)
         self.assertEqual(resolution_rate_from_counts(resolved_count=3, unresolved_count=0), 1.0)
 
-    def test_agent_counts_use_integrated_officials_and_project_custom_agents(self):
+    def test_agent_counts_use_only_active_team_integrated_agents(self):
         project = ProjectFactory(inline_agent_switch=True)
-        Agent.objects.create(
-            name="Custom",
-            slug="custom-on-project",
+        inactive_custom = Agent.objects.create(
+            name="Inactive Custom",
+            slug="inactive-custom",
             project=project,
             instruction="i",
             collaboration_instructions="c",
             is_official=False,
         )
+        Agent.objects.create(
+            name="Unassigned Custom",
+            slug="unassigned-custom",
+            project=project,
+            instruction="i",
+            collaboration_instructions="c",
+            is_official=False,
+        )
+        active_custom = Agent.objects.create(
+            name="Active Custom",
+            slug="active-custom",
+            project=project,
+            instruction="i",
+            collaboration_instructions="c",
+            is_official=False,
+        )
+        IntegratedAgent.objects.create(agent=inactive_custom, project=project, is_active=False)
+        IntegratedAgent.objects.create(agent=active_custom, project=project, is_active=True)
+
         catalog_project = ProjectFactory(inline_agent_switch=True, org=project.org, created_by=project.created_by)
         official_agent = Agent.objects.create(
             name="Official",
@@ -559,18 +583,6 @@ class TestProjectsResolutionRateServiceHelpers(TestCase):
             is_official=True,
         )
         IntegratedAgent.objects.create(agent=official_agent, project=project, is_active=True)
-        IntegratedAgent.objects.create(
-            agent=Agent.objects.create(
-                name="Inactive Official",
-                slug="inactive-official",
-                project=catalog_project,
-                instruction="i",
-                collaboration_instructions="c",
-                is_official=True,
-            ),
-            project=project,
-            is_active=False,
-        )
 
         counts = _agent_counts([project])[project.uuid]
         self.assertEqual(counts["agents_count"], 2)
