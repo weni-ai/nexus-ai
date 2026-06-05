@@ -816,7 +816,7 @@ class TeamView(APIView):
 
 
 class ProjectActiveAgentsConfigView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
     @extend_schema(
         operation_id="active_agents_config_list",
