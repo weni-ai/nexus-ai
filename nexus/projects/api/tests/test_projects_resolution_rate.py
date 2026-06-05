@@ -10,11 +10,12 @@ from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from nexus.inline_agents.backends.openai.models import ManagerAgent
-from nexus.inline_agents.models import Agent
+from nexus.inline_agents.models import Agent, IntegratedAgent
 from nexus.projects.api.resolution_rate_views import ProjectsResolutionRateView
 from nexus.projects.models import Project
 from nexus.projects.services.projects_resolution_rate import (
     CONVERSATIONS_METRICS_EARLIEST_DATE,
+    _agent_counts,
     apply_include_blocks,
     build_result_rows,
     parse_calendar_date,
@@ -73,20 +74,32 @@ class TestProjectsResolutionRateView(TestCase):
         self.eligible_project.save(update_fields=["manager_agent", "use_components"])
 
         Agent.objects.create(
-            name="Official",
-            slug="official-agent",
-            project=self.eligible_project,
-            instruction="i",
-            collaboration_instructions="c",
-            is_official=True,
-        )
-        Agent.objects.create(
             name="Custom",
             slug="custom-agent",
             project=self.eligible_project,
             instruction="i",
             collaboration_instructions="c",
             is_official=False,
+        )
+
+        self.catalog_project = Project.objects.create(
+            name="Official Catalog",
+            org=self.eligible_project.org,
+            created_by=self.eligible_project.created_by,
+            inline_agent_switch=True,
+        )
+        self.catalog_official_agent = Agent.objects.create(
+            name="Catalog Official",
+            slug="catalog-official-agent",
+            project=self.catalog_project,
+            instruction="i",
+            collaboration_instructions="c",
+            is_official=True,
+        )
+        IntegratedAgent.objects.create(
+            agent=self.catalog_official_agent,
+            project=self.eligible_project,
+            is_active=True,
         )
 
         self.internal_user = UserFactory()
@@ -525,6 +538,43 @@ class TestProjectsResolutionRateServiceHelpers(TestCase):
         self.assertIsNone(resolution_rate_from_counts(resolved_count=0, unresolved_count=0))
         self.assertEqual(resolution_rate_from_counts(resolved_count=1, unresolved_count=1), 0.5)
         self.assertEqual(resolution_rate_from_counts(resolved_count=3, unresolved_count=0), 1.0)
+
+    def test_agent_counts_use_integrated_officials_and_project_custom_agents(self):
+        project = ProjectFactory(inline_agent_switch=True)
+        Agent.objects.create(
+            name="Custom",
+            slug="custom-on-project",
+            project=project,
+            instruction="i",
+            collaboration_instructions="c",
+            is_official=False,
+        )
+        catalog_project = ProjectFactory(inline_agent_switch=True, org=project.org, created_by=project.created_by)
+        official_agent = Agent.objects.create(
+            name="Official",
+            slug="official-catalog",
+            project=catalog_project,
+            instruction="i",
+            collaboration_instructions="c",
+            is_official=True,
+        )
+        IntegratedAgent.objects.create(agent=official_agent, project=project, is_active=True)
+        IntegratedAgent.objects.create(
+            agent=Agent.objects.create(
+                name="Inactive Official",
+                slug="inactive-official",
+                project=catalog_project,
+                instruction="i",
+                collaboration_instructions="c",
+                is_official=True,
+            ),
+            project=project,
+            is_active=False,
+        )
+
+        counts = _agent_counts([project])[project.uuid]
+        self.assertEqual(counts["agents_count"], 2)
+        self.assertEqual(counts["official_agents_count"], 1)
 
     def test_build_result_rows_handles_null_resolution_rate(self):
         project = ProjectFactory(inline_agent_switch=True)

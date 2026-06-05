@@ -9,9 +9,8 @@ from typing import Any
 from uuid import UUID
 
 import pendulum
-from django.db.models import Count, Q
 
-from nexus.inline_agents.models import Agent
+from nexus.inline_agents.models import Agent, IntegratedAgent
 from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
@@ -159,22 +158,39 @@ def _manager_name(project: Project) -> str:
 
 
 def _agent_counts(projects: list[Project]) -> dict[UUID, dict[str, int]]:
+    """
+    Count agents per project using product ownership rules.
+
+    - Custom agents: ``Agent`` rows owned by the project (``is_official=False``).
+    - Official agents: active ``IntegratedAgent`` rows whose agent is official.
+    - ``agents_count`` is the union of both sets (no double counting).
+    """
     if not projects:
         return {}
-    rows = (
-        Agent.objects.filter(project__in=projects)
-        .values("project_id")
-        .annotate(
-            agents_count=Count("uuid"),
-            official_agents_count=Count("uuid", filter=Q(is_official=True)),
-        )
-    )
+
+    project_uuids = [project.uuid for project in projects]
+    custom_ids_by_project: dict[UUID, set[int]] = {project_uuid: set() for project_uuid in project_uuids}
+    official_ids_by_project: dict[UUID, set[int]] = {project_uuid: set() for project_uuid in project_uuids}
+
+    for project_uuid, agent_id in Agent.objects.filter(
+        project_id__in=project_uuids,
+        is_official=False,
+    ).values_list("project_id", "pk"):
+        custom_ids_by_project[project_uuid].add(agent_id)
+
+    for project_uuid, agent_id in IntegratedAgent.objects.filter(
+        project_id__in=project_uuids,
+        is_active=True,
+        agent__is_official=True,
+    ).values_list("project_id", "agent_id"):
+        official_ids_by_project[project_uuid].add(agent_id)
+
     return {
-        row["project_id"]: {
-            "agents_count": int(row["agents_count"] or 0),
-            "official_agents_count": int(row["official_agents_count"] or 0),
+        project_uuid: {
+            "agents_count": len(custom_ids_by_project[project_uuid] | official_ids_by_project[project_uuid]),
+            "official_agents_count": len(official_ids_by_project[project_uuid]),
         }
-        for row in rows
+        for project_uuid in project_uuids
     }
 
 
