@@ -1,5 +1,6 @@
 import logging
 
+from django.http import HttpResponse
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -61,6 +62,34 @@ class ProjectInstructionsViewSet(ModelViewSet):
         content_base = self._get_content_base(project_uuid)
         data = self.use_case.get_grouped_instructions(content_base)
         return Response(data=data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        operation_id="export_project_instructions",
+        summary="Export project instructions as CSV",
+        description="Returns a CSV file with all project instructions as a flat list for download.",
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.PATH,
+                description="Project UUID",
+                required=True,
+                type=OpenApiTypes.STR,
+            )
+        ],
+        responses={
+            200: OpenApiResponse(description="CSV file download"),
+            403: OpenApiResponse(description="Forbidden"),
+        },
+        tags=["Instructions"],
+    )
+    def export(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        content_base = self._get_content_base(project_uuid)
+        csv_content = self.use_case.build_instructions_csv(content_base)
+
+        response = HttpResponse(csv_content, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="instructions_{project_uuid}.csv"'
+        return response
 
     @extend_schema(
         operation_id="create_project_instruction",
