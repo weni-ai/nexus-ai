@@ -182,13 +182,24 @@ def _metrics_by_project_uuid(summary_payload: dict[str, Any]) -> dict[str, dict[
     return {str(row["project_uuid"]): row for row in summary_payload.get("projects", [])}
 
 
+def resolution_rate_from_counts(*, resolved_count: int, unresolved_count: int) -> float | None:
+    """Rate from evaluable conversations only (resolved + unresolved)."""
+    evaluable_count = resolved_count + unresolved_count
+    if evaluable_count < 1:
+        return None
+    return float(resolved_count / evaluable_count)
+
+
 def _period_averages_from_metric_rows(project_metrics: list[dict[str, Any]]) -> dict[str, Any]:
-    """Recompute period averages for a filtered project subset (FDD rules)."""
+    """Recompute period averages for a filtered project subset."""
     if not project_metrics:
         return empty_summary_averages()
 
-    rates = [float(row.get("resolution_rate") or 0.0) for row in project_metrics]
-    average_resolution_rate = round(float(sum(rates) / len(rates)), 4)
+    rates = [float(row["resolution_rate"]) for row in project_metrics if row.get("resolution_rate") is not None]
+    if rates:
+        average_resolution_rate = round(float(sum(rates) / len(rates)), 4)
+    else:
+        average_resolution_rate = None
 
     csat_den = sum(int(row.get("csat_responses_count") or 0) for row in project_metrics)
     csat_num = sum(
@@ -218,30 +229,24 @@ def resolve_projects_for_response(
 ) -> tuple[list[Project], dict[str, Any]]:
     """
     When project_uuids are omitted, keep only eligible AB2 projects with conversations in range.
-    Recompute period averages for that filtered set.
+    Period averages exclude projects without evaluable resolution data.
     """
-    if query.project_uuids is not None:
-        return eligible_projects, {
-            "average_resolution_rate": summary_payload.get("average_resolution_rate", 0.0),
-            "average_csat": summary_payload.get("average_csat"),
-            "average_nps": summary_payload.get("average_nps"),
-        }
-
     metrics_map = _metrics_by_project_uuid(summary_payload)
-    eligible_by_uuid = {str(project.uuid): project for project in eligible_projects}
-    active_metrics: list[dict[str, Any]] = []
-    active_projects: list[Project] = []
 
-    for project_uuid, project in eligible_by_uuid.items():
-        metrics = metrics_map.get(project_uuid)
-        if not metrics:
-            continue
-        if int(metrics.get("conversation_count") or 0) < 1:
-            continue
-        active_metrics.append(metrics)
-        active_projects.append(project)
+    if query.project_uuids is not None:
+        projects = eligible_projects
+    else:
+        projects = []
+        for project in eligible_projects:
+            metrics = metrics_map.get(str(project.uuid))
+            if not metrics:
+                continue
+            if int(metrics.get("conversation_count") or 0) < 1:
+                continue
+            projects.append(project)
 
-    return active_projects, _period_averages_from_metric_rows(active_metrics)
+    metric_rows = [metrics_map.get(str(project.uuid), {}) for project in projects]
+    return projects, _period_averages_from_metric_rows(metric_rows)
 
 
 def conversations_fetch_project_uuids(query: ResolutionRateQuery, eligible_projects: list[Project]) -> list[str] | None:
@@ -254,16 +259,19 @@ def conversations_fetch_project_uuids(query: ResolutionRateQuery, eligible_proje
 def _resolution_rate_from_metrics(
     metrics: dict[str, Any],
     *,
-    conversation_count: int,
     resolved_count: int,
-) -> float:
+    unresolved_count: int,
+) -> float | None:
     raw = metrics.get("resolution_rate")
-    if raw is None:
-        return float(resolved_count / conversation_count) if conversation_count > 0 else 0.0
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return float(resolved_count / conversation_count) if conversation_count > 0 else 0.0
+    if raw is not None:
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            pass
+    return resolution_rate_from_counts(
+        resolved_count=resolved_count,
+        unresolved_count=unresolved_count,
+    )
 
 
 def _response_dates(query: ResolutionRateQuery, summary_payload: dict[str, Any]) -> tuple[Any, Any]:
@@ -285,20 +293,21 @@ def build_result_rows(
         agent_row = agent_map.get(project.uuid, {"agents_count": 0, "official_agents_count": 0})
         conversation_count = int(metrics.get("conversation_count") or 0)
         resolved_count = int(metrics.get("resolved_count") or 0)
+        unresolved_count = int(metrics.get("unresolved_count") or 0)
         resolution_rate = _resolution_rate_from_metrics(
             metrics,
-            conversation_count=conversation_count,
             resolved_count=resolved_count,
+            unresolved_count=unresolved_count,
         )
 
         rows.append(
             {
                 "project_uuid": str(project.uuid),
                 "project_name": project.name,
-                "resolution_rate": round(resolution_rate, 4),
+                "resolution_rate": round(resolution_rate, 4) if resolution_rate is not None else None,
                 "conversation_count": conversation_count,
                 "resolved_count": resolved_count,
-                "unresolved_count": int(metrics.get("unresolved_count") or 0),
+                "unresolved_count": unresolved_count,
                 "human_support_count": int(metrics.get("human_support_count") or 0),
                 "csat": metrics.get("csat"),
                 "csat_responses_count": int(metrics.get("csat_responses_count") or 0),
@@ -317,7 +326,8 @@ def sort_result_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         rows,
         key=lambda row: (
-            -float(row["resolution_rate"]),
+            row.get("resolution_rate") is None,
+            -(float(row["resolution_rate"]) if row.get("resolution_rate") is not None else 0.0),
             -int(row.get("conversation_count") or 0),
             str(row.get("project_name") or "").lower(),
         ),
