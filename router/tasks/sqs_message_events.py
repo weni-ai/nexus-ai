@@ -6,18 +6,91 @@ channel_uuid, message with id, text, source, created_at, contact_name).
 All fields are required.
 """
 
+import ast
 import json
+import logging
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
+
+import pendulum
+import sentry_sdk
+
+from router.services.sqs_producer import get_conversation_events_producer
+
+logger = logging.getLogger(__name__)
 
 EVENT_TYPE_MESSAGE_RECEIVED = "message.received"
 EVENT_TYPE_MESSAGE_SENT = "message.sent"
 
 
-def sqs_response_text_from_agent_output(  # noqa: C901
-    response: str, *, skip_dispatch: bool
-) -> str:
+def parse_tool_result(raw: Any) -> Any:
+    """Parse tool result (str/dict/list) into a Python value."""
+    if isinstance(raw, (dict, list)):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            try:
+                return ast.literal_eval(raw)
+            except (ValueError, SyntaxError):
+                pass
+    return raw
+
+
+def _messages_sent_list_from_dict(parsed: dict) -> list:
+    """Extract messages_sent list from flat or Lambda-style payloads."""
+    messages_sent: list = []
+    top_msgs = parsed.get("messages_sent")
+    if isinstance(top_msgs, list):
+        messages_sent = top_msgs
+    inner = parsed.get("result")
+    if isinstance(inner, dict):
+        if not messages_sent:
+            inner_msgs = inner.get("messages_sent")
+            if isinstance(inner_msgs, list):
+                messages_sent = inner_msgs
+    return messages_sent
+
+
+def tool_result_has_final_output(parsed: dict) -> bool:
+    """True when is_final_output is set at top level or under result."""
+    is_final = bool(parsed.get("is_final_output"))
+    inner = parsed.get("result")
+    if isinstance(inner, dict) and not is_final:
+        is_final = bool(inner.get("is_final_output"))
+    return is_final
+
+
+def extract_messages_sent_texts(parsed: Any) -> list[str]:
+    """Return non-empty text values from messages_sent in a tool result dict."""
+    if not isinstance(parsed, dict):
+        return []
+    messages_sent = _messages_sent_list_from_dict(parsed)
+    text_lines: list[str] = []
+    for sent_item in messages_sent:
+        if isinstance(sent_item, dict):
+            line = str(sent_item.get("text", "")).strip()
+            if line:
+                text_lines.append(line)
+    return text_lines
+
+
+def _text_lines_from_merge_style_list(parsed: list) -> list[str]:
+    text_lines: list[str] = []
+    for channel_msg in parsed:
+        if not isinstance(channel_msg, dict):
+            continue
+        msg_payload = channel_msg.get("msg")
+        if isinstance(msg_payload, dict):
+            line = str(msg_payload.get("text", "")).strip()
+            if line:
+                text_lines.append(line)
+    return text_lines
+
+
+def sqs_response_text_from_agent_output(response: str, *, skip_dispatch: bool) -> str:
     """
     Text used in message.sent (via notify_async → observers) for SQS.
 
@@ -28,37 +101,60 @@ def sqs_response_text_from_agent_output(  # noqa: C901
     """
     if not skip_dispatch or not (response or "").strip():
         return response
-    try:
-        parsed = json.loads(response)
-    except (json.JSONDecodeError, TypeError):
-        return response
+    parsed = parse_tool_result(response)
     if isinstance(parsed, list):
-        text_lines: list[str] = []
-        for channel_msg in parsed:
-            if not isinstance(channel_msg, dict):
-                continue
-            msg_payload = channel_msg.get("msg")
-            if isinstance(msg_payload, dict):
-                line = str(msg_payload.get("text", "")).strip()
-                if line:
-                    text_lines.append(line)
+        text_lines = _text_lines_from_merge_style_list(parsed)
         if text_lines:
             return "\n".join(text_lines)
         return response
     if not isinstance(parsed, dict):
         return response
-    messages_sent = parsed.get("messages_sent")
-    if not isinstance(messages_sent, list):
-        return response
-    text_lines: list[str] = []
-    for sent_item in messages_sent:
-        if isinstance(sent_item, dict):
-            line = str(sent_item.get("text", "")).strip()
-            if line:
-                text_lines.append(line)
+    text_lines = extract_messages_sent_texts(parsed)
     if not text_lines:
         return response
     return "\n".join(text_lines)
+
+
+def send_tool_messages_sent_to_conversation_sqs(
+    *,
+    texts: list[str],
+    project_uuid: str,
+    contact_urn: str,
+    channel_uuid: str,
+    contact_name: str,
+    message_conversation_log_uuid: Optional[str] = None,
+    tool_name: str = "",
+) -> None:
+    """Send one message.sent SQS event per text from a tool messages_sent payload."""
+    if not texts:
+        return
+    created_at = pendulum.now().to_iso8601_string()
+    base_id = message_conversation_log_uuid or str(uuid.uuid4())
+    for index, text in enumerate(texts):
+        message_id = f"{base_id}:tool:{index}"
+        correlation_id = f"{base_id}:tool:{index}"
+        sent_event = build_message_sent_event(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            contact_name=contact_name,
+            message_text=text,
+            created_at=created_at,
+            message_id=message_id,
+            correlation_id=correlation_id,
+        )
+        try:
+            get_conversation_events_producer().send_event(sent_event.to_dict())
+        except Exception as exc:
+            logger.exception(
+                "Failed to send tool messages_sent event to SQS",
+                extra={
+                    "project_uuid": project_uuid,
+                    "tool_name": tool_name,
+                    "message_index": index,
+                },
+            )
+            sentry_sdk.capture_exception(exc)
 
 
 @dataclass(frozen=True)
