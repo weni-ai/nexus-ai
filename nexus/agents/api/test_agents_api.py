@@ -525,6 +525,33 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(row["mcps"][0]["name"], "Team Config MCP")
         self.assertEqual(row["mcps"][0]["config"], {"Country": "BRA"})
 
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=False)
+    def test_get_team_internal_communication_permission_grants_access(self, _mock_has_project_perm):
+        internal_user = UserFactory()
+        content_type = ContentType.objects.get_for_model(internal_user)
+        permission, _ = Permission.objects.get_or_create(
+            codename="can_communicate_internally",
+            name="can communicate internally",
+            content_type=content_type,
+        )
+        internal_user.user_permissions.add(permission)
+        internal_user = type(internal_user).objects.get(pk=internal_user.pk)
+
+        client = APIClient()
+        client.force_authenticate(user=internal_user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=False)
+    def test_get_team_unauthorized_user_returns_403(self, _mock_has_project_perm):
+        unauthorized_user = UserFactory()
+        client = APIClient()
+        client.force_authenticate(user=unauthorized_user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        self.assertEqual(response.status_code, 403)
+
 
 class ActivateAgentViewTestCase(TestCase):
     def setUp(self):
