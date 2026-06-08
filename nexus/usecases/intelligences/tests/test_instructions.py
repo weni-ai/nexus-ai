@@ -1,3 +1,6 @@
+import csv
+import io
+
 from django.test import TestCase
 
 from nexus.intelligences.models import ContentBaseInstruction, InstructionCategory
@@ -31,6 +34,37 @@ class TestProjectInstructionsUseCase(TestCase):
         self.assertEqual(len(payload["categories"]), 1)
         self.assertEqual(len(payload["uncategorized_instructions"]), 1)
         self.assertEqual(payload["uncategorized_instructions"][0]["instruction"], "Legacy instruction")
+
+    def test_build_instructions_csv_exports_flat_instruction_list(self):
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        InstructionCategory.objects.create(content_base=self.content_base, name="policy")
+        ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=greeting,
+            instruction="Always greet the customer",
+        )
+        ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            instruction="Legacy instruction",
+        )
+
+        csv_content = self.use_case.build_instructions_csv(self.content_base)
+        rows = list(csv.reader(io.StringIO(csv_content)))
+
+        self.assertEqual(rows[0], ["instruction"])
+        self.assertEqual(
+            rows[1:],
+            [
+                ["Always greet the customer"],
+                ["Legacy instruction"],
+            ],
+        )
+
+    def test_build_instructions_csv_returns_header_only_when_no_instructions(self):
+        csv_content = self.use_case.build_instructions_csv(self.content_base)
+        rows = list(csv.reader(io.StringIO(csv_content)))
+
+        self.assertEqual(rows, [["instruction"]])
 
     def test_create_instruction_uncategorized(self):
         self.use_case.create_instruction(
