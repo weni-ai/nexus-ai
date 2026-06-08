@@ -51,12 +51,12 @@ class TestProjectInstructionsUseCase(TestCase):
         csv_content = self.use_case.build_instructions_csv(self.content_base)
         rows = list(csv.reader(io.StringIO(csv_content)))
 
-        self.assertEqual(rows[0], ["instruction"])
+        self.assertEqual(rows[0], ["category", "instruction"])
         self.assertEqual(
             rows[1:],
             [
-                ["Always greet the customer"],
-                ["Legacy instruction"],
+                ["greeting", "Always greet the customer"],
+                ["", "Legacy instruction"],
             ],
         )
 
@@ -64,7 +64,7 @@ class TestProjectInstructionsUseCase(TestCase):
         csv_content = self.use_case.build_instructions_csv(self.content_base)
         rows = list(csv.reader(io.StringIO(csv_content)))
 
-        self.assertEqual(rows, [["instruction"]])
+        self.assertEqual(rows, [["category", "instruction"]])
 
     def test_create_instruction_uncategorized(self):
         self.use_case.create_instruction(

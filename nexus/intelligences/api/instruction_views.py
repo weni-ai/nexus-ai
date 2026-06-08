@@ -4,6 +4,7 @@ from django.http import HttpResponse
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
@@ -24,6 +25,15 @@ from nexus.usecases.intelligences.instructions import ProjectInstructionsUseCase
 logger = logging.getLogger(__name__)
 
 
+class InstructionsCSVRenderer(BaseRenderer):
+    media_type = "text/csv"
+    format = "csv"
+    charset = "utf-8"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data
+
+
 class ProjectInstructionsViewSet(ModelViewSet):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission, FeatureFlagPermission]
@@ -38,6 +48,11 @@ class ProjectInstructionsViewSet(ModelViewSet):
 
     def _get_content_base(self, project_uuid):
         return get_default_content_base_by_project(project_uuid)
+
+    def get_renderers(self):
+        if getattr(self, "action", None) == "export":
+            return [InstructionsCSVRenderer()]
+        return super().get_renderers()
 
     @extend_schema(
         operation_id="list_project_instructions",
@@ -66,7 +81,10 @@ class ProjectInstructionsViewSet(ModelViewSet):
     @extend_schema(
         operation_id="export_project_instructions",
         summary="Export project instructions as CSV",
-        description="Returns a CSV file with all project instructions as a flat list for download.",
+        description=(
+            "Returns a CSV file with all project instructions for download. "
+            "Each row contains category and instruction columns."
+        ),
         parameters=[
             OpenApiParameter(
                 name="project_uuid",
