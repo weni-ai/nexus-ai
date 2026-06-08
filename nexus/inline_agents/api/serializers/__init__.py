@@ -347,7 +347,7 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "slug", "name", "about", "group", "is_official", "mcps", "active"]
+        fields = ["uuid", "slug", "name", "about", "group", "is_official", "mcps", "active", "last_updated"]
 
     active = serializers.BooleanField(source="is_active", read_only=True)
     uuid = serializers.UUIDField(source="agent.uuid")
@@ -357,6 +357,7 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
     group = serializers.SerializerMethodField()
     is_official = serializers.SerializerMethodField()
     mcps = serializers.SerializerMethodField()
+    last_updated = serializers.SerializerMethodField()
 
     def get_slug(self, obj):
         return obj.agent.slug
@@ -377,6 +378,11 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
 
     def get_mcps(self, obj):
         return team_roster_mcps_payload(obj)
+
+    def get_last_updated(self, obj):
+        from nexus.inline_agents.api.serializers.catalog import format_agent_last_updated
+
+        return format_agent_last_updated(getattr(obj, "last_version_at", None))
 
 
 class AgentSerializer(serializers.ModelSerializer):
