@@ -59,22 +59,12 @@ CATALOG_ROW_KEYS: frozenset[str] = frozenset(
 # Backward-compatible alias for tests/imports.
 CATALOG_AGENT_ROW_KEYS = CATALOG_ROW_KEYS
 
-# Present only on ``GET agents/my-agents`` (CLI push history via ``Version.created_on``).
-MY_AGENTS_LAST_UPDATED_KEY = "last_updated"
-
 
 def format_agent_last_updated(value: datetime | None) -> str | None:
     """ISO-8601 timestamp for the latest CLI push version, or ``None`` when never pushed."""
     if value is None:
         return None
     return pendulum.instance(value).in_timezone("UTC").to_iso8601_string()
-
-
-def enrich_my_agents_row(row: dict[str, Any], agent: Agent) -> dict[str, Any]:
-    """Add ``last_updated`` from queryset annotation ``last_version_at`` (``Max(versions__created_on)``)."""
-    last_version_at = getattr(agent, "last_version_at", None)
-    row[MY_AGENTS_LAST_UPDATED_KEY] = format_agent_last_updated(last_version_at)
-    return row
 
 
 def project_agent_assignment_map(
