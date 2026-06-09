@@ -740,6 +740,22 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
 
         self.assertEqual(result, _TEST_ERROR_MESSAGES["en-us"])
 
+    def test_get_default_error_message_uses_project_override(self):
+        project = ProjectFactory(api_error_message="Custom project error message")
+
+        result = self.backend._get_default_error_message(str(project.uuid))
+
+        self.assertEqual(result, "Custom project error message")
+
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_falls_back_when_project_override_empty(self, mock_connect_cls):
+        project = ProjectFactory(api_error_message="")
+        mock_connect_cls.return_value.get_project_language.return_value = "pt-br"
+
+        result = self.backend._get_default_error_message(str(project.uuid))
+
+        self.assertEqual(result, _TEST_ERROR_MESSAGES["pt-br"])
+
     @patch("inline_agents.backends.openai.backend.sentry_sdk")
     @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
     @patch("inline_agents.backends.openai.backend.save_inline_message_async")

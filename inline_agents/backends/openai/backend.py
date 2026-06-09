@@ -45,6 +45,7 @@ from nexus.inline_agents.backends.openai.repository import (
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.internals.connect import ConnectRESTClient
+from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_async
@@ -81,6 +82,13 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_default_error_message(project_uuid: str) -> str:
         fallback_language = "en-us"
         messages = getattr(settings, "DEFAULT_ERROR_MESSAGES", {})
+        try:
+            project = Project.objects.only("api_error_message").get(uuid=project_uuid)
+            if project.api_error_message:
+                return project.api_error_message
+        except Project.DoesNotExist:
+            pass
+
         try:
             language = ConnectRESTClient().get_project_language(project_uuid)
         except Exception:

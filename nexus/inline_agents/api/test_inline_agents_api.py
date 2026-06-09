@@ -310,3 +310,87 @@ class ProjectComponentsViewTestCase(TestCase):
 
         # Verify notify_async was NOT called
         mock_notify_async.assert_not_called()
+
+
+class ProjectApiErrorMessageViewTestCase(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.url = reverse("project-api-error-message", kwargs={"project_uuid": str(self.project.uuid)})
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_get_returns_null_when_not_configured(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"error_message": None})
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_get_returns_configured_message(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+        self.project.api_error_message = "Unable to process your request right now."
+        self.project.save(update_fields=["api_error_message"])
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"error_message": "Unable to process your request right now."})
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_requires_error_message_field(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        response = self.client.patch(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "error_message is required"})
+
+    @mock.patch("nexus.inline_agents.api.views.notify_async")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_updates_error_message(self, mock_check_auth, mock_notify_async):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        response = self.client.patch(
+            self.url,
+            {"error_message": "  Custom API failure message  "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "message": "Error message updated successfully",
+                "error_message": "Custom API failure message",
+            },
+        )
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.api_error_message, "Custom API failure message")
+        mock_notify_async.assert_called_once()
+
+    @mock.patch("nexus.inline_agents.api.views.notify_async")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_clears_error_message_with_empty_string(self, mock_check_auth, mock_notify_async):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+        self.project.api_error_message = "Previous message"
+        self.project.save(update_fields=["api_error_message"])
+
+        response = self.client.patch(self.url, {"error_message": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["error_message"], None)
+        self.project.refresh_from_db()
+        self.assertIsNone(self.project.api_error_message)
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_rejects_message_over_max_length(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        response = self.client.patch(self.url, {"error_message": "x" * 501}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "error_message must be at most 500 characters"})

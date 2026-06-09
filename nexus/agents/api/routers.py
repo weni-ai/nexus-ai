@@ -11,6 +11,7 @@ from nexus.inline_agents.api.views import (
     MultiAgentView,
     OfficialAgentDetailV1,
     OfficialAgentsV1,
+    ProjectApiErrorMessageView,
     ProjectEngineSourceView,
     ProjectModelProvidersView,
 )
@@ -75,4 +76,9 @@ urlpatterns = [
     path("project/<project_uuid>/managers", AgentManagersView.as_view(), name="project-agent-managers"),
     path("project/<project_uuid>/model-providers", ProjectModelProvidersView.as_view(), name="project-model-providers"),
     path("project/<project_uuid>/engine-source", ProjectEngineSourceView.as_view(), name="project-engine-source"),
+    path(
+        "project/<project_uuid>/api-error-message",
+        ProjectApiErrorMessageView.as_view(),
+        name="project-api-error-message",
+    ),
 ]
