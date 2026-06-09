@@ -381,7 +381,7 @@ def paginate_rows(rows: list[dict[str, Any]], page: int, page_size: int) -> tupl
 
 def empty_summary_averages() -> dict[str, Any]:
     return {
-        "average_resolution_rate": None,
+        "average_resolution_rate": 0.0,
         "average_csat": None,
         "average_nps": None,
     }
