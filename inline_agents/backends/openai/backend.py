@@ -12,6 +12,7 @@ import pendulum
 import sentry_sdk
 from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
 from django.conf import settings
+from django.core.cache import cache
 from langfuse import get_client
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
@@ -43,7 +44,6 @@ from nexus.inline_agents.backends.openai.repository import (
     ManagerAgentRepository,
     OpenAISupervisorRepository,
 )
-from django.core.cache import cache
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project

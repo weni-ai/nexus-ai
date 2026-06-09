@@ -385,4 +385,3 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.assertEqual(response.json()["error_message"], None)
         self.project.refresh_from_db()
         self.assertIsNone(self.project.api_error_message)
-

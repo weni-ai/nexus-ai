@@ -14,7 +14,6 @@ from nexus.inline_agents.api.views import (
     ProjectEngineSourceView,
     ProjectModelProvidersView,
 )
-from nexus.projects.api.views import ProjectApiErrorMessageView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
 from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
 from nexus.inline_agents.api.views import ProjectCredentialsView as InlineProjectCredentialsView
@@ -26,6 +25,7 @@ from nexus.inline_agents.api.views import VtexAppOfficialAgentsView as VtexAppOf
 from nexus.inline_agents.api.views import VtexAppProjectCredentialsView as VtexAppInlineProjectCredentialsView
 from nexus.inline_agents.api.views import VTexAppTeamView as VtexAppInlineTeamView
 from nexus.inline_agents.api.views_official_extras import OfficialAvailableSystemsV1
+from nexus.projects.api.views import ProjectApiErrorMessageView
 from nexus.reports.views import ReportView
 
 urlpatterns = [

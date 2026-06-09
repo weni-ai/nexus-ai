@@ -274,9 +274,7 @@ class OpenAITeamAdapter(TeamAdapter):
         json_tools = cls._get_tools(supervisor["tools"])
         if not use_components:
             component_tool_names_to_strip = all_component_tool_names(formatter_tools_descriptions)
-            json_tools = [
-                t for t in json_tools if getattr(t, "name", None) not in component_tool_names_to_strip
-            ]
+            json_tools = [t for t in json_tools if getattr(t, "name", None) not in component_tool_names_to_strip]
 
         supervisor_tools: List[Any] = list(json_tools)
         supervisor_tools.extend(agents_as_tools)
@@ -289,12 +287,8 @@ class OpenAITeamAdapter(TeamAdapter):
             legacy_component_tool_name_set = all_component_tool_names(formatter_tools_descriptions)
             streaming_merge_tool_name_set = streaming_merge_tool_names(formatter_tools_descriptions)
             names_to_strip = legacy_component_tool_name_set | streaming_merge_tool_name_set
-            supervisor_tools = [
-                t for t in supervisor_tools if getattr(t, "name", None) not in names_to_strip
-            ]
-            supervisor_tools.extend(
-                get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions)
-            )
+            supervisor_tools = [t for t in supervisor_tools if getattr(t, "name", None) not in names_to_strip]
+            supervisor_tools.extend(get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions))
 
         supervisor_agent = SupervisorEntity(
             name="manager",

@@ -1534,5 +1534,3 @@ class ProjectEngineSourceView(APIView):
         )
 
         return Response(data={"engine_source": "OWN" if has_own else "STANDARD"})
-
-
