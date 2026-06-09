@@ -86,7 +86,7 @@ class OpenAIBackend(InlineAgentsBackend):
             project = Project.objects.only("api_error_message").get(uuid=project_uuid)
             if project.api_error_message:
                 return project.api_error_message
-        except Project.DoesNotExist:
+        except Exception:
             pass
 
         try:

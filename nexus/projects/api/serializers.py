@@ -38,4 +38,4 @@ class ConversationSerializer(serializers.Serializer):
     csat = serializers.CharField(required=False, allow_null=True)
     nps = serializers.IntegerField(required=False, allow_null=True)
     created_at = serializers.DateTimeField(required=False, allow_null=True)
-    topic = serializers.CharField(required=False, allow_null=True)
+    topic = serializers.CharField(required=False, allow_null=True, allow_blank=True)

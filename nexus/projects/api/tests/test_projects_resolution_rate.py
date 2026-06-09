@@ -515,7 +515,7 @@ class TestProjectsResolutionRateView(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 0)
         self.assertEqual(response.data["results"], [])
-        self.assertEqual(response.data["average_resolution_rate"], 0.0)
+        self.assertIsNone(response.data["average_resolution_rate"])
         self.assertIsNone(response.data["average_csat"])
         mock_summary.assert_not_called()
 
