@@ -26,6 +26,7 @@ from nexus.inline_agents.api.views import VtexAppOfficialAgentsView as VtexAppOf
 from nexus.inline_agents.api.views import VtexAppProjectCredentialsView as VtexAppInlineProjectCredentialsView
 from nexus.inline_agents.api.views import VTexAppTeamView as VtexAppInlineTeamView
 from nexus.inline_agents.api.views_official_extras import OfficialAvailableSystemsV1
+from nexus.projects.api.views import ProjectApiErrorMessageView
 from nexus.reports.views import ReportView
 
 urlpatterns = [
@@ -81,4 +82,9 @@ urlpatterns = [
     path("project/<project_uuid>/managers", AgentManagersView.as_view(), name="project-agent-managers"),
     path("project/<project_uuid>/model-providers", ProjectModelProvidersView.as_view(), name="project-model-providers"),
     path("project/<project_uuid>/engine-source", ProjectEngineSourceView.as_view(), name="project-engine-source"),
+    path(
+        "project/<project_uuid>/api-error-message",
+        ProjectApiErrorMessageView.as_view(),
+        name="project-api-error-message",
+    ),
 ]

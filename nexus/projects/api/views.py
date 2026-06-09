@@ -4,6 +4,7 @@ from uuid import UUID
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import HttpResponse
 from rest_framework import serializers, status, views
@@ -12,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from nexus.agents.api.views import InternalCommunicationPermission
+from nexus.events import notify_async
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.api.serializers import ConversationSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -756,3 +758,45 @@ class KnowledgeBaseChunksView(APIView):
             return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class ProjectApiErrorMessageView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            project = Project.objects.only("api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        return Response(data={"error_message": project.api_error_message})
+
+    def patch(self, request, project_uuid):
+        try:
+            project = Project.objects.only("uuid", "api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        if "error_message" not in request.data:
+            return Response(data={"error": "error_message is required"}, status=400)
+
+        error_message = request.data.get("error_message")
+        if error_message is not None and not isinstance(error_message, str):
+            return Response(data={"error": "error_message must be a string"}, status=400)
+
+        normalized_message = error_message.strip() if isinstance(error_message, str) else None
+        if normalized_message == "":
+            normalized_message = None
+
+        project.api_error_message = normalized_message
+        project.save(update_fields=["api_error_message"])
+
+        cache.delete(f"project:api_error_message:{project_uuid}")
+        notify_async(event="cache_invalidation:project", project=project)
+
+        return Response(
+            data={
+                "message": "Error message updated successfully",
+                "error_message": project.api_error_message,
+            }
+        )

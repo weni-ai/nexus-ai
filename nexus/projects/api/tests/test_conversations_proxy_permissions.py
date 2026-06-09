@@ -29,6 +29,7 @@ CONVERSATIONS_LIST_RESPONSE = {
             "status": "open",
             "contact_urn": "tel:+5511999999999",
             "channel_uuid": str(uuid4()),
+            "topic": "General",
         }
     ],
 }

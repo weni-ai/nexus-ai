@@ -840,9 +840,7 @@ class ProjectActiveAgentsConfigView(APIView):
         },
     )
     def get(self, request, project_uuid):
-        integrated_agents = (
-            GetInlineAgentsUsecase().get_active_agents(project_uuid).prefetch_related("agent__versions")
-        )
+        integrated_agents = GetInlineAgentsUsecase().get_active_agents(project_uuid).prefetch_related("agent__versions")
         data = AgentConfigSerializer(integrated_agents, many=True).data
         return Response(data)
 

@@ -329,8 +329,8 @@ class ProjectActiveAgentsConfigViewTestCase(TestCase):
         self.assertEqual(content, [])
 
     def test_get_returns_agent_config_with_tools(self):
-        from nexus.inline_agents.models import IntegratedAgent, Version
         from nexus.inline_agents.models import Agent as InlineAgent
+        from nexus.inline_agents.models import IntegratedAgent, Version
 
         agent = InlineAgent.objects.create(
             name="Agente de Troca e Devolução",
@@ -394,8 +394,8 @@ class ProjectActiveAgentsConfigViewTestCase(TestCase):
         self.assertEqual(param_names, {"order_id", "cpf"})
 
     def test_get_returns_empty_tools_when_agent_has_no_version(self):
-        from nexus.inline_agents.models import IntegratedAgent
         from nexus.inline_agents.models import Agent as InlineAgent
+        from nexus.inline_agents.models import IntegratedAgent
 
         agent = InlineAgent.objects.create(
             name="Agent Without Version",
@@ -416,8 +416,8 @@ class ProjectActiveAgentsConfigViewTestCase(TestCase):
         self.assertEqual(content[0]["tools"], [])
 
     def test_get_excludes_inactive_integrated_agents(self):
-        from nexus.inline_agents.models import IntegratedAgent, Version
         from nexus.inline_agents.models import Agent as InlineAgent
+        from nexus.inline_agents.models import IntegratedAgent, Version
 
         agent = InlineAgent.objects.create(
             name="Inactive Agent",
@@ -448,3 +448,78 @@ class ProjectActiveAgentsConfigViewTestCase(TestCase):
         response = client.get(self.url)
 
         self.assertEqual(response.status_code, 403)
+
+
+class ProjectApiErrorMessageViewTestCase(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.url = reverse("project-api-error-message", kwargs={"project_uuid": str(self.project.uuid)})
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_get_returns_null_when_not_configured(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"error_message": None})
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_get_returns_configured_message(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+        self.project.api_error_message = "Unable to process your request right now."
+        self.project.save(update_fields=["api_error_message"])
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"error_message": "Unable to process your request right now."})
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_requires_error_message_field(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        response = self.client.patch(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "error_message is required"})
+
+    @mock.patch("nexus.projects.api.views.notify_async")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_updates_error_message(self, mock_check_auth, mock_notify_async):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        response = self.client.patch(
+            self.url,
+            {"error_message": "  Custom API failure message  "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "message": "Error message updated successfully",
+                "error_message": "Custom API failure message",
+            },
+        )
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.api_error_message, "Custom API failure message")
+        mock_notify_async.assert_called_once()
+
+    @mock.patch("nexus.projects.api.views.notify_async")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_clears_error_message_with_empty_string(self, mock_check_auth, mock_notify_async):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+        self.project.api_error_message = "Previous message"
+        self.project.save(update_fields=["api_error_message"])
+
+        response = self.client.patch(self.url, {"error_message": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["error_message"], None)
+        self.project.refresh_from_db()
+        self.assertIsNone(self.project.api_error_message)
