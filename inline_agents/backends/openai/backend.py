@@ -43,6 +43,7 @@ from nexus.inline_agents.backends.openai.repository import (
     ManagerAgentRepository,
     OpenAISupervisorRepository,
 )
+from django.core.cache import cache
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project
@@ -52,6 +53,9 @@ from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
+
+_NOT_CACHED = object()
+_API_ERROR_MESSAGE_CACHE_TTL = 300  # 5 minutes
 
 
 def _is_final_out_debug(msg: str) -> None:
@@ -82,12 +86,22 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_default_error_message(project_uuid: str) -> str:
         fallback_language = "en-us"
         messages = getattr(settings, "DEFAULT_ERROR_MESSAGES", {})
-        try:
-            project = Project.objects.only("api_error_message").get(uuid=project_uuid)
-            if project.api_error_message:
-                return project.api_error_message
-        except Project.DoesNotExist:
-            pass
+
+        cache_key = f"project:api_error_message:{project_uuid}"
+        cached = cache.get(cache_key, _NOT_CACHED)
+        if cached is not _NOT_CACHED:
+            if cached:
+                return cached
+        else:
+            api_error_message = None
+            try:
+                project = Project.objects.only("api_error_message").get(uuid=project_uuid)
+                api_error_message = project.api_error_message or None
+            except Exception:
+                pass
+            cache.set(cache_key, api_error_message, _API_ERROR_MESSAGE_CACHE_TTL)
+            if api_error_message:
+                return api_error_message
 
         try:
             language = ConnectRESTClient().get_project_language(project_uuid)

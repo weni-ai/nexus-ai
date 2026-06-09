@@ -11,10 +11,10 @@ from nexus.inline_agents.api.views import (
     MultiAgentView,
     OfficialAgentDetailV1,
     OfficialAgentsV1,
-    ProjectApiErrorMessageView,
     ProjectEngineSourceView,
     ProjectModelProvidersView,
 )
+from nexus.projects.api.views import ProjectApiErrorMessageView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
 from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
 from nexus.inline_agents.api.views import ProjectCredentialsView as InlineProjectCredentialsView

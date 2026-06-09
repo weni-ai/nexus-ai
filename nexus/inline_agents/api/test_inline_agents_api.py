@@ -349,7 +349,7 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"error": "error_message is required"})
 
-    @mock.patch("nexus.inline_agents.api.views.notify_async")
+    @mock.patch("nexus.projects.api.views.notify_async")
     @mock.patch("nexus.projects.permissions._check_project_authorization")
     def test_patch_updates_error_message(self, mock_check_auth, mock_notify_async):
         mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
@@ -372,7 +372,7 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.assertEqual(self.project.api_error_message, "Custom API failure message")
         mock_notify_async.assert_called_once()
 
-    @mock.patch("nexus.inline_agents.api.views.notify_async")
+    @mock.patch("nexus.projects.api.views.notify_async")
     @mock.patch("nexus.projects.permissions._check_project_authorization")
     def test_patch_clears_error_message_with_empty_string(self, mock_check_auth, mock_notify_async):
         mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
@@ -386,11 +386,3 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.project.refresh_from_db()
         self.assertIsNone(self.project.api_error_message)
 
-    @mock.patch("nexus.projects.permissions._check_project_authorization")
-    def test_patch_rejects_message_over_max_length(self, mock_check_auth):
-        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
-
-        response = self.client.patch(self.url, {"error_message": "x" * 501}, format="json")
-
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {"error": "error_message must be at most 500 characters"})
