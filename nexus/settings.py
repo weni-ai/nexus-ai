@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "nexus.intelligences",
     "nexus.task_managers",
     "nexus.event_driven",
+    "weni.eda.django.eda_app",
     "nexus.actions",
     "corsheaders",
     "router",
@@ -294,7 +295,6 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 250 * 1024 * 1024
 USE_EDA = env.bool("USE_EDA", default=False)
 
 if USE_EDA:
-    EDA_CONNECTION_BACKEND = "nexus.event_driven.connection.pymqp_connection.PyAMQPConnectionBackend"
     EDA_CONSUMERS_HANDLE = "nexus.event_driven.handle.handle_consumers"
 
     EDA_BROKER_HOST = env("EDA_BROKER_HOST", default="localhost")
