@@ -71,7 +71,30 @@ class AgentViewsetSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content), 2)
         for row in content:
-            self.assertNotIn("last_updated", row)
+            self.assertIn("last_updated", row)
+            self.assertIsNone(row["last_updated"])
+
+    def test_get_my_agents_last_updated_from_latest_cli_version(self):
+        from nexus.inline_agents.api.serializers.catalog import format_agent_last_updated
+
+        older = timezone.now() - timedelta(days=2)
+        newer = timezone.now() - timedelta(hours=1)
+        v1 = Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        v2 = Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        Version.objects.filter(pk=v1.pk).update(created_on=older)
+        Version.objects.filter(pk=v2.pk).update(created_on=newer)
+        expected = format_agent_last_updated(
+            Version.objects.filter(agent=self.agent).aggregate(last=Max("created_on"))["last"]
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(r for r in content if r["uuid"] == str(self.agent.uuid))
+        self.assertEqual(row["last_updated"], expected)
 
     def test_get_my_agents_with_search(self):
         query_params = {"search": "information"}
@@ -1420,6 +1443,12 @@ class CatalogRowKeyParityTestCase(TestCase):
         self.assertNotIn("agents", row)
         self.assertNotIn("last_updated", row)
 
+    def _assert_my_agents_row_keys(self, row: dict) -> None:
+        from nexus.inline_agents.api.serializers.catalog import MY_AGENTS_LAST_UPDATED_KEY
+
+        self.assertEqual(frozenset(row.keys()), self.expected_keys | {MY_AGENTS_LAST_UPDATED_KEY})
+        self.assertNotIn("agents", row)
+
     def test_my_agents_uses_catalog_row_keys(self):
         client = APIClient()
         client.force_authenticate(user=self.user)
@@ -1428,7 +1457,7 @@ class CatalogRowKeyParityTestCase(TestCase):
         my_resp = client.get(reverse("my-agents", kwargs={"project_uuid": project_uuid}))
         my_resp.render()
         my_row = next(r for r in json.loads(my_resp.content) if r["uuid"] == str(self.agent.uuid))
-        self._assert_catalog_row_keys(my_row)
+        self._assert_my_agents_row_keys(my_row)
 
     def test_team_roster_includes_last_updated(self):
         client = APIClient()
@@ -1462,7 +1491,7 @@ class CatalogRowKeyParityTestCase(TestCase):
         group_row = next(r for r in _official_v1_grouped_rows(resp.json()) if r["group"] == self.group.slug)
         self._assert_catalog_row_keys(group_row)
         self.assertEqual(group_row["name"], "Parity Display")
-        self._assert_catalog_row_keys(my_row)
+        self._assert_my_agents_row_keys(my_row)
         self.assertNotIn("last_updated", group_row)
 
 
