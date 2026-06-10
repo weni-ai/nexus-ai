@@ -3,7 +3,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Max, Prefetch, Q
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -807,12 +807,16 @@ class TeamView(APIView):
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
-        agents = usecase.get_active_agents(project_uuid).prefetch_related(
-            "agent__group",
-            "agent__group__modal",
-            "agent__mcps",
-            "agent__mcps__system",
-            "agent__mcps__config_options",
+        agents = (
+            usecase.get_active_agents(project_uuid)
+            .annotate(last_version_at=Max("agent__versions__created_on"))
+            .prefetch_related(
+                "agent__group",
+                "agent__group__modal",
+                "agent__mcps",
+                "agent__mcps__system",
+                "agent__mcps__config_options",
+            )
         )
         serializer = TeamRosterAgentSerializer(agents, many=True)
 

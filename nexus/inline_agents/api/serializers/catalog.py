@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from itertools import groupby
 from typing import Any
 
+import pendulum
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 
@@ -56,6 +58,13 @@ CATALOG_ROW_KEYS: frozenset[str] = frozenset(
 
 # Backward-compatible alias for tests/imports.
 CATALOG_AGENT_ROW_KEYS = CATALOG_ROW_KEYS
+
+
+def format_agent_last_updated(value: datetime | None) -> str | None:
+    """ISO-8601 timestamp for the latest CLI push version, or ``None`` when never pushed."""
+    if value is None:
+        return None
+    return pendulum.instance(value).in_timezone("UTC").to_iso8601_string()
 
 
 def project_agent_assignment_map(
