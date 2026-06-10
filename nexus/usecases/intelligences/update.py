@@ -155,18 +155,39 @@ class UpdateContentBaseTextUseCase:
         contentbasetext: ContentBaseText,
         user_email: str,
         text: str = None,
+        title: str = None,
     ):
         user = users.get_by_email(user_email)
 
         old_contentbasetext_data = model_to_dict(contentbasetext)
-        old_contentbasetext_data["modified_at"] = str(old_contentbasetext_data["modified_at"])
+        for field in ("modified_at", "last_updated_at", "created_at"):
+            if old_contentbasetext_data.get(field) is not None:
+                old_contentbasetext_data[field] = str(old_contentbasetext_data[field])
+
+        update_fields = []
         if text is not None:
             contentbasetext.text = text
-            contentbasetext.modified_at = pendulum.now()
-            contentbasetext.modified_by = user
-            contentbasetext.save(update_fields=["text", "modified_at", "modified_by"])
+            update_fields.extend(["text"])
+        if title is not None:
+            contentbasetext.title = title
+            update_fields.append("title")
+
+        if not update_fields:
+            return contentbasetext, False
+
+        from django.utils import timezone as django_timezone
+
+        now = django_timezone.now()
+        contentbasetext.modified_at = now
+        contentbasetext.modified_by = user
+        contentbasetext.last_updated_at = now
+        update_fields.extend(["modified_at", "modified_by", "last_updated_at"])
+        contentbasetext.save(update_fields=update_fields)
+
         new_contentbase_data = model_to_dict(contentbasetext)
-        new_contentbase_data["modified_at"] = str(new_contentbase_data["modified_at"])
+        for field in ("modified_at", "last_updated_at", "created_at"):
+            if new_contentbase_data.get(field) is not None:
+                new_contentbase_data[field] = str(new_contentbase_data[field])
 
         self.event_manager_notify(
             event="contentbase_text_activity",
@@ -177,7 +198,8 @@ class UpdateContentBaseTextUseCase:
             action_type="U",
         )
 
-        return contentbasetext
+        text_changed = text is not None
+        return contentbasetext, text_changed
 
 
 class UpdateContentBaseFileUseCase:

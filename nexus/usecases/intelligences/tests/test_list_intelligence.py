@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.test import TestCase
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -15,6 +17,7 @@ from .intelligence_factory import (
     ContentBaseFactory,
     ContentBaseFileFactory,
     ContentBaseTextFactory,
+    IntegratedIntelligenceFactory,
     IntelligenceFactory,
     LLMFactory,
 )
@@ -56,6 +59,28 @@ class TestListContentBaseTextUseCase(TestCase):
             self.contentbasetext.content_base.uuid, user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(1, len(contentbasetext_list))
+
+
+class TestListInlineContentBaseTextUseCase(TestCase):
+    def setUp(self):
+        self.integrated = IntegratedIntelligenceFactory()
+        self.integrated.intelligence.is_router = True
+        self.integrated.intelligence.save(update_fields=["is_router"])
+        self.router = ContentBaseFactory(
+            intelligence=self.integrated.intelligence,
+            created_by=self.integrated.created_by,
+            is_router=True,
+        )
+
+    def test_inline_list_orders_by_last_updated_at(self):
+        older = ContentBaseTextFactory(content_base=self.router, created_by=self.integrated.created_by)
+        newer = ContentBaseTextFactory(content_base=self.router, created_by=self.integrated.created_by)
+        newer.last_updated_at = older.created_at + timedelta(hours=1)
+        newer.save(update_fields=["last_updated_at"])
+
+        use_case = ListContentBaseTextUseCase()
+        rows = list(use_case.get_inline_contentbasetext(str(self.integrated.project.uuid)))
+        self.assertEqual(rows[0].uuid, newer.uuid)
 
 
 class TestListAllIntelligenceContentUseCase(TestCase):
