@@ -10,6 +10,7 @@ from drf_spectacular.views import (
 from nexus.actions.api.routers import urlpatterns as actions_routes
 from nexus.agents.api.routers import urlpatterns as agent_routes
 from nexus.analytics.api.routers import urlpatterns as analytics_routes
+from nexus.feature_flags.routers import urlpatterns as feature_flags_routes
 from nexus.intelligences.api.routers import urlpatterns as intelligence_routes
 from nexus.logs.api.routers import urlpatterns as logs_routes
 from nexus.projects.api.routers import urlpatterns as projects_routes
@@ -18,6 +19,7 @@ from nexus.zeroshot.api.routers import urlpatterns as zeroshot_routes
 
 url_api = []
 
+url_api += feature_flags_routes
 url_api += intelligence_routes
 url_api += actions_routes
 url_api += projects_routes

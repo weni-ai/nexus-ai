@@ -15,6 +15,9 @@ env:
   DJANGO_SETTINGS_MODULE: "nexus.settings"
   DEFAULT_DATABASE: "postgres://nexus:nexus@postgres:5432/nexus"
   USE_SQLITE_FOR_TESTS: "false"
+  GROWTHBOOK_CLIENT_KEY: "test"
+  GROWTHBOOK_HOST_BASE_URL: "https://test.local"
+  GROWTHBOOK_WEBHOOK_SECRET: "webhook-secret"
 
 jobs:
   container-job:
