@@ -10,7 +10,6 @@ from django.test import TestCase
 
 from nexus.inline_agents.models import Agent, InlineAgentsConfiguration, Version
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence, Intelligence
-from nexus.logs.models import MessageLog
 from nexus.orgs.models import Org
 from nexus.projects.models import Channel, IntegratedFeature, Project
 from nexus.projects.services.project_transfer.exporter import ProjectExporter
@@ -20,7 +19,6 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     IntegratedIntelligenceFactory,
     LLMFactory,
 )
-from nexus.usecases.logs.tests.logs_factory import MessageLogFactory
 from nexus.usecases.projects.tests.project_factory import IntegratedFeatureFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -63,10 +61,6 @@ class ProjectTransferRoundtripTestCase(TestCase):
             channel_type="whatsapp",
             is_default_for_preview=True,
         )
-        MessageLogFactory(
-            project=self.project,
-            content_base=self.content_base,
-        )
 
         self.original_counts = {
             "orgs": Org.objects.filter(pk=self.org.pk).count(),
@@ -75,7 +69,6 @@ class ProjectTransferRoundtripTestCase(TestCase):
             "content_bases": ContentBase.objects.filter(intelligence__org=self.org).count(),
             "inline_agents": Agent.objects.filter(project=self.project).count(),
             "integrated_features": IntegratedFeature.objects.filter(project=self.project).count(),
-            "message_logs": MessageLog.objects.filter(project=self.project).count(),
         }
 
     def test_exporter_collects_project_graph(self):
@@ -87,7 +80,6 @@ class ProjectTransferRoundtripTestCase(TestCase):
         self.assertIn("projects.Project", bundle["records"])
         self.assertIn("intelligences.ContentBase", bundle["records"])
         self.assertIn("inline_agents.Agent", bundle["records"])
-        self.assertIn("logs.MessageLog", bundle["records"])
 
     def test_roundtrip_via_service(self):
         exporter = ProjectExporter(self.project)
@@ -117,7 +109,6 @@ class ProjectTransferRoundtripTestCase(TestCase):
             IntegratedFeature.objects.filter(project=imported_project).count(),
             self.original_counts["integrated_features"],
         )
-        self.assertEqual(MessageLog.objects.filter(project=imported_project).count(), 1)
 
     def test_management_commands_roundtrip(self):
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as temp_file:

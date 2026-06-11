@@ -38,7 +38,6 @@ from nexus.intelligences.models import (
     IntegratedIntelligence,
     Intelligence,
 )
-from nexus.logs.models import Message, MessageLog, RecentActivities
 from nexus.orgs.models import Org, OrgAuth
 from nexus.projects.models import (
     Channel,
@@ -47,11 +46,6 @@ from nexus.projects.models import (
     ProjectApiToken,
     ProjectAuth,
     TemplateType,
-)
-from nexus.task_managers.models import (
-    ContentBaseFileTaskManager,
-    ContentBaseLinkTaskManager,
-    ContentBaseTextTaskManager,
 )
 
 
@@ -110,10 +104,6 @@ def _export_inline_config(instance: models.Model) -> str:
 
 def _export_content_base_instruction(instance: models.Model) -> str:
     return f"{instance.content_base.uuid}:{hash(instance.instruction)}"
-
-
-def _export_message_log(instance: models.Model) -> str:
-    return str(instance.message.uuid)
 
 
 def _export_org_auth(instance: models.Model) -> str:
@@ -275,30 +265,6 @@ def _collect_agent_group_modals(project: Project) -> QuerySet:
     return AgentGroupModal.objects.filter(group_id__in=group_ids)
 
 
-def _collect_message_logs(project: Project) -> QuerySet:
-    return MessageLog.objects.filter(project=project).select_related("message")
-
-
-def _collect_messages(project: Project) -> QuerySet:
-    message_ids = MessageLog.objects.filter(project=project).values_list("message_id", flat=True)
-    return Message.objects.filter(pk__in=message_ids)
-
-
-def _collect_file_task_managers(project: Project) -> QuerySet:
-    file_ids = ContentBaseFile.objects.filter(content_base_id__in=_content_base_ids(project)).values_list("pk", flat=True)
-    return ContentBaseFileTaskManager.objects.filter(content_base_file_id__in=file_ids)
-
-
-def _collect_text_task_managers(project: Project) -> QuerySet:
-    text_ids = ContentBaseText.objects.filter(content_base_id__in=_content_base_ids(project)).values_list("pk", flat=True)
-    return ContentBaseTextTaskManager.objects.filter(content_base_text_id__in=text_ids)
-
-
-def _collect_link_task_managers(project: Project) -> QuerySet:
-    link_ids = ContentBaseLink.objects.filter(content_base_id__in=_content_base_ids(project)).values_list("pk", flat=True)
-    return ContentBaseLinkTaskManager.objects.filter(content_base_link_id__in=link_ids)
-
-
 TRANSFER_SPECS: list[TransferSpec] = [
     TransferSpec("projects.TemplateType", TemplateType, _collect_template_type, _export_template_type, 10, True),
     TransferSpec("inline_agents.Guardrail", Guardrail, _collect_guardrail, _export_guardrail, 11, True),
@@ -426,30 +392,6 @@ TRANSFER_SPECS: list[TransferSpec] = [
         lambda p: InlineAgentMessage.objects.filter(project=p),
         _export_uuid,
         770,
-    ),
-    TransferSpec("logs.Message", Message, _collect_messages, _export_uuid, 800),
-    TransferSpec("logs.MessageLog", MessageLog, _collect_message_logs, _export_message_log, 810),
-    TransferSpec("logs.RecentActivities", RecentActivities, lambda p: RecentActivities.objects.filter(project=p), _export_uuid, 820),
-    TransferSpec(
-        "task_managers.ContentBaseFileTaskManager",
-        ContentBaseFileTaskManager,
-        _collect_file_task_managers,
-        _export_uuid,
-        830,
-    ),
-    TransferSpec(
-        "task_managers.ContentBaseTextTaskManager",
-        ContentBaseTextTaskManager,
-        _collect_text_task_managers,
-        _export_uuid,
-        840,
-    ),
-    TransferSpec(
-        "task_managers.ContentBaseLinkTaskManager",
-        ContentBaseLinkTaskManager,
-        _collect_link_task_managers,
-        _export_uuid,
-        850,
     ),
 ]
 
