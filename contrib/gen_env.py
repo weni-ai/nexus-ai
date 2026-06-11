@@ -197,6 +197,10 @@ def generate_env():
         "INVOKE_AGENTS_RATE_LIMIT": "2500/m",
         "RATIONALE_IMPROVEMENT_INSTRUCTIONS": "",
         "SUBSEQUENT_RATIONALE_INSTRUCTIONS": "",
+        "PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION": (
+            "Before executing ANY tool or calling an agent, send the user a short feedback message "
+            "explaining what you're about to do, so they know the request is being processed."
+        ),
         "COMPLEXITY_LAYER_LAMBDA": "lambda-complexity-layer",
         "AWS_COMPONENTS_FUNCTION_ARN": "",
         "FORMATTER_AGENT_MODEL": "gpt-4.1-mini",
