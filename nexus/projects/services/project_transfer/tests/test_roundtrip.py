@@ -19,7 +19,6 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
     IntegratedIntelligenceFactory,
     LLMFactory,
-    TopicsFactory,
 )
 from nexus.usecases.logs.tests.logs_factory import MessageLogFactory
 from nexus.usecases.projects.tests.project_factory import IntegratedFeatureFactory, ProjectFactory
@@ -41,7 +40,6 @@ class ProjectTransferRoundtripTestCase(TestCase):
             created_by=self.project.created_by,
         )
         IntegratedFeatureFactory(project=self.project)
-        TopicsFactory(project=self.project)
 
         self.agent = Agent.objects.create(
             project=self.project,

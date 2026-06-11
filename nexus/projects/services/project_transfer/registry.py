@@ -34,14 +34,9 @@ from nexus.intelligences.models import (
     ContentBaseFile,
     ContentBaseInstruction,
     ContentBaseLink,
-    ContentBaseLogs,
     ContentBaseText,
-    Conversation,
     IntegratedIntelligence,
     Intelligence,
-    SubTopics,
-    Topics,
-    UserQuestion,
 )
 from nexus.logs.models import Message, MessageLog, RecentActivities
 from nexus.orgs.models import Org, OrgAuth
@@ -115,11 +110,6 @@ def _export_inline_config(instance: models.Model) -> str:
 
 def _export_content_base_instruction(instance: models.Model) -> str:
     return f"{instance.content_base.uuid}:{hash(instance.instruction)}"
-
-
-def _export_content_base_logs(instance: models.Model) -> str:
-    content_base_uuid = instance.content_base.uuid if instance.content_base else "none"
-    return f"{content_base_uuid}:{instance.created_at.isoformat()}:{hash(instance.question)}"
 
 
 def _export_message_log(instance: models.Model) -> str:
@@ -197,15 +187,6 @@ def _collect_content_base_agents(project: Project) -> QuerySet:
 
 def _collect_content_base_instructions(project: Project) -> QuerySet:
     return ContentBaseInstruction.objects.filter(content_base_id__in=_content_base_ids(project))
-
-
-def _collect_content_base_logs(project: Project) -> QuerySet:
-    return ContentBaseLogs.objects.filter(content_base_id__in=_content_base_ids(project))
-
-
-def _collect_user_questions(project: Project) -> QuerySet:
-    log_ids = ContentBaseLogs.objects.filter(content_base_id__in=_content_base_ids(project)).values_list("pk", flat=True)
-    return UserQuestion.objects.filter(content_base_log_id__in=log_ids)
 
 
 def _collect_flows(project: Project) -> QuerySet:
@@ -383,14 +364,6 @@ TRANSFER_SPECS: list[TransferSpec] = [
         _export_content_base_instruction,
         350,
     ),
-    TransferSpec(
-        "intelligences.ContentBaseLogs",
-        ContentBaseLogs,
-        _collect_content_base_logs,
-        _export_content_base_logs,
-        360,
-    ),
-    TransferSpec("intelligences.UserQuestion", UserQuestion, _collect_user_questions, _export_uuid, 370),
     TransferSpec("actions.Flow", Flow, _collect_flows, _export_uuid, 400),
     TransferSpec("inline_agents.Agent", Agent, _agent_qs, _export_uuid, 600, m2m_fields=["systems", "mcps"]),
     TransferSpec("inline_agents.Version", Version, lambda p: Version.objects.filter(agent__project=p), _export_version, 610),
@@ -447,9 +420,6 @@ TRANSFER_SPECS: list[TransferSpec] = [
         730,
         import_overrides={"enabled": False},
     ),
-    TransferSpec("intelligences.Topics", Topics, lambda p: Topics.objects.filter(project=p), _export_uuid, 740),
-    TransferSpec("intelligences.SubTopics", SubTopics, lambda p: SubTopics.objects.filter(topic__project=p), _export_uuid, 750),
-    TransferSpec("intelligences.Conversation", Conversation, lambda p: Conversation.objects.filter(project=p), _export_uuid, 760),
     TransferSpec(
         "inline_agents.InlineAgentMessage",
         InlineAgentMessage,
