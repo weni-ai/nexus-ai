@@ -19,7 +19,6 @@ from nexus.inline_agents.models import (
     AgentType,
     ContactField,
     Guardrail,
-    InlineAgentMessage,
     InlineAgentsConfiguration,
     IntegratedAgent,
     MCP,
@@ -385,13 +384,6 @@ TRANSFER_SPECS: list[TransferSpec] = [
         lambda i: f"{i.project.uuid}:{i.name}",
         730,
         import_overrides={"enabled": False},
-    ),
-    TransferSpec(
-        "inline_agents.InlineAgentMessage",
-        InlineAgentMessage,
-        lambda p: InlineAgentMessage.objects.filter(project=p),
-        _export_uuid,
-        770,
     ),
 ]
 
