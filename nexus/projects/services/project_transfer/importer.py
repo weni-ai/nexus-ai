@@ -201,6 +201,8 @@ class ProjectImporter:
         field_values = self._build_field_values(spec, record)
         if spec.label == "projects.Project" and self.target_project_uuid:
             field_values["uuid"] = UUID(self.target_project_uuid)
+        if spec.label == "inline_agents.Agent":
+            field_values["project"] = self._resolve_agent_project(record)
 
         instance = spec.model.objects.create(**field_values)
         self.id_map[map_key] = instance
@@ -299,6 +301,9 @@ class ProjectImporter:
                     values[field_name] = self.user
                     continue
 
+                if spec.label == "inline_agents.Agent" and field_name == "project":
+                    continue
+
                 related_spec = get_spec_by_label(field.related_model._meta.label)
                 if related_spec is None:
                     continue
@@ -327,6 +332,29 @@ class ProjectImporter:
             values[field_name] = override_value
 
         return values
+
+    def _resolve_agent_project(self, record: dict[str, Any]) -> Project:
+        project_ref = record.get("project_ref")
+        if project_ref:
+            mapped_project = self.id_map.get(("projects.Project", project_ref))
+            if mapped_project is not None:
+                return mapped_project
+
+        return self._resolve_import_target_project()
+
+    def _resolve_import_target_project(self) -> Project:
+        if self.target_project_uuid:
+            return Project.objects.get(uuid=self.target_project_uuid)
+
+        source_project_uuid = self.bundle.get("source_project_uuid")
+        for project_record in self.bundle.get("records", {}).get("projects.Project", []):
+            export_id = project_record["_export_id"]
+            if export_id == source_project_uuid or project_record.get("uuid") == source_project_uuid:
+                mapped_project = self.id_map.get(("projects.Project", export_id))
+                if mapped_project is not None:
+                    return mapped_project
+
+        raise ValueError("Imported project not found for agent project assignment")
 
     def _resolve_ref(self, label: str, export_id: str) -> models.Model:
         instance = self.id_map.get((label, export_id))
