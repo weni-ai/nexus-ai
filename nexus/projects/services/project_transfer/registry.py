@@ -65,8 +65,19 @@ def _content_base_ids(project: Project) -> QuerySet:
     return ContentBase.objects.filter(intelligence_id__in=intelligence_ids).values_list("pk", flat=True)
 
 
+def _collect_agent_ids(project: Project) -> set[int]:
+    agent_ids = set(Agent.objects.filter(project=project).values_list("pk", flat=True))
+    agent_ids.update(IntegratedAgent.objects.filter(project=project).values_list("agent_id", flat=True))
+    agent_ids.update(ContactField.objects.filter(project=project).values_list("agent_id", flat=True))
+    agent_ids.update(Agent.objects.filter(agentcredential__project=project).values_list("pk", flat=True))
+    return agent_ids
+
+
 def _agent_qs(project: Project) -> QuerySet:
-    return Agent.objects.filter(project=project)
+    agent_ids = _collect_agent_ids(project)
+    if not agent_ids:
+        return Agent.objects.none()
+    return Agent.objects.filter(pk__in=agent_ids)
 
 
 def _export_uuid(instance: models.Model) -> str:
@@ -331,7 +342,13 @@ TRANSFER_SPECS: list[TransferSpec] = [
     ),
     TransferSpec("actions.Flow", Flow, _collect_flows, _export_uuid, 400),
     TransferSpec("inline_agents.Agent", Agent, _agent_qs, _export_uuid, 600, m2m_fields=["systems", "mcps"]),
-    TransferSpec("inline_agents.Version", Version, lambda p: Version.objects.filter(agent__project=p), _export_version, 610),
+    TransferSpec(
+        "inline_agents.Version",
+        Version,
+        lambda p: Version.objects.filter(agent_id__in=_collect_agent_ids(p)),
+        _export_version,
+        610,
+    ),
     TransferSpec(
         "inline_agents.IntegratedAgent",
         IntegratedAgent,

@@ -207,3 +207,64 @@ class ProjectTransferRoundtripTestCase(TestCase):
         self.assertEqual(second_import.uuid, target_project_uuid)
         self.assertNotEqual(second_import.name, "Changed name")
         self.assertEqual(second_import.name, bundle["records"]["projects.Project"][0]["name"])
+
+    def test_export_includes_agents_integrated_from_other_project(self):
+        owner_project = ProjectFactory(created_by=self.import_user)
+        shared_agent = Agent.objects.create(
+            project=owner_project,
+            name="Official Agent",
+            slug="official-agent-shared",
+            instruction="Help",
+            collaboration_instructions="Collaborate",
+            is_official=True,
+        )
+        from nexus.inline_agents.models import IntegratedAgent
+
+        IntegratedAgent.objects.create(agent=shared_agent, project=self.project, is_active=True)
+
+        bundle = ProjectExporter(self.project).export()
+        exported_agent_uuids = {
+            record["uuid"] for record in bundle["records"].get("inline_agents.Agent", [])
+        }
+
+        self.assertIn(str(shared_agent.uuid), exported_agent_uuids)
+
+    def test_import_integrated_agent_from_other_project(self):
+        owner_project = ProjectFactory(created_by=self.import_user)
+        shared_agent = Agent.objects.create(
+            project=owner_project,
+            name="Official Agent",
+            slug="official-agent-import",
+            instruction="Help",
+            collaboration_instructions="Collaborate",
+            is_official=True,
+        )
+        Version.objects.create(
+            agent=shared_agent,
+            skills=[{"name": "search"}],
+            display_skills=[{"name": "search"}],
+        )
+        from nexus.inline_agents.models import IntegratedAgent
+
+        IntegratedAgent.objects.create(agent=shared_agent, project=self.project, is_active=True)
+
+        bundle = ProjectExporter(self.project).export()
+        target_org = OrgFactory(created_by=self.import_user)
+        target_project_uuid = uuid4()
+
+        imported_project = ProjectImporter(
+            bundle,
+            self.import_user.email,
+            target_org_uuid=str(target_org.uuid),
+            target_project_uuid=str(target_project_uuid),
+        ).import_project()
+
+        imported_agent = Agent.objects.get(uuid=shared_agent.uuid)
+        self.assertEqual(imported_agent.project_id, imported_project.pk)
+        self.assertTrue(
+            IntegratedAgent.objects.filter(
+                project=imported_project,
+                agent=imported_agent,
+                is_active=True,
+            ).exists()
+        )

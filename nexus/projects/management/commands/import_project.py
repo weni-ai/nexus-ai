@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.core.management.base import BaseCommand, CommandError
 
 from nexus.projects.services.project_transfer.importer import ProjectImporter
@@ -40,7 +42,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        input_path = options["input"]
+        input_path = Path(options["input"])
         user_email = options["user_email"]
         target_org_uuid = options["org_uuid"]
         target_project_uuid = options["project_uuid"]
@@ -48,8 +50,15 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         skip_if_exists = options["skip_if_exists"]
 
-        with open(input_path, encoding="utf-8") as input_file:
-            raw = input_file.read()
+        if not input_path.is_file():
+            raise CommandError(f"Input file not found: {input_path}")
+
+        raw = input_path.read_text(encoding="utf-8")
+        if not raw.strip():
+            raise CommandError(
+                f"Input file is empty: {input_path}. "
+                "Copy the export JSON into the pod or mount it as a volume before running import."
+            )
 
         try:
             importer = ProjectImporter.from_json(
@@ -63,7 +72,13 @@ class Command(BaseCommand):
             )
             project = importer.import_project()
         except ValueError as exc:
-            raise CommandError(str(exc)) from exc
+            message = str(exc)
+            if message.startswith("Expecting value"):
+                raise CommandError(
+                    f"Invalid or empty JSON in {input_path}: {message}. "
+                    "Verify the file was exported with export_project and transferred completely."
+                ) from exc
+            raise CommandError(message) from exc
 
         for warning in importer.warnings:
             self.stdout.write(self.style.WARNING(warning))
