@@ -62,6 +62,23 @@ class BedrockDirectIngestionMethodsTestCase(SimpleTestCase):
         )
         self.assertEqual(result, [{"status": "PENDING"}])
 
+    def test_direct_ingest_batch_calls_aws_with_multiple_documents(self):
+        bedrock = self._bedrock_with_mocks()
+        filenames = ["document-a.txt", "document-b.txt"]
+        bedrock.bedrock_agent.ingest_knowledge_base_documents.return_value = {
+            "documentDetails": [{"status": "PENDING"}, {"status": "PENDING"}]
+        }
+
+        result = bedrock.direct_ingest_batch(self.content_base_uuid, filenames)
+
+        call_kwargs = bedrock.bedrock_agent.ingest_knowledge_base_documents.call_args.kwargs
+        self.assertEqual(len(call_kwargs["documents"]), 2)
+        self.assertEqual(
+            call_kwargs["documents"][0]["content"]["s3"]["s3Location"]["uri"],
+            f"s3://test-bucket/{self.content_base_uuid}/{filenames[0]}",
+        )
+        self.assertEqual(result, [{"status": "PENDING"}, {"status": "PENDING"}])
+
     def test_direct_delete_calls_aws_with_expected_payload(self):
         bedrock = self._bedrock_with_mocks()
         bedrock.bedrock_agent.delete_knowledge_base_documents.return_value = {
@@ -341,3 +358,67 @@ class DirectIngestTaskTestCase(SimpleTestCase):
             "file",
         )
         mock_direct_ingest_delay.assert_not_called()
+
+
+class DirectIngestBatchSubmitTestCase(SimpleTestCase):
+    @patch("nexus.task_managers.tasks_bedrock.direct_ingest")
+    @patch("nexus.task_managers.tasks_bedrock.BedrockFileDatabase")
+    def test_direct_ingest_batch_submit_chunks_and_schedules_polls(self, mock_bedrock_cls, mock_direct_ingest):
+        from nexus.task_managers.tasks_bedrock import direct_ingest_batch_submit
+
+        mock_direct_ingest.delay = MagicMock()
+        file_database = MagicMock()
+        mock_bedrock_cls.return_value = file_database
+
+        filenames = [f"file-{index}.txt" for index in range(3)]
+        task_manager_uuids = [f"task-{index}" for index in range(3)]
+
+        direct_ingest_batch_submit(
+            task_manager_uuids,
+            "content-base-uuid",
+            filenames,
+            project_uuid="project-uuid",
+        )
+
+        file_database.direct_ingest_batch.assert_called_once_with("content-base-uuid", filenames)
+        self.assertEqual(mock_direct_ingest.delay.call_count, 3)
+        mock_direct_ingest.delay.assert_any_call(
+            "task-0",
+            file_type="file",
+            project_uuid="project-uuid",
+            ingest_submitted=True,
+            poll_count=0,
+        )
+
+
+@override_settings(
+    AWS_BEDROCK_DATASOURCE_ID="default-ds",
+    AWS_BEDROCK_LARGE_DATASOURCE_ID="large-ds",
+    AWS_BEDROCK_DIRECT_DATASOURCE_ID="direct-ds",
+    PROJECTS_WITH_LARGE_DATASOURCE=["large-project"],
+)
+class GetDatasourceIdTestCase(SimpleTestCase):
+    @patch("nexus.projects.models.Project.objects.get")
+    def test_returns_direct_datasource_for_direct_strategy(self, mock_project_get):
+        from nexus.utils import get_datasource_id
+
+        project = MagicMock()
+        project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_DIRECT
+        mock_project_get.return_value = project
+
+        self.assertEqual(get_datasource_id("project-uuid"), "direct-ds")
+
+    @patch("nexus.projects.models.Project.objects.get")
+    def test_returns_default_datasource_for_job_strategy(self, mock_project_get):
+        from nexus.utils import get_datasource_id
+
+        project = MagicMock()
+        project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_JOB
+        mock_project_get.return_value = project
+
+        self.assertEqual(get_datasource_id("project-uuid"), "default-ds")
+
+    def test_returns_large_datasource_for_configured_project(self):
+        from nexus.utils import get_datasource_id
+
+        self.assertEqual(get_datasource_id("large-project"), "large-ds")
