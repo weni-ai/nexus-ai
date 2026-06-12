@@ -218,6 +218,7 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale: bool,
         skip_conversation_sqs: bool = False,
         manager_pipeline_version: Optional[str] = None,
+        channel_type: str = "",
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -252,6 +253,9 @@ class OpenAITeamAdapter(TeamAdapter):
             include_streaming_merge_prompts=bool(use_components and not is_legacy_manager_pipeline),
             rationale_switch=rationale_switch,
             turn_off_rationale=turn_off_rationale,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -362,6 +366,7 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale: bool = False,
         use_components: bool = False,
         skip_conversation_sqs: bool = False,
+        channel_type: str = "",
         # Cached data parameters (optional, used to avoid database queries)
         content_base_uuid: str = None,
         business_rules: str = None,
@@ -416,6 +421,9 @@ class OpenAITeamAdapter(TeamAdapter):
             include_streaming_merge_prompts=False,
             rationale_switch=rationale_switch,
             turn_off_rationale=turn_off_rationale,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
         )
 
         for agent in agents:
@@ -1087,6 +1095,9 @@ class OpenAITeamAdapter(TeamAdapter):
         include_streaming_merge_prompts: bool = False,
         rationale_switch: bool = False,
         turn_off_rationale: bool = False,
+        channel_type: str = "",
+        preview: bool = False,
+        preview_websocket: bool = False,
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1145,18 +1156,62 @@ class OpenAITeamAdapter(TeamAdapter):
         rendered_content = template.render(context_object)
 
         from inline_agents.backends.openai.prompts_progressive_feedback import (
+            find_core_identity_marker,
             get_progressive_feedback_orchestration_instruction,
             inject_progressive_feedback_instruction,
+            log_progressive_feedback_orchestration_decision,
             should_inject_progressive_feedback_instruction,
         )
 
-        if should_inject_progressive_feedback_instruction(rationale_switch, turn_off_rationale):
+        if should_inject_progressive_feedback_instruction(
+            rationale_switch,
+            turn_off_rationale,
+            contact_urn=contact_id,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+        ):
             progressive_feedback_instruction = get_progressive_feedback_orchestration_instruction()
             if progressive_feedback_instruction:
+                insertion_point = find_core_identity_marker(rendered_content) or "prepend"
                 rendered_content = inject_progressive_feedback_instruction(
                     rendered_content,
                     progressive_feedback_instruction,
                 )
+                log_progressive_feedback_orchestration_decision(
+                    project_id=project_id,
+                    contact_urn=contact_id,
+                    channel_type=channel_type,
+                    preview=preview,
+                    preview_websocket=preview_websocket,
+                    rationale_switch=rationale_switch,
+                    turn_off_rationale=turn_off_rationale,
+                    injected=True,
+                    insertion_point=insertion_point,
+                    instruction_preview=progressive_feedback_instruction[:120],
+                )
+            else:
+                log_progressive_feedback_orchestration_decision(
+                    project_id=project_id,
+                    contact_urn=contact_id,
+                    channel_type=channel_type,
+                    preview=preview,
+                    preview_websocket=preview_websocket,
+                    rationale_switch=rationale_switch,
+                    turn_off_rationale=turn_off_rationale,
+                    injected=False,
+                )
+        else:
+            log_progressive_feedback_orchestration_decision(
+                project_id=project_id,
+                contact_urn=contact_id,
+                channel_type=channel_type,
+                preview=preview,
+                preview_websocket=preview_websocket,
+                rationale_switch=rationale_switch,
+                turn_off_rationale=turn_off_rationale,
+                injected=False,
+            )
 
         return rendered_content
 
