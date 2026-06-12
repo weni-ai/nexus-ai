@@ -11,6 +11,7 @@ class S3ObjectRef:
     source_model: str
     source_uuid: str
     is_metadata: bool = False
+    trace_type: str | None = None
 
 
 def bedrock_object_key(content_base_uuid: str, file_name: str) -> str:
