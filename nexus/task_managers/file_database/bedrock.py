@@ -610,26 +610,37 @@ class BedrockFileDatabase(FileDataBase):
     def _build_s3_uri(self, content_base_uuid: str, filename: str) -> str:
         return f"s3://{self.bucket_name}/{content_base_uuid}/{filename}"
 
-    def direct_ingest(self, content_base_uuid: str, filename: str) -> dict:
-        logger.info("[Bedrock] Direct ingesting document", extra={"document_filename": filename})
+    def _build_ingest_document(self, content_base_uuid: str, filename: str) -> dict:
         s3_uri = self._build_s3_uri(content_base_uuid, filename)
         metadata_uri = self._build_s3_uri(content_base_uuid, f"{filename}.metadata.json")
+        return {
+            "content": {
+                "dataSourceType": "S3",
+                "s3": {"s3Location": {"uri": s3_uri}},
+            },
+            "metadata": {
+                "type": "S3_LOCATION",
+                "s3Location": {"uri": metadata_uri},
+            },
+        }
 
+    def direct_ingest(self, content_base_uuid: str, filename: str) -> list:
+        logger.info("[Bedrock] Direct ingesting document", extra={"document_filename": filename})
+        return self.direct_ingest_batch(content_base_uuid, [filename])
+
+    def direct_ingest_batch(self, content_base_uuid: str, filenames: List[str]) -> list:
+        if not filenames:
+            return []
+
+        logger.info(
+            "[Bedrock] Direct ingesting documents",
+            extra={"document_count": len(filenames), "content_base_uuid": content_base_uuid},
+        )
+        documents = [self._build_ingest_document(content_base_uuid, filename) for filename in filenames]
         response = self.bedrock_agent.ingest_knowledge_base_documents(
             knowledgeBaseId=self.knowledge_base_id,
             dataSourceId=self.data_source_id,
-            documents=[
-                {
-                    "content": {
-                        "dataSourceType": "S3",
-                        "s3": {"s3Location": {"uri": s3_uri}},
-                    },
-                    "metadata": {
-                        "type": "S3_LOCATION",
-                        "s3Location": {"uri": metadata_uri},
-                    },
-                }
-            ],
+            documents=documents,
         )
         return response.get("documentDetails", [])
 
