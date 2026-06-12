@@ -49,6 +49,10 @@ from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.traces_observers.rationale.channel_hint import (
+    channel_hint_from_contact_urn,
+    supports_progressive_feedback,
+)
 from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
@@ -297,6 +301,21 @@ class OpenAIBackend(InlineAgentsBackend):
         manager_pipeline_version = kwargs.pop("manager_pipeline_version", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
         rationale_switch = rationale_switch_cached
+        progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
+            contact_urn,
+            channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+        )
+        if rationale_switch and not progressive_feedback_enabled:
+            logger.info(
+                "[ProgressiveFeedback] Disabled for non-webchat channel project_uuid=%s "
+                "channel_from_urn=%s contact_urn=%s channel_type=%s",
+                project_uuid,
+                channel_hint_from_contact_urn(contact_urn),
+                contact_urn,
+                channel_type or None,
+            )
         if manager_pipeline_version is not None:
             logger.debug(
                 "[OpenAIBackend] manager_pipeline_version=%s project_uuid=%s",
@@ -359,7 +378,7 @@ class OpenAIBackend(InlineAgentsBackend):
             agent_name="manager",
             preview=preview,
             preview_websocket=preview_websocket,
-            rationale_switch=rationale_switch,
+            rationale_switch=progressive_feedback_enabled,
             language=language,
             user_email=user_email,
             session_id=session_id,
@@ -382,7 +401,7 @@ class OpenAIBackend(InlineAgentsBackend):
             supervisor_name="manager",
             preview=preview,
             preview_websocket=preview_websocket,
-            rationale_switch=rationale_switch,
+            rationale_switch=progressive_feedback_enabled,
             language=language,
             user_email=user_email,
             session_id=session_id,
@@ -436,6 +455,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 turn_off_rationale=turn_off_rationale,
                 skip_conversation_sqs=skip_conversation_sqs,
                 manager_pipeline_version=manager_pipeline_version,
+                channel_type=channel_type,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -472,6 +492,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 auth_token=auth_token,
                 use_components=use_components_cached,
                 skip_conversation_sqs=skip_conversation_sqs,
+                channel_type=channel_type,
             )
 
         client = self._get_client()
