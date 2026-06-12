@@ -11,7 +11,7 @@ from django.test import TestCase
 from nexus.inline_agents.models import Agent, InlineAgentsConfiguration, Version
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence, Intelligence
 from nexus.orgs.models import Org, OrgAuth
-from nexus.projects.models import Channel, IntegratedFeature, Project
+from nexus.projects.models import Channel, IntegratedFeature, Project, ProjectAuth
 from nexus.projects.services.project_transfer.exporter import ProjectExporter
 from nexus.projects.services.project_transfer.importer import ProjectImporter
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -20,6 +20,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     IntegratedIntelligenceFactory,
     LLMFactory,
 )
+from nexus.projects.models import ProjectAuthorizationRole
 from nexus.usecases.projects.tests.project_factory import IntegratedFeatureFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -268,3 +269,48 @@ class ProjectTransferRoundtripTestCase(TestCase):
                 is_active=True,
             ).exists()
         )
+
+    def test_import_creates_project_auth_only_for_import_user(self):
+        ProjectAuth.objects.create(
+            project=self.project,
+            user=UserFactory(email="moderator@example.com"),
+            role=ProjectAuthorizationRole.MODERATOR.value,
+        )
+        ProjectAuth.objects.create(
+            project=self.project,
+            user=UserFactory(email="contributor@example.com"),
+            role=ProjectAuthorizationRole.CONTRIBUTOR.value,
+        )
+
+        bundle = ProjectExporter(self.project).export()
+        target_org = OrgFactory(created_by=self.import_user)
+        target_project_uuid = uuid4()
+
+        imported_project = ProjectImporter(
+            bundle,
+            self.import_user.email,
+            target_org_uuid=str(target_org.uuid),
+            target_project_uuid=str(target_project_uuid),
+        ).import_project()
+
+        project_auths = ProjectAuth.objects.filter(project=imported_project)
+        self.assertEqual(project_auths.count(), 1)
+        auth = project_auths.get()
+        self.assertEqual(auth.user_id, self.import_user.pk)
+        self.assertEqual(auth.role, ProjectAuthorizationRole.MODERATOR.value)
+
+    def test_import_deduplicates_org_auth_for_remapped_user(self):
+        ProjectAuth.objects.all().delete()
+        from nexus.orgs.models import OrgAuth, Role
+
+        OrgAuth.objects.create(org=self.org, user=UserFactory(email="admin@example.com"), role=Role.ADMIN.value)
+        OrgAuth.objects.create(org=self.org, user=UserFactory(email="viewer@example.com"), role=Role.VIEWER.value)
+
+        bundle = ProjectExporter(self.project).export()
+        org_uuid = self.org.uuid
+        Org.objects.filter(pk=self.org.pk).delete()
+
+        ProjectImporter(bundle, self.import_user.email).import_project()
+
+        imported_org = Org.objects.get(uuid=org_uuid)
+        self.assertEqual(OrgAuth.objects.filter(org=imported_org, user=self.import_user).count(), 1)

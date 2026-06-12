@@ -7,7 +7,8 @@ from uuid import UUID
 from django.db import models, transaction
 
 from nexus.orgs.models import Org, OrgAuth
-from nexus.projects.models import Project
+from nexus.projects.models import Project, ProjectAuth, ProjectAuthorizationRole
+from nexus.projects.services.project_transfer.constants import IMPORT_UNIQUE_LOOKUPS
 from nexus.projects.services.project_transfer.project_cleanup import cleanup_before_import
 from nexus.projects.services.project_transfer.registry import (
     TRANSFER_SPECS,
@@ -89,7 +90,9 @@ class ProjectImporter:
 
         self._import_m2m()
         self._log_warnings()
-        return self._get_imported_project()
+        project = self._get_imported_project()
+        self._ensure_import_user_project_auth(project)
+        return project
 
     def _validate_target_overrides(self) -> None:
         if self.target_org_uuid:
@@ -158,6 +161,9 @@ class ProjectImporter:
         if spec.label == "orgs.Org" and ("orgs.Org", record["_export_id"]) in self.id_map:
             return True
 
+        if spec.label == "projects.ProjectAuth":
+            return True
+
         if spec.label == "orgs.OrgAuth":
             org = self.id_map.get(("orgs.Org", record.get("org_ref")))
             if org and OrgAuth.objects.filter(org=org, user=self.user).exists():
@@ -204,7 +210,17 @@ class ProjectImporter:
         if spec.label == "inline_agents.Agent":
             field_values["project"] = self._resolve_agent_project(record)
 
-        instance = spec.model.objects.create(**field_values)
+        unique_lookup = IMPORT_UNIQUE_LOOKUPS.get(spec.label)
+        if unique_lookup:
+            lookup = {field_name: field_values[field_name] for field_name in unique_lookup}
+            defaults = {
+                key: value
+                for key, value in field_values.items()
+                if key not in lookup
+            }
+            instance, _created = spec.model.objects.update_or_create(**lookup, defaults=defaults)
+        else:
+            instance = spec.model.objects.create(**field_values)
         self.id_map[map_key] = instance
 
     def _find_existing_instance(self, spec: TransferSpec, record: dict[str, Any]) -> models.Model | None:
@@ -257,6 +273,8 @@ class ProjectImporter:
             group = self._resolve_ref("inline_agents.AgentGroup", record["group_ref"])
             return {"group": group}
         if spec.label in {"inline_agents.ManagerAgent", "inline_agents.ModelProvider", "actions.TemplateAction"}:
+            if spec.label == "inline_agents.ModelProvider":
+                return {"model_vendor": record["model_vendor"]}
             return {"uuid": UUID(str(record["uuid"]))}
         if spec.label == "projects.TemplateType":
             if record.get("uuid"):
@@ -412,7 +430,22 @@ class ProjectImporter:
 
         raise ValueError("Imported project not found in id map")
 
+    def _ensure_import_user_project_auth(self, project: Project) -> None:
+        ProjectAuth.objects.update_or_create(
+            user=self.user,
+            project=project,
+            defaults={
+                "role": ProjectAuthorizationRole.MODERATOR.value,
+                "is_active": True,
+            },
+        )
+
     def _log_warnings(self) -> None:
+        if self.bundle.get("records", {}).get("projects.ProjectAuth"):
+            self.warnings.append(
+                "ProjectAuth records from the export were skipped. "
+                f"Moderator access was granted to '{self.user.email}'."
+            )
         if self.bundle.get("records", {}).get("projects.ProjectApiToken"):
             self.warnings.append(
                 "ProjectApiToken records were imported with enabled=False because raw tokens cannot be recovered."
