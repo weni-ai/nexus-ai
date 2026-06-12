@@ -5,7 +5,7 @@ from typing import Any
 from django.db import models
 
 from nexus.intelligences.models import IntegratedIntelligence, Intelligence
-from nexus.projects.models import Project
+from nexus.projects.models import Project, ProjectAuth
 from nexus.projects.services.project_transfer.registry import TRANSFER_SPECS
 
 
@@ -47,13 +47,20 @@ def cleanup_exported_records(bundle: dict[str, Any]) -> None:
 
 def cleanup_before_import(bundle: dict[str, Any], project_uuid: str) -> bool:
     cleaned = False
+    project_uuids = {str(project_uuid)}
 
-    try:
-        project = Project.objects.get(uuid=project_uuid)
-        cleanup_project_tree(project)
-        cleaned = True
-    except Project.DoesNotExist:
-        pass
+    source_project_uuid = bundle.get("source_project_uuid")
+    if source_project_uuid:
+        project_uuids.add(str(source_project_uuid))
+
+    for uuid_value in project_uuids:
+        try:
+            project = Project.objects.get(uuid=uuid_value)
+            ProjectAuth.objects.filter(project=project).delete()
+            cleanup_project_tree(project)
+            cleaned = True
+        except Project.DoesNotExist:
+            pass
 
     cleanup_exported_records(bundle)
     return cleaned
