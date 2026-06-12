@@ -6,8 +6,9 @@ from uuid import UUID
 
 from django.db import models, transaction
 
-from nexus.orgs.models import Org
+from nexus.orgs.models import Org, OrgAuth
 from nexus.projects.models import Project
+from nexus.projects.services.project_transfer.project_cleanup import cleanup_before_import
 from nexus.projects.services.project_transfer.registry import (
     TRANSFER_SPECS,
     TransferSpec,
@@ -25,11 +26,17 @@ class ProjectImporter:
         bundle: dict[str, Any],
         user_email: str,
         *,
+        target_org_uuid: str | None = None,
+        target_project_uuid: str | None = None,
+        overwrite: bool = True,
         dry_run: bool = False,
         skip_if_exists: bool = False,
     ):
         self.bundle = bundle
         self.user = resolve_user(user_email)
+        self.target_org_uuid = str(target_org_uuid) if target_org_uuid else None
+        self.target_project_uuid = str(target_project_uuid) if target_project_uuid else None
+        self.overwrite = overwrite
         self.dry_run = dry_run
         self.skip_if_exists = skip_if_exists
         self.id_map: dict[tuple[str, str], models.Model] = {}
@@ -41,12 +48,18 @@ class ProjectImporter:
         raw: str,
         user_email: str,
         *,
+        target_org_uuid: str | None = None,
+        target_project_uuid: str | None = None,
+        overwrite: bool = True,
         dry_run: bool = False,
         skip_if_exists: bool = False,
     ) -> "ProjectImporter":
         return cls(
             load_export_bundle(raw),
             user_email,
+            target_org_uuid=target_org_uuid,
+            target_project_uuid=target_project_uuid,
+            overwrite=overwrite,
             dry_run=dry_run,
             skip_if_exists=skip_if_exists,
         )
@@ -59,7 +72,12 @@ class ProjectImporter:
             return project
 
     def _run_import(self) -> Project:
-        self._check_existing_records()
+        self._validate_target_overrides()
+        if self.overwrite:
+            self._cleanup_existing_data()
+        else:
+            self._check_existing_records()
+        self._prepare_org_overrides()
         sorted_specs = sorted(TRANSFER_SPECS, key=lambda spec: spec.import_order)
 
         for spec in sorted_specs:
@@ -73,24 +91,97 @@ class ProjectImporter:
         self._log_warnings()
         return self._get_imported_project()
 
+    def _validate_target_overrides(self) -> None:
+        if self.target_org_uuid:
+            try:
+                Org.objects.get(uuid=self.target_org_uuid)
+            except Org.DoesNotExist as exc:
+                raise ValueError(f"Target org with uuid '{self.target_org_uuid}' does not exist") from exc
+
+        if (
+            not self.overwrite
+            and self.target_project_uuid
+            and Project.objects.filter(uuid=self.target_project_uuid).exists()
+        ):
+            raise ValueError(f"Target project with uuid '{self.target_project_uuid}' already exists")
+
+    def _effective_project_uuid(self) -> str | None:
+        return self.target_project_uuid or self.bundle.get("source_project_uuid")
+
+    def _cleanup_existing_data(self) -> None:
+        project_uuid = self._effective_project_uuid()
+        if not project_uuid:
+            return
+
+        cleaned_project = cleanup_before_import(self.bundle, project_uuid)
+        if cleaned_project:
+            self.warnings.append(
+                f"Existing data for project '{project_uuid}' was removed before import."
+            )
+        else:
+            self.warnings.append(
+                "Existing exported records with matching UUIDs were removed before import."
+            )
+
+    def _prepare_org_overrides(self) -> None:
+        if self.target_org_uuid:
+            target_org = Org.objects.get(uuid=self.target_org_uuid)
+            for record in self.bundle.get("records", {}).get("orgs.Org", []):
+                self.id_map[("orgs.Org", record["_export_id"])] = target_org
+
+            self.warnings.append(
+                f"Using existing org '{target_org.name}' ({target_org.uuid}). "
+                "Org and OrgAuth records from the export were skipped."
+            )
+            return
+
+        if not self.overwrite:
+            return
+
+        for record in self.bundle.get("records", {}).get("orgs.Org", []):
+            org_uuid = record.get("uuid")
+            if not org_uuid:
+                continue
+            try:
+                org = Org.objects.get(uuid=org_uuid)
+            except Org.DoesNotExist:
+                continue
+            self.id_map[("orgs.Org", record["_export_id"])] = org
+            self.warnings.append(
+                f"Reusing existing org '{org.name}' ({org.uuid}) during overwrite import."
+            )
+
+    def _should_skip_record(self, spec: TransferSpec, record: dict[str, Any]) -> bool:
+        if self.target_org_uuid and spec.label in {"orgs.Org", "orgs.OrgAuth"}:
+            return True
+
+        if spec.label == "orgs.Org" and ("orgs.Org", record["_export_id"]) in self.id_map:
+            return True
+
+        if spec.label == "orgs.OrgAuth":
+            org = self.id_map.get(("orgs.Org", record.get("org_ref")))
+            if org and OrgAuth.objects.filter(org=org, user=self.user).exists():
+                return True
+
+        return False
+
     def _check_existing_records(self) -> None:
         if not self.skip_if_exists:
             return
+            org_records = self.bundle.get("records", {}).get("orgs.Org", [])
+            for record in org_records:
+                org_uuid = record.get("uuid") or record.get("_export_id")
+                if org_uuid and Org.objects.filter(uuid=org_uuid).exists():
+                    raise ValueError(f"Org with uuid '{org_uuid}' already exists")
 
-        org_records = self.bundle.get("records", {}).get("orgs.Org", [])
-        project_records = self.bundle.get("records", {}).get("projects.Project", [])
-
-        for record in org_records:
-            org_uuid = record.get("uuid") or record.get("_export_id")
-            if org_uuid and Org.objects.filter(uuid=org_uuid).exists():
-                raise ValueError(f"Org with uuid '{org_uuid}' already exists")
-
-        for record in project_records:
-            project_uuid = record.get("uuid") or record.get("_export_id")
-            if project_uuid and Project.objects.filter(uuid=project_uuid).exists():
-                raise ValueError(f"Project with uuid '{project_uuid}' already exists")
+        project_uuid = self.target_project_uuid or self.bundle.get("source_project_uuid")
+        if project_uuid and Project.objects.filter(uuid=project_uuid).exists():
+            raise ValueError(f"Project with uuid '{project_uuid}' already exists")
 
     def _import_record(self, spec: TransferSpec, record: dict[str, Any]) -> None:
+        if self._should_skip_record(spec, record):
+            return
+
         export_id = record["_export_id"]
         map_key = (spec.label, export_id)
 
@@ -108,10 +199,16 @@ class ProjectImporter:
             return
 
         field_values = self._build_field_values(spec, record)
+        if spec.label == "projects.Project" and self.target_project_uuid:
+            field_values["uuid"] = UUID(self.target_project_uuid)
+
         instance = spec.model.objects.create(**field_values)
         self.id_map[map_key] = instance
 
     def _find_existing_instance(self, spec: TransferSpec, record: dict[str, Any]) -> models.Model | None:
+        if self.overwrite:
+            return None
+
         if record.get("uuid"):
             uuid_field_names = {field.name for field in spec.model._meta.fields if isinstance(field, models.UUIDField)}
             if "uuid" in uuid_field_names:
@@ -274,6 +371,9 @@ class ProjectImporter:
         return get_spec_by_label(field.related_model._meta.label)
 
     def _get_imported_project(self) -> Project:
+        if self.target_project_uuid:
+            return Project.objects.get(uuid=self.target_project_uuid)
+
         project_uuid = self.bundle.get("source_project_uuid")
         if project_uuid:
             return Project.objects.get(uuid=project_uuid)

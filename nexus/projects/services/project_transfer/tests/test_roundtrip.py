@@ -10,10 +10,11 @@ from django.test import TestCase
 
 from nexus.inline_agents.models import Agent, InlineAgentsConfiguration, Version
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence, Intelligence
-from nexus.orgs.models import Org
+from nexus.orgs.models import Org, OrgAuth
 from nexus.projects.models import Channel, IntegratedFeature, Project
 from nexus.projects.services.project_transfer.exporter import ProjectExporter
 from nexus.projects.services.project_transfer.importer import ProjectImporter
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
     IntegratedIntelligenceFactory,
@@ -110,6 +111,29 @@ class ProjectTransferRoundtripTestCase(TestCase):
             self.original_counts["integrated_features"],
         )
 
+    def test_import_with_target_org_and_project_uuid(self):
+        exporter = ProjectExporter(self.project)
+        bundle = exporter.export()
+
+        target_org = OrgFactory(created_by=self.import_user)
+        target_project_uuid = uuid4()
+        source_org_uuid = self.org.uuid
+
+        Project.objects.filter(pk=self.project.pk).delete()
+        Org.objects.filter(pk=self.org.pk).delete()
+
+        imported_project = ProjectImporter(
+            bundle,
+            self.import_user.email,
+            target_org_uuid=str(target_org.uuid),
+            target_project_uuid=str(target_project_uuid),
+        ).import_project()
+
+        self.assertEqual(imported_project.uuid, target_project_uuid)
+        self.assertEqual(imported_project.org_id, target_org.uuid)
+        self.assertFalse(Org.objects.filter(uuid=source_org_uuid).exists())
+        self.assertEqual(OrgAuth.objects.filter(org=target_org, user=self.import_user).count(), 1)
+
     def test_management_commands_roundtrip(self):
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as temp_file:
             output_path = temp_file.name
@@ -156,4 +180,30 @@ class ProjectTransferRoundtripTestCase(TestCase):
                 payload,
                 self.import_user.email,
                 skip_if_exists=True,
+                overwrite=False,
             ).import_project()
+
+    def test_import_overwrites_existing_project_data(self):
+        exporter = ProjectExporter(self.project)
+        bundle = exporter.export()
+        target_project_uuid = uuid4()
+
+        first_import = ProjectImporter(
+            bundle,
+            self.import_user.email,
+            target_project_uuid=str(target_project_uuid),
+        ).import_project()
+        self.assertEqual(first_import.uuid, target_project_uuid)
+
+        first_import.name = "Changed name"
+        first_import.save(update_fields=["name"])
+
+        second_import = ProjectImporter(
+            bundle,
+            self.import_user.email,
+            target_project_uuid=str(target_project_uuid),
+        ).import_project()
+
+        self.assertEqual(second_import.uuid, target_project_uuid)
+        self.assertNotEqual(second_import.name, "Changed name")
+        self.assertEqual(second_import.name, bundle["records"]["projects.Project"][0]["name"])
