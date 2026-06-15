@@ -43,6 +43,48 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         self.assertNotIn("flows_api_token", cfg)
         mock_store_token.assert_called_once_with(task_id, "secret", timeout=3900)  # TASK_TIME_LIMIT 3600 + 300
 
+    @mock.patch("nexus.projects.services.flows_db_cohort_service.run_flows_db_cohort_reconcile_range")
+    def test_json_delivery_returns_sync_report(self, mock_run_sync, mock_apply_async):
+        report = {"overall_status": "aligned", "day_summaries": []}
+        mock_run_sync.return_value = report
+
+        request = self.factory.post(
+            self.url,
+            {
+                "flows_api_token": "secret",
+                "delivery": "json",
+                "date_start": "2026-01-10T00:00:00Z",
+                "date_end": "2026-01-10T23:59:59Z",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "completed")
+        self.assertEqual(response.data["delivery"], "json")
+        self.assertEqual(response.data["report"], report)
+        mock_apply_async.assert_not_called()
+        mock_run_sync.assert_called_once()
+
+    def test_json_delivery_rejects_multi_day_range(self, mock_apply_async):
+        request = self.factory.post(
+            self.url,
+            {
+                "flows_api_token": "secret",
+                "delivery": "json",
+                "date_start": "2026-01-10T00:00:00Z",
+                "date_end": "2026-01-11T23:59:59Z",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_apply_async.assert_not_called()
+
     def test_internal_permission_grants_access_when_project_denied(self, mock_apply_async):
         mock_apply_async.return_value = mock.Mock(id="celery-job-internal")
 
@@ -92,7 +134,7 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         mock_apply_async.assert_not_called()
 
-    def test_user_without_email_returns_400(self, mock_apply_async):
+    def test_user_without_email_returns_400_for_email_delivery(self, mock_apply_async):
         request = self.factory.post(
             self.url,
             {
