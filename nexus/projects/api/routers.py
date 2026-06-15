@@ -8,6 +8,7 @@ from .views import (
     ConversationsExportProxyView,
     ConversationsProxyView,
     EnableHumanSupportView,
+    FlowsDbCohortReconcileJobView,
     FlowsDbCohortReconcileProxyView,
     ProjectPromptCreationConfigurationsViewset,
     ProjectUpdateViewset,
@@ -39,5 +40,10 @@ urlpatterns = [
         "v2/<project_uuid>/flows-db-cohort",
         FlowsDbCohortReconcileProxyView.as_view(),
         name="flows-db-cohort-reconcile-proxy-v2",
+    ),
+    path(
+        "v2/<project_uuid>/flows-db-cohort/<job_id>",
+        FlowsDbCohortReconcileJobView.as_view(),
+        name="flows-db-cohort-reconcile-job-v2",
     ),
 ]

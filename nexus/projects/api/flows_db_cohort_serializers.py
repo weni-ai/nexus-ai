@@ -4,7 +4,12 @@ from rest_framework import serializers
 class FlowsDbCohortReconcileRequestSerializer(serializers.Serializer):
     """Body for POST ``/api/v2/<project_uuid>/flows-db-cohort`` (nexus-ai proxy)."""
 
+    DELIVERY_EMAIL = "email"
+    DELIVERY_JSON = "json"
+    DELIVERY_CHOICES = (DELIVERY_EMAIL, DELIVERY_JSON)
+
     flows_api_token = serializers.CharField(write_only=True, trim_whitespace=False)
+    delivery = serializers.ChoiceField(choices=DELIVERY_CHOICES, default=DELIVERY_EMAIL, required=False)
     date_start = serializers.CharField()
     date_end = serializers.CharField()
     apply_terminal_cohort_filter = serializers.BooleanField(default=True)
@@ -26,7 +31,11 @@ class FlowsDbCohortReconcileRequestSerializer(serializers.Serializer):
             validate_reconcile_date_range,
         )
 
-        max_days = int(getattr(django_settings, "FLOWS_DB_COHORT_MAX_RANGE_DAYS", 31))
+        delivery = attrs.get("delivery", self.DELIVERY_EMAIL)
+        if delivery == self.DELIVERY_JSON:
+            max_days = int(getattr(django_settings, "FLOWS_DB_COHORT_JSON_MAX_RANGE_DAYS", 1))
+        else:
+            max_days = int(getattr(django_settings, "FLOWS_DB_COHORT_MAX_RANGE_DAYS", 31))
 
         try:
             start_bound = parse_api_utc(str(attrs["date_start"]).strip())
