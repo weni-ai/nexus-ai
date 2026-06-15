@@ -680,14 +680,11 @@ class FlowsDbCohortReconcileProxyView(APIView):
         return self._post_email_async(request, project_uuid, data, django_settings)
 
     def _post_json_sync(self, project_uuid, data):
-        import logging
-
         from nexus.projects.api.flows_db_cohort_serializers import FlowsDbCohortReconcileRequestSerializer
 
         DELIVERY_JSON = FlowsDbCohortReconcileRequestSerializer.DELIVERY_JSON
         from nexus.projects.services.flows_db_cohort_service import run_flows_db_cohort_reconcile_range
 
-        logger = logging.getLogger(__name__)
         cfg = _flows_db_cohort_build_cfg(project_uuid, data)
         requested_range = {
             "from_inclusive": cfg["date_start"],
@@ -696,12 +693,12 @@ class FlowsDbCohortReconcileProxyView(APIView):
 
         try:
             report = run_flows_db_cohort_reconcile_range(cfg)
-        except Exception as exc:
+        except Exception:
             logger.exception("[flows_db_cohort] Sync reconcile failed project=%s", project_uuid)
             return Response(
                 {
                     "error": "Reconcile request failed",
-                    "detail": str(exc),
+                    "detail": "Reconcile couldn't be completed due to a technical issue",
                 },
                 status=status.HTTP_502_BAD_GATEWAY,
             )
