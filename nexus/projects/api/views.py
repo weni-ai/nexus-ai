@@ -637,8 +637,11 @@ def _flows_db_cohort_build_cfg(project_uuid: str, data: dict) -> dict:
 
 class FlowsDbCohortReconcileProxyView(APIView):
     """
-    Queue Flows vs DB cohort reconcile on nexus-ai (Celery + email).
-    Injects ``recipient_email`` from the authenticated Nexus user.
+    Flows vs DB cohort reconcile on nexus-ai.
+
+    ``delivery=email`` (default): queues Celery and sends HTML report by email.
+    ``delivery=json``: runs synchronously for a **single calendar day** and returns JSON.
+    Long-running requests may be terminated by upstream infrastructure (load balancer).
     """
 
     permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
@@ -647,37 +650,95 @@ class FlowsDbCohortReconcileProxyView(APIView):
         from django.conf import settings as django_settings
 
         from nexus.projects.api.flows_db_cohort_serializers import FlowsDbCohortReconcileRequestSerializer
-        from nexus.projects.tasks import reconcile_flows_db_cohort_email_task
+        from nexus.projects.services.flows_db_cohort_job_store import DELIVERY_EMAIL, DELIVERY_JSON
 
         project_uuid = kwargs.get("project_uuid")
         if not project_uuid:
             return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        recipient_email = getattr(request.user, "email", None)
+        ser = FlowsDbCohortReconcileRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        delivery = data.get("delivery", DELIVERY_EMAIL)
+
+        if delivery == DELIVERY_JSON:
+            return self._post_json_sync(project_uuid, data)
+
+        return self._post_email_async(request, project_uuid, data, django_settings)
+
+    def _post_json_sync(self, project_uuid, data):
+        import logging
+
+        from nexus.projects.services.flows_db_cohort_job_store import DELIVERY_JSON
+        from nexus.projects.services.flows_db_cohort_service import run_flows_db_cohort_reconcile_range
+
+        logger = logging.getLogger(__name__)
+        cfg = _flows_db_cohort_build_cfg(project_uuid, data)
+        requested_range = {
+            "from_inclusive": cfg["date_start"],
+            "to_inclusive": cfg["date_end"],
+        }
+
+        try:
+            report = run_flows_db_cohort_reconcile_range(cfg)
+        except Exception as exc:
+            logger.exception("[flows_db_cohort] Sync reconcile failed project=%s", project_uuid)
+            return Response(
+                {
+                    "error": "Reconcile request failed",
+                    "detail": str(exc),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(
+            {
+                "status": "completed",
+                "delivery": DELIVERY_JSON,
+                "project_id": str(project_uuid),
+                "requested_range": requested_range,
+                "report": report,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _post_email_async(self, request, project_uuid, data, django_settings):
+        from uuid import uuid4
+
+        from nexus.projects.services.flows_db_cohort_credentials import store_flows_api_token
+        from nexus.projects.services.flows_db_cohort_job_store import DELIVERY_EMAIL, create_job
+        from nexus.projects.tasks import reconcile_flows_db_cohort_email_task
+
+        recipient_email = getattr(request.user, "email", None) or None
         if not recipient_email:
             return Response(
                 {"error": "Authenticated user has no email address"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        ser = FlowsDbCohortReconcileRequestSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        data = ser.validated_data
         cfg = _flows_db_cohort_build_cfg(project_uuid, data)
         flows_api_token = cfg.pop("flows_api_token")
 
         celery_hard = int(getattr(django_settings, "FLOWS_DB_COHORT_TASK_TIME_LIMIT", 3600))
         celery_soft = max(celery_hard - 100, 60)
 
-        from uuid import uuid4
-
-        from nexus.projects.services.flows_db_cohort_credentials import store_flows_api_token
-
         job_id = str(uuid4())
         store_flows_api_token(job_id, flows_api_token, timeout=celery_hard + 300)
 
+        requested_range = {
+            "from_inclusive": cfg["date_start"],
+            "to_inclusive": cfg["date_end"],
+        }
+        create_job(
+            job_id,
+            project_id=str(project_uuid),
+            delivery=DELIVERY_EMAIL,
+            requested_range=requested_range,
+            recipient_email=recipient_email,
+        )
+
         reconcile_flows_db_cohort_email_task.apply_async(
-            args=[cfg, recipient_email],
+            args=[cfg, recipient_email, DELIVERY_EMAIL],
             task_id=job_id,
             soft_time_limit=celery_soft,
             time_limit=celery_hard,
@@ -687,12 +748,33 @@ class FlowsDbCohortReconcileProxyView(APIView):
             {
                 "status": "queued",
                 "job_id": job_id,
+                "delivery": DELIVERY_EMAIL,
                 "project_id": str(project_uuid),
                 "recipient_email": recipient_email,
-                "requested_range": {
-                    "from_inclusive": cfg["date_start"],
-                    "to_inclusive": cfg["date_end"],
-                },
+                "requested_range": requested_range,
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class FlowsDbCohortReconcileJobView(APIView):
+    """Poll async email reconcile job status (``delivery=email``)."""
+
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def get(self, request, *args, **kwargs):
+        from nexus.projects.services.flows_db_cohort_job_store import build_job_poll_response, get_job
+
+        project_uuid = kwargs.get("project_uuid")
+        job_id = kwargs.get("job_id")
+        if not project_uuid or not job_id:
+            return Response({"error": "project_uuid and job_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        job = get_job(str(job_id))
+        if job is None:
+            return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if str(job.get("project_id")) != str(project_uuid):
+            return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(build_job_poll_response(job), status=status.HTTP_200_OK)
