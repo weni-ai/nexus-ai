@@ -650,7 +650,9 @@ class FlowsDbCohortReconcileProxyView(APIView):
         from django.conf import settings as django_settings
 
         from nexus.projects.api.flows_db_cohort_serializers import FlowsDbCohortReconcileRequestSerializer
-        from nexus.projects.services.flows_db_cohort_job_store import DELIVERY_EMAIL, DELIVERY_JSON
+
+        DELIVERY_EMAIL = FlowsDbCohortReconcileRequestSerializer.DELIVERY_EMAIL
+        DELIVERY_JSON = FlowsDbCohortReconcileRequestSerializer.DELIVERY_JSON
 
         project_uuid = kwargs.get("project_uuid")
         if not project_uuid:
@@ -669,7 +671,9 @@ class FlowsDbCohortReconcileProxyView(APIView):
     def _post_json_sync(self, project_uuid, data):
         import logging
 
-        from nexus.projects.services.flows_db_cohort_job_store import DELIVERY_JSON
+        from nexus.projects.api.flows_db_cohort_serializers import FlowsDbCohortReconcileRequestSerializer
+
+        DELIVERY_JSON = FlowsDbCohortReconcileRequestSerializer.DELIVERY_JSON
         from nexus.projects.services.flows_db_cohort_service import run_flows_db_cohort_reconcile_range
 
         logger = logging.getLogger(__name__)
@@ -706,7 +710,6 @@ class FlowsDbCohortReconcileProxyView(APIView):
         from uuid import uuid4
 
         from nexus.projects.services.flows_db_cohort_credentials import store_flows_api_token
-        from nexus.projects.services.flows_db_cohort_job_store import DELIVERY_EMAIL, create_job
         from nexus.projects.tasks import reconcile_flows_db_cohort_email_task
 
         recipient_email = getattr(request.user, "email", None) or None
@@ -729,16 +732,9 @@ class FlowsDbCohortReconcileProxyView(APIView):
             "from_inclusive": cfg["date_start"],
             "to_inclusive": cfg["date_end"],
         }
-        create_job(
-            job_id,
-            project_id=str(project_uuid),
-            delivery=DELIVERY_EMAIL,
-            requested_range=requested_range,
-            recipient_email=recipient_email,
-        )
 
         reconcile_flows_db_cohort_email_task.apply_async(
-            args=[cfg, recipient_email, DELIVERY_EMAIL],
+            args=[cfg, recipient_email],
             task_id=job_id,
             soft_time_limit=celery_soft,
             time_limit=celery_hard,
@@ -748,33 +744,9 @@ class FlowsDbCohortReconcileProxyView(APIView):
             {
                 "status": "queued",
                 "job_id": job_id,
-                "delivery": DELIVERY_EMAIL,
                 "project_id": str(project_uuid),
                 "recipient_email": recipient_email,
                 "requested_range": requested_range,
             },
             status=status.HTTP_202_ACCEPTED,
         )
-
-
-class FlowsDbCohortReconcileJobView(APIView):
-    """Poll async email reconcile job status (``delivery=email``)."""
-
-    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
-
-    def get(self, request, *args, **kwargs):
-        from nexus.projects.services.flows_db_cohort_job_store import build_job_poll_response, get_job
-
-        project_uuid = kwargs.get("project_uuid")
-        job_id = kwargs.get("job_id")
-        if not project_uuid or not job_id:
-            return Response({"error": "project_uuid and job_id are required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        job = get_job(str(job_id))
-        if job is None:
-            return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        if str(job.get("project_id")) != str(project_uuid):
-            return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        return Response(build_job_poll_response(job), status=status.HTTP_200_OK)
