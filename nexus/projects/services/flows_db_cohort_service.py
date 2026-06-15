@@ -45,6 +45,10 @@ def validate_reconcile_window_seconds(start_bound: pendulum.DateTime, end_bound:
         )
 
 
+def reconcile_calendar_day_count(start_bound: pendulum.DateTime, end_bound: pendulum.DateTime) -> int:
+    return end_bound.start_of("day").diff(start_bound.start_of("day")).in_days() + 1
+
+
 def validate_reconcile_date_range(
     start_bound: pendulum.DateTime,
     end_bound: pendulum.DateTime,
@@ -52,9 +56,13 @@ def validate_reconcile_date_range(
 ) -> None:
     if end_bound < start_bound:
         raise ValueError("date_end must be on or after date_start")
-    day_count = end_bound.start_of("day").diff(start_bound.start_of("day")).in_days() + 1
+    day_count = reconcile_calendar_day_count(start_bound, end_bound)
     if day_count > max_days:
         raise ValueError(f"Date range spans {day_count} days; maximum is {max_days}")
+
+
+def is_single_calendar_day_range(start_bound: pendulum.DateTime, end_bound: pendulum.DateTime) -> bool:
+    return reconcile_calendar_day_count(start_bound, end_bound) == 1
 
 
 def parse_api_utc(s: str) -> pendulum.DateTime:
