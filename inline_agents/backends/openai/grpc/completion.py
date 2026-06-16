@@ -117,7 +117,7 @@ def _build_delivery_target(
 
 def _read_session_responses(session: StreamingSession) -> list[dict[str, Any]]:
     with session._lock:
-        return list(session.responses)
+        return list(session._responses)
 
 
 def _summarize_responses(responses: list[dict[str, Any]]) -> str:

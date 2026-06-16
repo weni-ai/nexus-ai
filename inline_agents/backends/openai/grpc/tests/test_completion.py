@@ -1,19 +1,29 @@
+from threading import Lock
 from unittest import TestCase
 from unittest.mock import MagicMock
 
 from inline_agents.backends.openai.grpc.completion import (
+    _read_session_responses,
     _summarize_responses,
     _summarize_unary_result,
     deliver_final_grpc_stream,
 )
 
 
+def _session_with_responses(responses):
+    grpc_session = MagicMock()
+    grpc_session._lock = Lock()
+    grpc_session._responses = list(responses)
+    return grpc_session
+
+
 class DeliverFinalGrpcStreamTestCase(TestCase):
     def test_delivers_via_session_when_active(self):
-        grpc_session = MagicMock()
+        grpc_session = _session_with_responses(
+            [{"status": "success", "is_final": True, "data": {"received_type": "completed"}}]
+        )
         grpc_session.is_active = True
         grpc_session.send_completed.return_value = True
-        grpc_session.responses = [{"status": "success", "is_final": True, "data": {"received_type": "completed"}}]
 
         delivered = deliver_final_grpc_stream(
             "Final text",
@@ -29,10 +39,9 @@ class DeliverFinalGrpcStreamTestCase(TestCase):
         grpc_session.send_completed.assert_called_once_with("Final text")
 
     def test_falls_back_when_session_ack_missing(self):
-        grpc_session = MagicMock()
+        grpc_session = _session_with_responses([])
         grpc_session.is_active = True
         grpc_session.send_completed.return_value = True
-        grpc_session.responses = []
         grpc_client = MagicMock()
         grpc_client.send_completed_message.return_value = {"status": "success"}
 
@@ -128,3 +137,11 @@ class GrpcDeliveryLoggingTestCase(TestCase):
         )
         self.assertIn("status='success'", summary)
         self.assertIn("received_type='completed'", summary)
+
+    def test_read_session_responses_reads_internal_list(self):
+        session = _session_with_responses(
+            [{"status": "success", "is_final": True, "data": {"received_type": "completed"}}]
+        )
+        read = _read_session_responses(session)
+        self.assertEqual(len(read), 1)
+        self.assertEqual(read[0]["data"]["received_type"], "completed")
