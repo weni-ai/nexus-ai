@@ -87,6 +87,7 @@ class StreamingSession:
         self._lock = threading.Lock()
         self._responses: List[Dict[str, Any]] = []
         self._error: Optional[Exception] = None
+        self._completed_sent = False
 
     def _create_message(self, msg_type: str, content: str = "") -> message_stream_service_pb2.StreamMessage:
         """Create a StreamMessage with the given type and content."""
@@ -153,7 +154,9 @@ class StreamingSession:
                     except Exception as e:
                         logger.error(f"[gRPC Session] Response callback error: {e}")
 
-                if response.is_final:
+                # Only end the read loop after the client sent completed (persistent session).
+                # Server may mark delta acks as is_final; breaking early kills send_completed.
+                if response.is_final and self._completed_sent:
                     break
 
         except grpc.RpcError as e:
@@ -253,6 +256,7 @@ class StreamingSession:
             logger.warning("[gRPC Session] Cannot send completed - stream not active")
             return False
 
+        self._completed_sent = True
         logger.info(f"[gRPC Session] Sending completed message ({len(content)} chars)")
         completed_msg = self._create_message("completed", content)
         self._message_queue.put(completed_msg)
