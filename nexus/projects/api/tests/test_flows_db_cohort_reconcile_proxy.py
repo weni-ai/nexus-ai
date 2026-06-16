@@ -70,6 +70,9 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         self.assertEqual(response.data["delivery"], "json")
         self.assertEqual(response.data["report"], report)
         mock_run_sync.assert_called_once()
+        cfg = mock_run_sync.call_args.args[0]
+        self.assertEqual(cfg["date_start"], "2026-01-10T00:00:00Z")
+        self.assertEqual(cfg["date_end"], "2026-01-10T23:59:59Z")
 
     @mock.patch(_RUN_RECONCILE)
     def test_json_delivery_failure_returns_generic_error(self, mock_run_sync):

@@ -470,9 +470,16 @@ def run_flows_db_cohort_reconcile(cfg: dict[str, Any]) -> dict[str, Any]:
     mismatch_sample_limit = int(cfg.get("mismatch_sample_limit", 20))
     uuid_sample_limit = int(cfg.get("uuid_sample_limit", 20))
 
-    cohort, fetch_stats = fetch_flows_cohort(cfg)
-    flow_uuids = _flow_uuids_from_events(cohort)
     export = fetch_db_cohort_export(cfg)
+    selected = export.get("selected_date_range", {})
+    flows_cfg = {
+        **cfg,
+        "date_start": selected.get("from_inclusive", cfg["date_start"]),
+        "date_end": selected.get("to_inclusive", cfg["date_end"]),
+    }
+
+    cohort, fetch_stats = fetch_flows_cohort(flows_cfg)
+    flow_uuids = _flow_uuids_from_events(cohort)
     db_uuids, conv_by_lower = load_db_cohort_from_export(export, flow_uuids_for_timestamps=flow_uuids)
     database_totals = build_db_cohort_summary(export)
     stats, mismatches, ids_timestamp_differ = detail_compare_flows_to_db(
@@ -482,11 +489,7 @@ def run_flows_db_cohort_reconcile(cfg: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "project_id": str(cfg["project"]),
-        "selected_date_range": {
-            "from_inclusive": cfg["date_start"],
-            "to_inclusive": cfg["date_end"] if cfg.get("use_date_end", True) else None,
-            "applies_end_date_cutoff": bool(cfg.get("use_date_end", True)),
-        },
+        "selected_date_range": selected,
         "flows_service_results": fetch_stats,
         "database_results": database_totals,
         "timestamp_comparison": {
@@ -499,12 +502,17 @@ def run_flows_db_cohort_reconcile(cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_flows_db_cohort_reconcile_range(base_cfg: dict[str, Any]) -> dict[str, Any]:
-    daily_cfgs = iter_daily_reconcile_cfgs(base_cfg)
+    from nexus.projects.services.reconcile_window import iter_project_calendar_day_cfgs, prepare_calendar_range_cfg
+
+    base_cfg = prepare_calendar_range_cfg(base_cfg)
+    daily_cfgs = iter_project_calendar_day_cfgs(base_cfg)
+    if not daily_cfgs:
+        daily_cfgs = iter_daily_reconcile_cfgs(base_cfg)
     day_reports: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
 
     for day_cfg in daily_cfgs:
-        day_label = day_cfg["date_start"][:10]
+        day_label = day_cfg.get("_calendar_day") or day_cfg["date_start"][:10]
         try:
             result = run_flows_db_cohort_reconcile(day_cfg)
             status = classify_day_result(result)
