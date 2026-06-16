@@ -39,12 +39,14 @@ from router.tasks.invoke import (
     UnsafeMessageException,
     _invoke_backend,
     _invoke_is_final_debug,
+    _log_simulation_message_ingress,
     _preprocess_message_input,
     apply_simulation_foundation_model_override,
     dispatch_preview,
     effective_simulation_channel,
     should_skip_conversation_sqs,
 )
+from router.tasks.message_external_id import enrich_message_msg_external_id, resolve_msg_external_id
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
@@ -114,7 +116,7 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
     notify_async(
         event="workflow:send_typing_indicator",
         contact_urn=ctx.contact_urn,
-        msg_external_id=ctx.message.get("msg_event", {}).get("msg_external_id", ""),
+        msg_external_id=resolve_msg_external_id(ctx.message),
         project_uuid=ctx.project_uuid,
         preview=ctx.preview,
     )
@@ -279,6 +281,14 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     # Preprocess message
     processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
+    if ctx.simulation_channel:
+        _log_simulation_message_ingress(
+            message=ctx.message,
+            processed_message=processed_message,
+            project_uuid=ctx.project_uuid or "",
+            preview=ctx.preview,
+            preview_websocket=ctx.preview_websocket,
+        )
     foundation_model = apply_simulation_foundation_model_override(
         ctx.simulation_channel,
         ctx.project_uuid or "",
@@ -291,7 +301,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     # Get backend and invoke (incoming message is saved inside backend via save_inline_message_async)
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
-    ctx.turn_id = ctx.message.get("msg_event", {}).get("msg_external_id") or str(uuid_lib.uuid4())
+    ctx.turn_id = resolve_msg_external_id(processed_message) or str(uuid_lib.uuid4())
 
     skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
     # Conversation SQS: same rules as start_inline_agents (Cases 1–3)
@@ -494,6 +504,7 @@ def inline_agent_workflow(
     The orchestrator is intentionally simple - all complex logic is delegated
     to the phase tasks and helper functions.
     """
+    message = enrich_message_msg_external_id(message)
     message_conversation_log_uuid = str(uuid_lib.uuid4())
     ctx = _create_workflow_context(
         task_id=self.request.id,

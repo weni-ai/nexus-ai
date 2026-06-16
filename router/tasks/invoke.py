@@ -31,6 +31,7 @@ from router.services.pre_generation_service import PreGenerationService
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.invocation_context import CachedProjectData
+from router.tasks.message_external_id import enrich_message_msg_external_id, resolve_msg_external_id
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
 from router.utils.redis_clients import get_redis_read_client
@@ -55,6 +56,33 @@ def effective_simulation_channel(message: Dict, simulation_channel: bool = False
 def should_skip_conversation_sqs(preview: bool, simulation_channel_effective: bool) -> bool:
     """Whether to omit sending conversation message.received events to SQS."""
     return bool(preview) or bool(simulation_channel_effective)
+
+
+def _log_simulation_message_ingress(
+    *,
+    message: Dict,
+    processed_message: Dict,
+    project_uuid: str,
+    preview: bool,
+    preview_websocket: bool,
+) -> None:
+    raw_msg_event = message.get("msg_event") or {}
+    resolved = resolve_msg_external_id(processed_message)
+    logger.info(
+        "[OpenAIBackend] simulation message ingress project_uuid=%s channel_uuid=%s contact_urn=%s "
+        "preview=%s preview_websocket=%s stream_support=%s msg_external_id=%r msg_uuid=%r msg_id=%r "
+        "resolved_msg_external_id=%r",
+        project_uuid,
+        message.get("channel_uuid"),
+        message.get("contact_urn"),
+        preview,
+        preview_websocket,
+        message.get("stream_support", False),
+        raw_msg_event.get("msg_external_id"),
+        raw_msg_event.get("msg_uuid"),
+        raw_msg_event.get("msg_id"),
+        resolved or None,
+    )
 
 
 def _get_simulation_manager_model(project_uuid: str, contact_urn: str) -> Optional[str]:
@@ -360,7 +388,7 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
             f"attachments: {attachments}, product_items: {product_items}"
         )
 
-    processed_message = message.copy()
+    processed_message = enrich_message_msg_external_id(message.copy())
     processed_message["text"] = text
     return processed_message, foundation_model, turn_off_rationale
 
@@ -482,7 +510,7 @@ def _invoke_backend(
             "contact_fields": message_obj.contact_fields_as_json,
             "contact_name": message_obj.contact_name,
             "channel_uuid": message_obj.channel_uuid,
-            "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
+            "msg_external_id": resolve_msg_external_id(processed_message),
             "preview": preview,
             "preview_websocket": preview_websocket,
             "language": language,
@@ -553,11 +581,12 @@ def start_inline_agents(  # noqa: C901
     task_manager = task_manager or get_task_manager()
 
     try:
+        message = enrich_message_msg_external_id(message)
         incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
-        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
+        turn_id = resolve_msg_external_id(message) or str(uuid.uuid4())
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
-            msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
+            msg_external_id=resolve_msg_external_id(message),
             project_uuid=project_uuid,
             preview=preview,
         )
@@ -593,6 +622,14 @@ def start_inline_agents(  # noqa: C901
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message, agents_backend)
+        if simulation_channel_effective:
+            _log_simulation_message_ingress(
+                message=message,
+                processed_message=processed_message,
+                project_uuid=project_uuid or "",
+                preview=preview,
+                preview_websocket=preview_websocket,
+            )
         foundation_model = apply_simulation_foundation_model_override(
             simulation_channel_effective, project_uuid or "", message.get("contact_urn") or "", foundation_model
         )
