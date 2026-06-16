@@ -197,6 +197,10 @@ def generate_env():
         "INVOKE_AGENTS_RATE_LIMIT": "2500/m",
         "RATIONALE_IMPROVEMENT_INSTRUCTIONS": "",
         "SUBSEQUENT_RATIONALE_INSTRUCTIONS": "",
+        "PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION": (
+            "Before executing ANY tool or calling an agent, send the user a short feedback message "
+            "explaining what you're about to do, so they know the request is being processed."
+        ),
         "COMPLEXITY_LAYER_LAMBDA": "lambda-complexity-layer",
         "AWS_COMPONENTS_FUNCTION_ARN": "",
         "FORMATTER_AGENT_MODEL": "gpt-4.1-mini",
@@ -265,6 +269,10 @@ def generate_env():
         "TURN_SERVER_USERNAME": "",
         "TURN_SERVER_PASSWORD": "",
         "CONVERSATIONS_TOKEN": "",
+        "GROWTHBOOK_CLIENT_KEY": "",
+        "GROWTHBOOK_HOST_BASE_URL": "https://cdn.growthbook.io",
+        "GROWTHBOOK_WEBHOOK_SECRET": "",
+        "GROWTHBOOK_REQUESTS_TIMEOUT": "60",
     }
 
     with open(env_path, "w") as configfile:

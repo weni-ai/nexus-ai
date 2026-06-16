@@ -3,7 +3,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Max, Prefetch, Q
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -28,6 +28,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.inline_agents.api.serializers.catalog import (
     build_row_from_project_agent,
+    enrich_my_agents_row,
     my_agents_list_prefetches,
     project_agent_assignment_map,
 )
@@ -684,7 +685,11 @@ class AgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        agents = (
+            Agent.objects.filter(project__uuid=project_uuid)
+            .select_related("group", "group__modal")
+            .annotate(last_version_at=Max("versions__created_on"))
+        )
 
         if search:
             query_filter = (
@@ -699,11 +704,14 @@ class AgentsView(APIView):
             project_agent_assignment_map(str(project_uuid), include_inactive_integrated=False) if project_uuid else None
         )
         data = [
-            build_row_from_project_agent(
+            enrich_my_agents_row(
+                build_row_from_project_agent(
+                    agent,
+                    project_uuid,
+                    include_inactive_integrated=False,
+                    assignment_by_agent_id=assignment,
+                ),
                 agent,
-                project_uuid,
-                include_inactive_integrated=False,
-                assignment_by_agent_id=assignment,
             )
             for agent in agents
         ]
@@ -807,12 +815,16 @@ class TeamView(APIView):
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
-        agents = usecase.get_active_agents(project_uuid).prefetch_related(
-            "agent__group",
-            "agent__group__modal",
-            "agent__mcps",
-            "agent__mcps__system",
-            "agent__mcps__config_options",
+        agents = (
+            usecase.get_active_agents(project_uuid)
+            .annotate(last_version_at=Max("agent__versions__created_on"))
+            .prefetch_related(
+                "agent__group",
+                "agent__group__modal",
+                "agent__mcps",
+                "agent__mcps__system",
+                "agent__mcps__config_options",
+            )
         )
         serializer = TeamRosterAgentSerializer(agents, many=True)
 

@@ -21,6 +21,12 @@ from opentelemetry import trace
 
 from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backends.openai.entities import FinalResponse, HooksState
+from router.tasks.sqs_message_events import (
+    extract_messages_sent_texts,
+    parse_tool_result,
+    send_tool_messages_sent_to_conversation_sqs,
+    tool_result_has_final_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +217,37 @@ def _result_to_value(result):
         except (json.JSONDecodeError, TypeError):
             return result
     return result
+
+
+def _maybe_send_tool_messages_sent_to_conversation(
+    context_data,
+    result,
+    *,
+    preview: bool,
+    skip_conversation_sqs: bool,
+    hooks_state: HooksState,
+    tool_name: str = "",
+) -> None:
+    """Send messages_sent texts to conversation SQS when tool is not a final-output payload."""
+    if preview or skip_conversation_sqs:
+        return
+    parsed = parse_tool_result(result)
+    if not isinstance(parsed, dict):
+        return
+    if tool_result_has_final_output(parsed):
+        return
+    texts = extract_messages_sent_texts(parsed)
+    if not texts:
+        return
+    send_tool_messages_sent_to_conversation_sqs(
+        texts=texts,
+        project_uuid=context_data.project.get("uuid"),
+        contact_urn=context_data.contact.get("urn"),
+        channel_uuid=context_data.contact.get("channel_uuid"),
+        contact_name=context_data.contact.get("name") or "",
+        message_conversation_log_uuid=hooks_state.message_conversation_log_uuid,
+        tool_name=tool_name,
+    )
 
 
 class TraceHandler:
@@ -656,6 +693,15 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
 
         logger.info(f"[HOOK] Resultado da ferramenta '{tool.name}' recebido {result}.")
 
+        _maybe_send_tool_messages_sent_to_conversation(
+            context_data,
+            result,
+            preview=self.preview,
+            skip_conversation_sqs=self.skip_conversation_sqs,
+            hooks_state=self.hooks_state,
+            tool_name=tool.name,
+        )
+
         contact_urn = context_data.contact.get("urn", "unknown")
         events = _get_events_from_tool_result(result, tool.name, self.hooks_state, project_uuid, contact_urn)
         events_list = _normalize_events_to_list(events, tool.name, project_uuid)
@@ -918,6 +964,14 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
     async def _on_tool_end_regular_tool(self, context, agent, tool, result, context_data, project_uuid, parameters):
         """Handle on_tool_end for regular (non-agent) tools."""
+        _maybe_send_tool_messages_sent_to_conversation(
+            context_data,
+            result,
+            preview=self.preview,
+            skip_conversation_sqs=self.skip_conversation_sqs,
+            hooks_state=self.hooks_state,
+            tool_name=tool.name,
+        )
         contact_urn = context_data.contact.get("urn", "unknown")
         events = _get_events_from_tool_result(result, tool.name, self.hooks_state, project_uuid, contact_urn)
         events_list = _normalize_events_to_list(events, tool.name, project_uuid)
