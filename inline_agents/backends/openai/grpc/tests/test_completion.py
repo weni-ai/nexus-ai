@@ -1,7 +1,11 @@
 from unittest import TestCase
 from unittest.mock import MagicMock
 
-from inline_agents.backends.openai.grpc.completion import deliver_final_grpc_stream
+from inline_agents.backends.openai.grpc.completion import (
+    _summarize_responses,
+    _summarize_unary_result,
+    deliver_final_grpc_stream,
+)
 
 
 class DeliverFinalGrpcStreamTestCase(TestCase):
@@ -102,3 +106,25 @@ class DeliverFinalGrpcStreamTestCase(TestCase):
 
         self.assertFalse(delivered)
         grpc_session.send_completed.assert_not_called()
+
+
+class GrpcDeliveryLoggingTestCase(TestCase):
+    def test_summarize_responses_empty(self):
+        self.assertEqual(_summarize_responses([]), "(empty)")
+
+    def test_summarize_responses_includes_ack_fields(self):
+        summary = _summarize_responses(
+            [
+                {"status": "success", "is_final": False, "sequence": 1, "data": {"received_type": "setup"}},
+                {"status": "success", "is_final": True, "sequence": 2, "data": {"received_type": "completed"}},
+            ]
+        )
+        self.assertIn("received_type='completed'", summary)
+        self.assertIn("2 total", summary)
+
+    def test_summarize_unary_result(self):
+        summary = _summarize_unary_result(
+            {"status": "success", "is_final": True, "sequence": 1, "data": {"received_type": "completed"}}
+        )
+        self.assertIn("status='success'", summary)
+        self.assertIn("received_type='completed'", summary)
