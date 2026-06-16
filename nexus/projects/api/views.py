@@ -806,7 +806,7 @@ class ProjectApiErrorMessageView(APIView):
 
 
 class KnowledgeBaseChunksView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
     def get(self, request, project_uuid):
         try:
