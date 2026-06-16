@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pendulum
 import pytest
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
@@ -886,3 +886,88 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
         self.assertEqual(result.text, _TEST_ERROR_MESSAGES["en-us"])
         grpc_session.close.assert_called()
         grpc_client.close.assert_called()
+
+
+def _patch_invoke_grpc_success(test_method):
+    def wrapper(self, *args, **kwargs):
+        grpc_client = MagicMock()
+        grpc_session = MagicMock()
+        with (
+            patch("inline_agents.backends.openai.backend.deliver_final_grpc_stream", return_value=True),
+            patch("inline_agents.backends.openai.backend.asyncio.run", return_value="Final answer"),
+            patch("inline_agents.backends.openai.backend.save_inline_message_async"),
+            patch("inline_agents.backends.openai.backend.ConnectRESTClient") as mock_connect_cls,
+            patch("inline_agents.backends.openai.backend.JWTUsecase"),
+            patch.object(OpenAIBackend, "_initialize_grpc_session", return_value=(grpc_client, grpc_session, "msg-id")),
+            patch.object(OpenAIBackend, "_ensure_conversation", return_value=None),
+            patch.object(OpenAIBackend, "_get_data_lake_event_adapter", return_value=None),
+            patch.object(OpenAIBackend, "_get_session", return_value=(MagicMock(), "session-id")),
+            patch.object(OpenAIBackend, "_get_session_factory", return_value=MagicMock()),
+            patch.object(OpenAIBackend, "_get_event_manager_notify", return_value=lambda *a, **kw: None),
+            patch.object(
+                OpenAIBackend,
+                "get_supervisor",
+                return_value={
+                    "instruction": "",
+                    "use_components": False,
+                    "use_human_support": False,
+                    "components_instructions": "",
+                    "formatter_agent_components_instructions": "",
+                    "components_instructions_up": "",
+                    "human_support_instructions": "",
+                    "tools": [],
+                    "foundation_model": "gpt-4",
+                    "knowledge_bases": [],
+                    "prompt_override_configuration": {},
+                    "default_instructions_for_collaborators": "",
+                    "max_tokens": 4096,
+                },
+            ),
+            patch.object(OpenAIBackend, "_get_client"),
+            patch.object(OpenAITeamAdapter, "to_external", return_value={"context": {}}),
+        ):
+            mock_connect_cls.return_value.get_project_language.return_value = "en-us"
+            return test_method(self, *args, **kwargs)
+
+    return wrapper
+
+
+@override_settings(DEFAULT_ERROR_MESSAGES=_TEST_ERROR_MESSAGES)
+class TestGrpcSkipDispatchAfterDelivery(SimpleTestCase):
+    def setUp(self):
+        self.backend = OpenAIBackend()
+        self.project_uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+    @_patch_invoke_grpc_success
+    def test_preview_websocket_keeps_dispatch_after_grpc(self):
+        result = self.backend.invoke_agents(
+            team=[],
+            input_text="hello",
+            project_uuid=self.project_uuid,
+            sanitized_urn="test_urn",
+            contact_fields="",
+            contact_urn="ext:user@example.com",
+            preview=False,
+            preview_websocket=True,
+            stream_support=True,
+        )
+
+        self.assertEqual(result.text, "Final answer")
+        self.assertFalse(result.skip_dispatch)
+
+    @_patch_invoke_grpc_success
+    def test_production_webchat_skips_dispatch_after_grpc(self):
+        result = self.backend.invoke_agents(
+            team=[],
+            input_text="hello",
+            project_uuid=self.project_uuid,
+            sanitized_urn="test_urn",
+            contact_fields="",
+            contact_urn="ext:user@example.com",
+            preview=False,
+            preview_websocket=False,
+            stream_support=True,
+        )
+
+        self.assertEqual(result.text, "Final answer")
+        self.assertTrue(result.skip_dispatch)

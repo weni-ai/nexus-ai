@@ -565,16 +565,17 @@ class OpenAIBackend(InlineAgentsBackend):
                     contact_urn=contact_urn,
                     project_uuid=project_uuid,
                 )
-                if grpc_delivered:
+                if grpc_delivered and not preview_websocket:
                     skip_dispatch = True
                 logger.info(
                     "[OpenAIBackend] gRPC delivery finished project_uuid=%s msg_id=%s "
-                    "grpc_delivered=%s skip_dispatch=%s skip_outgoing_dispatch=%s",
+                    "grpc_delivered=%s skip_dispatch=%s skip_outgoing_dispatch=%s preview_websocket=%s",
                     project_uuid,
                     grpc_msg_id,
                     grpc_delivered,
                     skip_dispatch,
                     getattr(hooks_state, "skip_outgoing_dispatch", False),
+                    preview_websocket,
                 )
 
             return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
