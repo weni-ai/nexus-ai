@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from inline_agents.backends.openai.backend import OpenAIBackend
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.events import notify_async
 from nexus.projects.api.permissions import ProjectPermission
@@ -27,6 +28,10 @@ from nexus.usecases.projects.update import ProjectUpdateUseCase
 from .serializers import ProjectSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _get_effective_api_error_message(project_uuid: str) -> str:
+    return OpenAIBackend._get_default_error_message(str(project_uuid))
 
 
 class ProjectUpdateViewset(views.APIView):
@@ -706,11 +711,11 @@ class ProjectApiErrorMessageView(APIView):
 
     def get(self, request, project_uuid):
         try:
-            project = Project.objects.only("api_error_message").get(uuid=project_uuid)
+            Project.objects.only("api_error_message").get(uuid=project_uuid)
         except Project.DoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        return Response(data={"error_message": project.api_error_message})
+        return Response(data={"error_message": _get_effective_api_error_message(project_uuid)})
 
     def patch(self, request, project_uuid):
         try:
@@ -738,6 +743,6 @@ class ProjectApiErrorMessageView(APIView):
         return Response(
             data={
                 "message": "Error message updated successfully",
-                "error_message": project.api_error_message,
+                "error_message": _get_effective_api_error_message(project_uuid),
             }
         )
