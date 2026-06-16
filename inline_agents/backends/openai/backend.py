@@ -23,6 +23,7 @@ from inline_agents.backends.openai.components_tools import get_component_tools a
 from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.grpc import (
     MessageStreamingClient,
+    deliver_final_grpc_stream,
     is_grpc_enabled,
 )
 from inline_agents.backends.openai.grpc.streaming_client import StreamingSession
@@ -496,6 +497,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 language=language,
                 use_components=use_components_cached,
                 stream_support=stream_support,
+                msg_external_id=msg_external_id,
             )
 
         try:
@@ -531,11 +533,18 @@ class OpenAIBackend(InlineAgentsBackend):
             preview_txt = text[:200] + "..." if len(text) > 200 else text
             _is_final_out_debug(f"F invoke_agents_return skip_dispatch={skip_dispatch} text_preview={preview_txt!r}")
 
-            if grpc_session and grpc_session.is_active:
-                try:
-                    grpc_session.send_completed(text)
-                except Exception as e:
-                    logger.error(f"gRPC completion failed: {e}", exc_info=True)
+            if grpc_client or grpc_session:
+                grpc_delivered = deliver_final_grpc_stream(
+                    text,
+                    grpc_client=grpc_client,
+                    grpc_session=grpc_session,
+                    grpc_msg_id=grpc_msg_id,
+                    channel_uuid=channel_uuid,
+                    contact_urn=contact_urn,
+                    project_uuid=project_uuid,
+                )
+                if grpc_delivered:
+                    skip_dispatch = True
 
             return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
         except Exception as exc:
@@ -582,6 +591,7 @@ class OpenAIBackend(InlineAgentsBackend):
         language: str,
         use_components: bool,
         stream_support: bool,
+        msg_external_id: str | None = None,
     ) -> tuple[Optional[MessageStreamingClient], Optional[StreamingSession], Optional[str]]:
         """
         Initialize gRPC client and create a persistent streaming session.
@@ -604,9 +614,13 @@ class OpenAIBackend(InlineAgentsBackend):
 
             grpc_client = MessageStreamingClient(host=grpc_host, port=grpc_port, use_secure_channel=grpc_use_tls)
 
-            grpc_msg_id = hashlib.sha256(
-                f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
-            ).hexdigest()[:16]
+            external_id = (msg_external_id or "").strip()
+            if external_id:
+                grpc_msg_id = external_id
+            else:
+                grpc_msg_id = hashlib.sha256(
+                    f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
+                ).hexdigest()[:16]
 
             # Create a persistent streaming session
             grpc_session = grpc_client.create_streaming_session(
