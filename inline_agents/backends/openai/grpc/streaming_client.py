@@ -87,6 +87,7 @@ class StreamingSession:
         self._lock = threading.Lock()
         self._responses: List[Dict[str, Any]] = []
         self._error: Optional[Exception] = None
+        self._completed_sent = False
 
     def _create_message(self, msg_type: str, content: str = "") -> message_stream_service_pb2.StreamMessage:
         """Create a StreamMessage with the given type and content."""
@@ -105,7 +106,7 @@ class StreamingSession:
         """Generator that yields messages from the queue."""
         # First, send the setup message
         setup_msg = self._create_message("setup", "")
-        logger.info(f"[gRPC Session] Sending setup for {self.contact_urn}")
+        logger.info(f"[gRPC Session] Sending setup for {self.contact_urn} msg_id={self.msg_id}")
         yield setup_msg
 
         # Then yield messages from the queue until we get a stop signal
@@ -144,7 +145,12 @@ class StreamingSession:
                     # Mark setup as complete after first response
                     if not self._setup_complete:
                         self._setup_complete = True
-                        logger.info(f"[gRPC Session] Setup complete: {result['status']}")
+                        logger.info(
+                            "[gRPC Session] Setup complete: %s msg_id=%s received_type=%s",
+                            result["status"],
+                            result.get("msg_id"),
+                            (result.get("data") or {}).get("received_type"),
+                        )
 
                 # Call response callback if provided
                 if self.on_response:
@@ -153,7 +159,9 @@ class StreamingSession:
                     except Exception as e:
                         logger.error(f"[gRPC Session] Response callback error: {e}")
 
-                if response.is_final:
+                # Only end the read loop after the client sent completed (persistent session).
+                # Server may mark delta acks as is_final; breaking early kills send_completed.
+                if response.is_final and self._completed_sent:
                     break
 
         except grpc.RpcError as e:
@@ -236,7 +244,14 @@ class StreamingSession:
         self._delta_counter += 1
         delta_msg = self._create_message("delta", content)
         self._message_queue.put(delta_msg)
-        logger.debug(f"[gRPC Session] Queued delta #{self._delta_counter}")
+        if self._delta_counter == 1:
+            logger.info(
+                "[gRPC Session] First delta queued msg_id=%s chars=%s",
+                self.msg_id,
+                len(content),
+            )
+        else:
+            logger.debug(f"[gRPC Session] Queued delta #{self._delta_counter}")
         return True
 
     def send_completed(self, content: str) -> bool:
@@ -253,7 +268,14 @@ class StreamingSession:
             logger.warning("[gRPC Session] Cannot send completed - stream not active")
             return False
 
-        logger.info(f"[gRPC Session] Sending completed message ({len(content)} chars)")
+        self._completed_sent = True
+        logger.info(
+            "[gRPC Session] Sending completed message msg_id=%s chars=%s deltas_sent=%s stream_active=%s",
+            self.msg_id,
+            len(content),
+            self._delta_counter,
+            self._stream_active,
+        )
         completed_msg = self._create_message("completed", content)
         self._message_queue.put(completed_msg)
 
@@ -261,8 +283,19 @@ class StreamingSession:
         self._message_queue.put(None)
 
         # Wait for response thread to finish
-        if self._response_thread and self._response_thread.is_alive():
+        thread_alive = bool(self._response_thread and self._response_thread.is_alive())
+        if thread_alive:
             self._response_thread.join(timeout=5)
+        thread_still_alive = bool(self._response_thread and self._response_thread.is_alive())
+        response_count = len(self._responses)
+        logger.info(
+            "[gRPC Session] Completed send finished msg_id=%s response_count=%s "
+            "thread_join_timed_out=%s stream_error=%s",
+            self.msg_id,
+            response_count,
+            thread_still_alive,
+            self._error,
+        )
 
         self._stream_active = False
         return True
