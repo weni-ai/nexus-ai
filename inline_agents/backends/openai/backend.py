@@ -545,6 +545,15 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
                 if grpc_delivered:
                     skip_dispatch = True
+                logger.info(
+                    "[OpenAIBackend] gRPC delivery finished project_uuid=%s msg_id=%s "
+                    "grpc_delivered=%s skip_dispatch=%s skip_outgoing_dispatch=%s",
+                    project_uuid,
+                    grpc_msg_id,
+                    grpc_delivered,
+                    skip_dispatch,
+                    getattr(hooks_state, "skip_outgoing_dispatch", False),
+                )
 
             return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
         except Exception as exc:
@@ -617,10 +626,24 @@ class OpenAIBackend(InlineAgentsBackend):
             external_id = (msg_external_id or "").strip()
             if external_id:
                 grpc_msg_id = external_id
+                msg_id_source = "external"
             else:
                 grpc_msg_id = hashlib.sha256(
                     f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
                 ).hexdigest()[:16]
+                msg_id_source = "hash"
+
+            logger.info(
+                "[OpenAIBackend] gRPC session init project_uuid=%s msg_id=%s msg_id_source=%s "
+                "msg_external_id_present=%s channel_uuid=%s contact_urn=%s session_id=%s",
+                project_uuid,
+                grpc_msg_id,
+                msg_id_source,
+                bool(external_id),
+                channel_uuid,
+                contact_urn,
+                session_id,
+            )
 
             # Create a persistent streaming session
             grpc_session = grpc_client.create_streaming_session(
