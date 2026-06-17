@@ -22,6 +22,7 @@ from django.template.defaultfilters import slugify
 
 from nexus.agents.components import get_all_formats_list
 from nexus.agents.models import Agent, Credential, Team
+from nexus.projects.models import Project
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.utils import get_datasource_id
 
@@ -63,8 +64,33 @@ class BedrockFileDatabase(FileDataBase):
         self.s3_client = self.__get_s3_client()
 
         self._suffix = f"{self.region_name}-{self.account_id}"
+        self.s3_key_prefix = self._resolve_s3_key_prefix(project_uuid)
         self.agent_foundation_model = agent_foundation_model
         self.supervisor_foundation_model = supervisor_foundation_model
+
+    @staticmethod
+    def _normalize_s3_prefix(prefix: str) -> str:
+        if not prefix:
+            return ""
+        cleaned = prefix.strip("/")
+        return f"{cleaned}/" if cleaned else ""
+
+    def _resolve_s3_key_prefix(self, project_uuid: str | None) -> str:
+        if not project_uuid or not settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID:
+            return ""
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return ""
+
+        if project.bedrock_ingestion_strategy != Project.BEDROCK_INGESTION_DIRECT:
+            return ""
+
+        return self._normalize_s3_prefix(settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX)
+
+    def _build_s3_key(self, content_base_uuid: str, filename: str) -> str:
+        return f"{self.s3_key_prefix}{content_base_uuid}/{filename}"
 
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
@@ -154,7 +180,7 @@ class BedrockFileDatabase(FileDataBase):
         }
 
         filename_metadata_json = f"{filename}.metadata.json"
-        key = f"{content_base_uuid}/{filename_metadata_json}"
+        key = self._build_s3_key(content_base_uuid, filename_metadata_json)
         logger.debug("Bedrock metadata file", extra={"filename": filename_metadata_json, "key": key})
         bytes_stream = BytesIO(json.dumps(data).encode("utf-8"))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
@@ -163,7 +189,7 @@ class BedrockFileDatabase(FileDataBase):
         s3_client = self.s3_client
         bucket_name = self.bucket_name
         file_name = self.__create_unique_filename(basename(file.name))
-        key = f"{content_base_uuid}/{file_name}"
+        key = self._build_s3_key(content_base_uuid, file_name)
 
         response = s3_client.create_multipart_upload(Bucket=bucket_name, Key=key)
         upload_id = response["UploadId"]
@@ -199,7 +225,7 @@ class BedrockFileDatabase(FileDataBase):
             logger.info("[Bedrock] Adding file to bucket")
 
             file_name = self.__create_unique_filename(basename(file.name))
-            file_path = f"{content_base_uuid}/{file_name}"
+            file_path = self._build_s3_key(content_base_uuid, file_name)
 
             response = FileResponseDTO(
                 status=0,
@@ -608,7 +634,7 @@ class BedrockFileDatabase(FileDataBase):
         return ingestion_job_id
 
     def _build_s3_uri(self, content_base_uuid: str, filename: str) -> str:
-        return f"s3://{self.bucket_name}/{content_base_uuid}/{filename}"
+        return f"s3://{self.bucket_name}/{self._build_s3_key(content_base_uuid, filename)}"
 
     def _build_ingest_document(self, content_base_uuid: str, filename: str) -> dict:
         s3_uri = self._build_s3_uri(content_base_uuid, filename)
