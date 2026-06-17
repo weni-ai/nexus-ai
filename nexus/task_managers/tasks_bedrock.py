@@ -242,6 +242,58 @@ def direct_ingest(
     return True
 
 
+def _chunk_list(items: list, chunk_size: int):
+    for index in range(0, len(items), chunk_size):
+        yield items[index : index + chunk_size]
+
+
+@app.task
+def direct_ingest_batch_submit(
+    task_manager_uuids: List[str],
+    content_base_uuid: str,
+    filenames: List[str],
+    project_uuid: str | None = None,
+):
+    if not task_manager_uuids or not filenames:
+        return True
+
+    if len(task_manager_uuids) != len(filenames):
+        logger.error(
+            "🦑 BEDROCK: direct_ingest_batch_submit task_manager_uuids and filenames length mismatch",
+            extra={
+                "task_manager_count": len(task_manager_uuids),
+                "filename_count": len(filenames),
+            },
+        )
+        task_manager_usecase = CeleryTaskManagerUseCase()
+        for task_manager_uuid in task_manager_uuids:
+            task_manager_usecase.update_task_status(task_manager_uuid, TaskManager.STATUS_FAIL, "file")
+        return True
+
+    file_database = BedrockFileDatabase(project_uuid=project_uuid)
+    chunk_size = settings.BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST
+
+    try:
+        for filename_chunk in _chunk_list(filenames, chunk_size):
+            file_database.direct_ingest_batch(content_base_uuid, filename_chunk)
+    except Exception as e:
+        logger.error("🦑 BEDROCK: Batch direct ingest submission failed", exc_info=True, extra={"error": str(e)})
+        task_manager_usecase = CeleryTaskManagerUseCase()
+        for task_manager_uuid in task_manager_uuids:
+            task_manager_usecase.update_task_status(task_manager_uuid, TaskManager.STATUS_FAIL, "file")
+        return True
+
+    for task_manager_uuid in task_manager_uuids:
+        direct_ingest.delay(
+            task_manager_uuid,
+            file_type="file",
+            project_uuid=project_uuid,
+            ingest_submitted=True,
+            poll_count=0,
+        )
+    return True
+
+
 @app.task
 def direct_delete(content_base_uuid: str, filename: str, project_uuid: str | None = None):
     logger.info("🦑 BEDROCK: Direct deleting document from knowledge base")

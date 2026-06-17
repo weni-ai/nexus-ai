@@ -120,6 +120,14 @@ class InlineContentBaseTextWriteSerializer(serializers.Serializer):
         return attrs
 
 
+class BatchIngestionProgressRequestSerializer(serializers.Serializer):
+    file_uuids = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=False,
+        min_length=1,
+    )
+
+
 class ContentBaseFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseFile

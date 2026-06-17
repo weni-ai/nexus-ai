@@ -6,7 +6,7 @@ from rest_framework import status as http_status
 from nexus.projects.models import Project
 from nexus.task_managers import tasks, tasks_bedrock
 from nexus.task_managers.file_database.file_database import FileDataBase
-from nexus.task_managers.tasks_bedrock import trigger_bedrock_ingestion
+from nexus.task_managers.tasks_bedrock import direct_ingest_batch_submit, trigger_bedrock_ingestion
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.usecases.intelligences.intelligences_dto import (
     ContentBaseFileDTO,
@@ -35,6 +35,7 @@ class CeleryFileManager:
         content_base_uuid: str,
         extension_file: str,
         user_email: str,
+        project_uuid: str | None = None,
     ):
         from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
         from nexus.task_managers.file_database.file_database import FileResponseDTO
@@ -52,7 +53,7 @@ class CeleryFileManager:
                 content_base_file=content_base_file_dto
             )
             content_base_file_uuid = str(content_base_file.uuid)
-            file_database = BedrockFileDatabase()
+            file_database = BedrockFileDatabase(project_uuid=project_uuid)
             file_name, file_url = file_database.multipart_upload(file, content_base_uuid, content_base_file_uuid)
             file_database.add_metadata_json_file(file_name, content_base_uuid, content_base_file_uuid)
             response = FileResponseDTO(
@@ -73,12 +74,19 @@ class CeleryFileManager:
         extension_file: str,
         user_email: str,
     ) -> tuple[dict, int]:
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            project_uuid = str(project.uuid)
+        except Exception:
+            project_uuid = None
+
         file_database_response = self.add_file_to_s3(
             file,
             filename,
             content_base_uuid,
             extension_file,
             user_email,
+            project_uuid=project_uuid,
         )
 
         if file_database_response.status != 0:
@@ -96,12 +104,6 @@ class CeleryFileManager:
         )
         task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
-        try:
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-            project_uuid = str(project.uuid)
-        except Exception:
-            project_uuid = None
-
         trigger_bedrock_ingestion(str(task_manager.uuid), project_uuid=project_uuid)
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
 
@@ -113,12 +115,19 @@ class CeleryFileManager:
         extension_file: str,
         user_email: str,
     ) -> tuple[dict, int]:
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            project_uuid = str(project.uuid)
+        except Exception:
+            project_uuid = None
+
         file_database_response = self.add_file_to_s3(
             file,
             filename,
             content_base_uuid,
             extension_file,
             user_email,
+            project_uuid=project_uuid,
         )
 
         if file_database_response.status != 0:
@@ -135,14 +144,93 @@ class CeleryFileManager:
             update_content_base_file_dto=content_base_file_dto,
         )
         task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
+
+        trigger_bedrock_ingestion(str(task_manager.uuid), project_uuid=project_uuid)
+        return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
+
+    def upload_and_ingest_batch(
+        self,
+        files: list,
+        content_base_uuid: str,
+        extension_file: str,
+        user_email: str,
+        inline: bool = False,
+    ) -> tuple[dict, int]:
+        uploaded_files = []
+        errors = []
+
         try:
             project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             project_uuid = str(project.uuid)
         except Exception:
             project_uuid = None
 
-        trigger_bedrock_ingestion(str(task_manager.uuid), project_uuid=project_uuid)
-        return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
+        for uploaded_file in files:
+            filename = uploaded_file.name
+            file_database_response = self.add_file_to_s3(
+                uploaded_file,
+                filename,
+                content_base_uuid,
+                extension_file,
+                user_email,
+                project_uuid=project_uuid,
+            )
+
+            if file_database_response.status != 0:
+                errors.append({"filename": filename, "message": file_database_response.err})
+                continue
+
+            content_base_file_dto = UpdateContentBaseFileDTO(
+                file_url=file_database_response.file_url,
+                file_name=file_database_response.file_name,
+            )
+            if inline:
+                content_base_file = UpdateContentBaseFileUseCase().update_inline_content_base_file(
+                    content_base_file_uuid=file_database_response.content_base_file_uuid,
+                    user_email=user_email,
+                    update_content_base_file_dto=content_base_file_dto,
+                )
+            else:
+                content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
+                    content_base_file_uuid=file_database_response.content_base_file_uuid,
+                    user_email=user_email,
+                    update_content_base_file_dto=content_base_file_dto,
+                )
+
+            task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
+            uploaded_files.append(
+                {
+                    "uuid": str(content_base_file.uuid),
+                    "extension_file": extension_file,
+                    "filename": file_database_response.file_name,
+                    "task_manager_uuid": str(task_manager.uuid),
+                }
+            )
+
+        if not uploaded_files:
+            return {"message": "No files were uploaded", "errors": errors}, http_status.HTTP_500_INTERNAL_SERVER_ERROR
+
+        direct_ingest_batch_submit.delay(
+            [item["task_manager_uuid"] for item in uploaded_files],
+            content_base_uuid,
+            [item["filename"] for item in uploaded_files],
+            project_uuid=project_uuid,
+        )
+
+        response_data = {
+            "files": [
+                {
+                    "uuid": item["uuid"],
+                    "extension_file": item["extension_file"],
+                    "filename": item["filename"],
+                }
+                for item in uploaded_files
+            ],
+        }
+        if errors:
+            response_data["errors"] = errors
+
+        return response_data, http_status.HTTP_201_CREATED
 
     def upload_file(
         self,
