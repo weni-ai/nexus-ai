@@ -7,8 +7,6 @@ This module extracts complex logic from RationaleObserver to reduce cyclomatic c
 import logging
 from typing import Callable, Dict, Optional
 
-from router.traces_observers.rationale.channel_hint import channel_hint_from_contact_urn
-
 logger = logging.getLogger(__name__)
 
 
@@ -47,15 +45,6 @@ class RationaleMessageSender:
         from router.traces_observers.save_traces import save_inline_message_to_database
 
         try:
-            logger.info(
-                "[ProgressiveFeedback] Sending rationale message project_uuid=%s channel_from_urn=%s "
-                "contact_urn=%s channel_uuid=%s text_preview=%r",
-                project_uuid,
-                channel_hint_from_contact_urn(contact_urn),
-                contact_urn,
-                channel_uuid,
-                text[:120],
-            )
             send_message_callback(
                 text=text,
                 urns=[contact_urn],
