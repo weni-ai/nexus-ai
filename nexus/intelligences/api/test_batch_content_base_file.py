@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from nexus.projects.models import Project
+from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -30,6 +31,46 @@ class BatchContentBaseFileViewsetTestCase(TestCase):
             "content-base-file-batch-create",
             kwargs={"content_base_uuid": str(self.content_base.uuid)},
         )
+        self.progress_url = reverse(
+            "content-base-file-batch-progress",
+            kwargs={"content_base_uuid": str(self.content_base.uuid)},
+        )
+
+    def test_batch_progress_requires_file_uuids(self):
+        response = self.client.post(self.progress_url, {}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("file_uuids", response.json())
+
+    def test_batch_progress_returns_statuses(self):
+        from nexus.intelligences.models import ContentBaseFile
+
+        content_base_file = ContentBaseFile.objects.create(
+            content_base=self.content_base,
+            file_name="progress.txt",
+            extension_file="txt",
+            created_by=self.user,
+        )
+        ContentBaseFileTaskManager.objects.create(
+            content_base_file=content_base_file,
+            created_by=self.user,
+            status=ContentBaseFileTaskManager.STATUS_PROCESSING,
+        )
+
+        response = self.client.post(
+            self.progress_url,
+            {"file_uuids": [str(content_base_file.uuid)]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.json()
+        self.assertEqual(content["total"], 1)
+        self.assertEqual(content["remaining"], 1)
+        self.assertEqual(content["progress_percentage"], 0)
+        self.assertFalse(content["is_complete"])
+        self.assertEqual(content["status"], "processing")
+        self.assertNotIn("files", content)
 
     def test_batch_create_requires_files(self):
         response = self.client.post(self.url, {}, format="multipart")
@@ -76,4 +117,4 @@ class BatchContentBaseFileViewsetTestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["message"], "Batch upload requires direct Bedrock ingestion strategy")
+        self.assertEqual(response.json()["message"], "This endpoint requires direct Bedrock ingestion strategy")
