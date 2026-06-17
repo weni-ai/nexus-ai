@@ -38,7 +38,7 @@ from nexus.intelligences.models import (
 )
 from nexus.internals.conversations import ConversationsRESTClient
 from nexus.orgs import permissions
-from nexus.paginations import CustomCursorPagination, SupervisorPagination
+from nexus.paginations import CustomCursorPagination, InlineContentBaseTextCursorPagination, SupervisorPagination
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -88,8 +88,11 @@ from .serializers import (
     ContentBaseLinkSerializer,
     ContentBasePersonalizationSerializer,
     ContentBaseSerializer,
+    ContentBaseTextDetailSerializer,
+    ContentBaseTextListSerializer,
     ContentBaseTextSerializer,
     CreatedContentBaseLinkSerializer,
+    InlineContentBaseTextWriteSerializer,
     InstructionClassificationRequestSerializer,
     InstructionClassificationResponseSerializer,
     IntelligenceSerializer,
@@ -551,10 +554,22 @@ class ContentBaseTextViewset(ModelViewSet):
 
 
 class InlineContentBaseTextViewset(ModelViewSet):
-    pagination_class = CustomCursorPagination
-    serializer_class = ContentBaseTextSerializer
+    pagination_class = InlineContentBaseTextCursorPagination
+    serializer_class = ContentBaseTextDetailSerializer
     lookup_url_kwarg = "contentbasetext_uuid"
     permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ContentBaseTextListSerializer
+        if self.action in ("create", "update", "partial_update"):
+            return InlineContentBaseTextWriteSerializer
+        return ContentBaseTextDetailSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["is_create"] = self.action == "create"
+        return context
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -566,6 +581,36 @@ class InlineContentBaseTextViewset(ModelViewSet):
         )
         return content_base_text_objects
 
+    def _queue_text_index_upload(self, project, cb_dto, content_base_text, text):
+        if project.indexer_database == Project.BEDROCK:
+            bedrock_upload_text_file.delay(
+                content_base_dto=cb_dto.__dict__,
+                content_base_text_uuid=str(content_base_text.uuid),
+                text=text,
+            )
+        else:
+            upload_text_file.delay(
+                content_base_dto=cb_dto.__dict__,
+                content_base_text_uuid=content_base_text.uuid,
+                text=text,
+            )
+
+    def _reindex_inline_content_base_text(self, project, content_base, content_base_text, text):
+        file_database = ProjectsUseCase().get_indexer_database_by_project(project)
+        delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
+        delete_use_case.delete_content_base_text_from_index(
+            str(content_base_text.uuid),
+            str(content_base.uuid),
+            content_base_text.file_name,
+        )
+        cb_dto = intelligences.ContentBaseDTO(
+            uuid=content_base.uuid,
+            title=content_base.title,
+            intelligence_uuid=content_base.intelligence.uuid,
+            created_by_email=content_base.created_by.email,
+        )
+        self._queue_text_index_upload(project, cb_dto, content_base_text, text)
+
     def list(self, request, *args, **kwargs):
         try:
             return super().list(request, *args, **kwargs)
@@ -575,25 +620,32 @@ class InlineContentBaseTextViewset(ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         try:
             project_uuid = kwargs.get("project_uuid")
+            contentbasetext_uuid = kwargs.get("contentbasetext_uuid")
 
             use_case = intelligences.RetrieveContentBaseTextUseCase()
             contentbasetext = use_case.get_inline_contentbasetext(
                 project_uuid=project_uuid,
+                contentbasetext_uuid=contentbasetext_uuid,
             )
 
-            serializer = ContentBaseTextSerializer(contentbasetext)
+            serializer = ContentBaseTextDetailSerializer(contentbasetext)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseText.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
     def create(self, request, project_uuid: str):
         try:
             user_email = request.user.email
 
-            serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+            write_serializer = InlineContentBaseTextWriteSerializer(
+                data=request.data, context={"is_create": True}
+            )
+            write_serializer.is_valid(raise_exception=True)
 
-            text = serializer.validated_data.get("text")
+            text = write_serializer.validated_data["text"]
+            title = write_serializer.validated_data["title"]
             content_base = intelligences.get_default_content_base_by_project(project_uuid)
             cb_dto = intelligences.ContentBaseDTO(
                 uuid=content_base.uuid,
@@ -602,23 +654,18 @@ class InlineContentBaseTextViewset(ModelViewSet):
                 created_by_email=content_base.created_by.email,
             )
             cbt_dto = intelligences.ContentBaseTextDTO(
-                text=text, content_base_uuid=content_base.uuid, user_email=user_email
+                text=text,
+                content_base_uuid=content_base.uuid,
+                user_email=user_email,
+                title=title,
             )
             content_base_text = intelligences.CreateContentBaseTextUseCase().create_contentbasetext(
                 content_base_dto=cb_dto, content_base_text_dto=cbt_dto
             )
             project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
-            if project.indexer_database == Project.BEDROCK:
-                bedrock_upload_text_file.delay(
-                    content_base_dto=cb_dto.__dict__, content_base_text_uuid=str(content_base_text.uuid), text=text
-                )
+            self._queue_text_index_upload(project, cb_dto, content_base_text, text)
 
-            else:
-                upload_text_file.delay(
-                    content_base_dto=cb_dto.__dict__, content_base_text_uuid=content_base_text.uuid, text=text
-                )
-
-            response = ContentBaseTextSerializer(content_base_text).data
+            response = ContentBaseTextDetailSerializer(content_base_text).data
 
             return Response(response, status=status.HTTP_201_CREATED)
         except IntelligencePermissionDenied:
@@ -627,66 +674,59 @@ class InlineContentBaseTextViewset(ModelViewSet):
             upload_text_file.delay(
                 content_base_dto=cb_dto.__dict__, content_base_text_uuid=content_base_text.uuid, text=text
             )
-            response = ContentBaseTextSerializer(content_base_text).data
+            response = ContentBaseTextDetailSerializer(content_base_text).data
 
             return Response(response, status=status.HTTP_201_CREATED)
 
+    def partial_update(self, request, **kwargs):
+        return self._inline_patch_or_update(request, **kwargs)
+
     def update(self, request, **kwargs):
+        return self._inline_patch_or_update(request, **kwargs)
+
+    def _inline_patch_or_update(self, request, **kwargs):
         try:
             user_email = request.user.email
-            text = request.data.get("text")
             project_uuid = kwargs.get("project_uuid")
+            content_base_text_uuid = kwargs.get("contentbasetext_uuid")
+
+            write_serializer = InlineContentBaseTextWriteSerializer(data=request.data, context={"is_create": False})
+            write_serializer.is_valid(raise_exception=True)
 
             content_base = intelligences.get_default_content_base_by_project(project_uuid)
-            content_base_uuid = content_base.uuid
-            content_base_text_uuid = kwargs.get("contentbasetext_uuid")
-            content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
-            cb_dto = intelligences.ContentBaseDTO(
-                uuid=content_base.uuid,
-                title=content_base.title,
-                intelligence_uuid=content_base.intelligence.uuid,
-                created_by_email=content_base.created_by.email,
-            )
-            content_base_text = intelligences.UpdateContentBaseTextUseCase().update_inline_contentbasetext(
-                contentbasetext=content_base_text, user_email=user_email, text=text
-            )
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
-            file_database = ProjectsUseCase().get_indexer_database_by_project(project)
-
-            delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
-            delete_use_case.delete_content_base_text_from_index(
-                content_base_text_uuid, content_base_uuid, content_base_text.file_name
+            content_base_text = intelligences.RetrieveContentBaseTextUseCase().get_inline_contentbasetext(
+                project_uuid=project_uuid,
+                contentbasetext_uuid=content_base_text_uuid,
             )
 
-            if project.indexer_database == Project.BEDROCK:
-                bedrock_upload_text_file.delay(
-                    content_base_dto=cb_dto.__dict__, content_base_text_uuid=str(content_base_text.uuid), text=text
-                )
-            else:
-                upload_text_file.delay(
-                    content_base_dto=cb_dto.__dict__,
-                    content_base_text_uuid=content_base_text.uuid,
-                    text=text,
+            update_kwargs = {}
+            if "text" in write_serializer.validated_data:
+                update_kwargs["text"] = write_serializer.validated_data["text"]
+            if "title" in write_serializer.validated_data:
+                update_kwargs["title"] = write_serializer.validated_data["title"]
+
+            update_use_case = intelligences.UpdateContentBaseTextUseCase()
+            content_base_text, text_changed = update_use_case.update_inline_contentbasetext(
+                contentbasetext=content_base_text,
+                user_email=user_email,
+                **update_kwargs,
+            )
+
+            if text_changed:
+                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
+                self._reindex_inline_content_base_text(
+                    project, content_base, content_base_text, write_serializer.validated_data["text"]
                 )
 
-            response = ContentBaseTextSerializer(content_base_text).data
+            response = ContentBaseTextDetailSerializer(content_base_text).data
 
             return Response(response, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseText.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         except ObjectDoesNotExist:
-            file_database = SentenXFileDataBase
-            delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
-            delete_use_case.delete_content_base_text_from_index(
-                content_base_text_uuid, content_base_uuid, content_base_text.file_name
-            )
-            upload_text_file.delay(
-                content_base_dto=cb_dto.__dict__,
-                content_base_text_uuid=content_base_text.uuid,
-                text=text,
-            )
-            response = ContentBaseTextSerializer(content_base_text).data
-            return Response(response, status=status.HTTP_200_OK)
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
     def destroy(self, request, **kwargs):
         try:
