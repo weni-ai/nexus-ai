@@ -22,6 +22,7 @@ class BedrockDirectIngestionMethodsTestCase(SimpleTestCase):
         bedrock.bucket_name = "test-bucket"
         bedrock.knowledge_base_id = "kb-id"
         bedrock.data_source_id = "ds-id"
+        bedrock.s3_key_prefix = ""
         bedrock.bedrock_agent = MagicMock()
         return bedrock
 
@@ -98,6 +99,54 @@ class BedrockDirectIngestionMethodsTestCase(SimpleTestCase):
             ],
         )
         self.assertEqual(result, [{"status": "DELETING"}])
+
+    def test_build_s3_uri_with_direct_ingest_prefix(self):
+        bedrock = self._bedrock_with_mocks()
+        bedrock.s3_key_prefix = "direct-ingest/"
+        uri = bedrock._build_s3_uri(self.content_base_uuid, self.filename)
+        self.assertEqual(
+            uri,
+            f"s3://test-bucket/direct-ingest/{self.content_base_uuid}/{self.filename}",
+        )
+
+
+@override_settings(
+    AWS_BEDROCK_DIRECT_DATASOURCE_ID="direct-ds",
+    AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX="direct-ingest/",
+)
+class BedrockDirectIngestS3PrefixTestCase(SimpleTestCase):
+    @patch("nexus.projects.models.Project.objects.get")
+    def test_resolves_prefix_for_direct_strategy(self, mock_project_get):
+        project = MagicMock()
+        project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_DIRECT
+        mock_project_get.return_value = project
+
+        bedrock = BedrockFileDatabase.__new__(BedrockFileDatabase)
+        bedrock.s3_key_prefix = bedrock._resolve_s3_key_prefix("project-uuid")
+        self.assertEqual(bedrock.s3_key_prefix, "direct-ingest/")
+        self.assertEqual(
+            bedrock._build_s3_key("cb-uuid", "file.txt"),
+            "direct-ingest/cb-uuid/file.txt",
+        )
+
+    @patch("nexus.projects.models.Project.objects.get")
+    def test_no_prefix_for_job_strategy(self, mock_project_get):
+        project = MagicMock()
+        project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_JOB
+        mock_project_get.return_value = project
+
+        bedrock = BedrockFileDatabase.__new__(BedrockFileDatabase)
+        self.assertEqual(bedrock._resolve_s3_key_prefix("project-uuid"), "")
+
+    @override_settings(AWS_BEDROCK_DIRECT_DATASOURCE_ID="")
+    @patch("nexus.projects.models.Project.objects.get")
+    def test_no_prefix_when_direct_datasource_not_configured(self, mock_project_get):
+        project = MagicMock()
+        project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_DIRECT
+        mock_project_get.return_value = project
+
+        bedrock = BedrockFileDatabase.__new__(BedrockFileDatabase)
+        self.assertEqual(bedrock._resolve_s3_key_prefix("project-uuid"), "")
 
 
 class TriggerBedrockIngestionTestCase(SimpleTestCase):
