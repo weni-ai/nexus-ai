@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
                 (
                     "project",
                     models.ForeignKey(
-                        on_delete=models.deletion.CASCADE,
+                        on_delete=models.CASCADE,
                         related_name="inline_constants",
                         to="projects.project",
                     ),

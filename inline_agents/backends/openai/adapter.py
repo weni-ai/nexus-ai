@@ -6,6 +6,7 @@ import boto3
 import pendulum
 import sentry_sdk
 from django.conf import settings
+from django.db.models import Prefetch
 from django.template import Context as TemplateContext
 from django.template import Template
 from django.utils.text import slugify
@@ -23,11 +24,13 @@ from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, 
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
+    AgentConstant,
     AgentCredential,
     Guardrail,
     InlineAgentsConfiguration,
     IntegratedAgent,
 )
+from nexus.usecases.inline_agents.agent_constants_sync import iter_agent_constant_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -577,9 +580,16 @@ class OpenAITeamAdapter(TeamAdapter):
                 f"Searching for agent with tool '{function_name}' in project '{project_uuid}'"
                 f" - function_name: {function_name}, project_uuid: {project_uuid}"
             )
-            integrated_agents = IntegratedAgent.objects.filter(
-                project__uuid=project_uuid, is_active=True
-            ).select_related("agent")
+            integrated_agents = (
+                IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+                .select_related("agent")
+                .prefetch_related(
+                    Prefetch(
+                        "agent__agentconstant_set",
+                        queryset=AgentConstant.objects.all(),
+                    )
+                )
+            )
 
             integrated_agents_count = integrated_agents.count()
             logger.debug(
@@ -655,10 +665,7 @@ class OpenAITeamAdapter(TeamAdapter):
     @classmethod
     def _prepare_agent_constants(cls, agent, integrated_agent=None):
         """Extract constants from agent configuration."""
-        constants = {}
-        for row in agent.agentconstant_set.all():
-            if row.default_value is not None:
-                constants[row.key] = row.default_value
+        constants = iter_agent_constant_defaults(agent)
 
         if integrated_agent and integrated_agent.metadata:
             mcp_config = integrated_agent.metadata.get("mcp_config", {})

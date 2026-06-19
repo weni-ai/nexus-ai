@@ -8,7 +8,6 @@ from nexus.agents.encryption import encrypt_value
 from nexus.inline_agents.models import (
     MCP,
     Agent,
-    AgentConstant,
     AgentCredential,
     AgentGroup,
     AgentSystem,
@@ -16,7 +15,7 @@ from nexus.inline_agents.models import (
 )
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
-from nexus.usecases.inline_agents.agent_constant_definitions import fields_from_yaml_constant
+from nexus.usecases.inline_agents.agent_constants_sync import sync_agent_constants_from_payload
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.mcp_definition_sync import sync_mcp_templates_from_agent_payload
@@ -108,35 +107,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def create_constants(self, agent: Agent, project: Project, constants: Dict):
         if not constants:
             return
-
-        for key, constant_def in constants.items():
-            if not isinstance(constant_def, dict):
-                continue
-            logger.info(f"Creating constant - key: {key}")
-            fields = fields_from_yaml_constant(key, constant_def)
-            existing = AgentConstant.objects.filter(project=project, key=key).first()
-            if existing:
-                existing.label = fields["label"]
-                existing.type = fields["type"]
-                existing.options = fields["options"]
-                existing.default_value = fields["default_value"]
-                existing.is_required = fields["is_required"]
-                existing.definition = fields["definition"]
-                existing.save()
-                if agent not in existing.agents.all():
-                    existing.agents.add(agent)
-            else:
-                new_constant = AgentConstant.objects.create(
-                    project=project,
-                    key=fields["key"],
-                    label=fields["label"],
-                    type=fields["type"],
-                    options=fields["options"],
-                    default_value=fields["default_value"],
-                    is_required=fields["is_required"],
-                    definition=fields["definition"],
-                )
-                new_constant.agents.add(agent)
+        sync_agent_constants_from_payload(agent, project, constants)
 
     def create_credentials(self, agent: Agent, project: Project, credentials: Dict):
         created_credentials = []
