@@ -44,18 +44,22 @@ def _locked_constants_for_sync(
     if payload_keys:
         lock_filter |= Q(key__in=payload_keys)
 
-    rows = (
-        AgentConstant.objects.filter(project=project)
-        .filter(lock_filter)
-        .annotate(agent_count=Count("agents", distinct=True))
-        .prefetch_related("agents")
-        .order_by("key")
-        .select_for_update()
-    )
+    # PostgreSQL rejects FOR UPDATE with GROUP BY from Count() annotations.
+    rows = AgentConstant.objects.filter(project=project).filter(lock_filter).order_by("pk").select_for_update()
     locked_by_key: dict[str, AgentConstant] = {}
     for row in rows:
         locked_by_key.setdefault(row.key, row)
-    return locked_by_key
+
+    if not locked_by_key:
+        return locked_by_key
+
+    enriched_by_pk = {
+        row.pk: row
+        for row in AgentConstant.objects.filter(pk__in=[row.pk for row in locked_by_key.values()])
+        .prefetch_related("agents")
+        .annotate(agent_count=Count("agents", distinct=True))
+    }
+    return {key: enriched_by_pk[row.pk] for key, row in locked_by_key.items()}
 
 
 def _linked_constants_for_agent(
@@ -112,7 +116,8 @@ def sync_agent_constants_from_payload(
     for key, row in linked_to_agent.items():
         if key in payload_keys:
             continue
-        if row.agent_count == 1:
+        agent_count = getattr(row, "agent_count", row.agents.count())
+        if agent_count == 1:
             row.delete()
         else:
             row.agents.remove(agent)
