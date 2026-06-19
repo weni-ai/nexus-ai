@@ -16,7 +16,8 @@ from nexus.inline_agents.api.official_agents_helpers import (
     get_all_mcps_for_group,
     get_all_systems_for_group,
 )
-from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, AgentConstant, AgentCredential, IntegratedAgent
+from nexus.usecases.inline_agents.agent_constant_definitions import serialize_agent_constant_for_api
 
 
 def my_agents_list_prefetches() -> list:
@@ -26,6 +27,10 @@ def my_agents_list_prefetches() -> list:
         Prefetch(
             "agentcredential_set",
             queryset=AgentCredential.objects.order_by("key"),
+        ),
+        Prefetch(
+            "agentconstant_set",
+            queryset=AgentConstant.objects.order_by("key"),
         ),
         Prefetch(
             "mcps",
@@ -207,6 +212,25 @@ def _agent_credentials_payload(agent: Agent) -> list[dict[str, Any]]:
     return rows
 
 
+def _iter_agent_constants(agent: Agent) -> list[AgentConstant]:
+    cache = getattr(agent, "_prefetched_objects_cache", None)
+    if isinstance(cache, dict) and "agentconstant_set" in cache:
+        return sorted(cache["agentconstant_set"], key=lambda row: row.key or "")
+    return list(agent.agentconstant_set.all().order_by("key"))
+
+
+def _agent_constants_payload(agent: Agent) -> list[dict[str, Any]]:
+    seen_keys: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    for constant in _iter_agent_constants(agent):
+        key = constant.key
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        rows.append(serialize_agent_constant_for_api(constant))
+    return rows
+
+
 def _merge_agent_credentials_into_mcp(mcp_data: dict[str, Any], agent_credentials: list[dict[str, Any]]) -> None:
     """Fill ``mcp_data['credentials']`` from agent credentials when MCP templates are missing or partial."""
     if not agent_credentials:
@@ -220,27 +244,45 @@ def _merge_agent_credentials_into_mcp(mcp_data: dict[str, Any], agent_credential
             mcp_data["credentials"].append(credential)
 
 
-def _synthetic_mcp_for_agent_credentials(agent: Agent, credentials: list[dict[str, Any]]) -> dict[str, Any]:
-    """Carrier row for ``mcps[].credentials`` when the agent has no linked MCP (not a DB MCP)."""
+def _merge_agent_constants_into_mcp(mcp_data: dict[str, Any], agent_constants: list[dict[str, Any]]) -> None:
+    if not agent_constants:
+        return
+    if not mcp_data.get("config"):
+        mcp_data["config"] = list(agent_constants)
+        return
+    existing_names = {item["name"] for item in mcp_data["config"]}
+    for constant in agent_constants:
+        if constant["name"] not in existing_names:
+            mcp_data["config"].append(constant)
+
+
+def _synthetic_mcp_for_standalone_agent(
+    agent: Agent,
+    credentials: list[dict[str, Any]],
+    constants: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Carrier row for standalone agents without a linked MCP (not a DB MCP)."""
     description = (agent.collaboration_instructions or "").strip() or None
     return {
         "name": None,
         "description": {"en": description, "pt": None, "es": None},
         "system": None,
-        "config": [],
+        "config": constants,
         "credentials": credentials,
     }
 
 
 def _mcps_for_standalone_agent(agent: Agent) -> list[dict[str, Any]]:
     agent_credentials = _agent_credentials_payload(agent)
+    agent_constants = _agent_constants_payload(agent)
     serialized = [_serialize_mcp(m) for m in _iter_active_agent_mcps(agent)]
     if serialized:
         for mcp_data in serialized:
             _merge_agent_credentials_into_mcp(mcp_data, agent_credentials)
+            _merge_agent_constants_into_mcp(mcp_data, agent_constants)
         return _sort_mcps(serialized)
-    if agent_credentials:
-        return [_synthetic_mcp_for_agent_credentials(agent, agent_credentials)]
+    if agent_credentials or agent_constants:
+        return [_synthetic_mcp_for_standalone_agent(agent, agent_credentials, agent_constants)]
     return []
 
 
