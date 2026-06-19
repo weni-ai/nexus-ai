@@ -50,10 +50,12 @@ def _locked_constants_for_sync(
         .annotate(agent_count=Count("agents", distinct=True))
         .prefetch_related("agents")
         .order_by("key")
-        .distinct()
         .select_for_update()
     )
-    return {row.key: row for row in rows}
+    locked_by_key: dict[str, AgentConstant] = {}
+    for row in rows:
+        locked_by_key.setdefault(row.key, row)
+    return locked_by_key
 
 
 def _linked_constants_for_agent(
