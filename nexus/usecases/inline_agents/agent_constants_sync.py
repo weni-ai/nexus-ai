@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count
 
 from nexus.inline_agents.models import Agent, AgentConstant
 from nexus.projects.models import Project
@@ -40,12 +40,20 @@ def _locked_constants_for_sync(
     agent: Agent,
     payload_keys: set[str],
 ) -> dict[str, AgentConstant]:
-    lock_filter = Q(agents=agent)
+    # Lock rows by primary key only. Filtering M2M (agents=agent) in the same
+    # select_for_update() query produces an outer join that PostgreSQL rejects.
+    pk_candidates: set[int] = set(
+        AgentConstant.objects.filter(project=project, agents=agent).values_list("pk", flat=True)
+    )
     if payload_keys:
-        lock_filter |= Q(key__in=payload_keys)
+        pk_candidates.update(
+            AgentConstant.objects.filter(project=project, key__in=payload_keys).values_list("pk", flat=True)
+        )
 
-    # PostgreSQL rejects FOR UPDATE with GROUP BY from Count() annotations.
-    rows = AgentConstant.objects.filter(project=project).filter(lock_filter).order_by("pk").select_for_update()
+    if not pk_candidates:
+        return {}
+
+    rows = AgentConstant.objects.filter(project=project, pk__in=pk_candidates).order_by("pk").select_for_update()
     locked_by_key: dict[str, AgentConstant] = {}
     for row in rows:
         locked_by_key.setdefault(row.key, row)
