@@ -1,6 +1,42 @@
 from django.db import migrations, models
 
 
+def backfill_agent_constants_from_mcp_options(apps, schema_editor):
+    """Copy MCP config option schemas onto agents that lack AgentConstant rows.
+
+    The legacy ``Agent.constants`` JSONField was removed in migration 0023 before
+    this table existed, so that data cannot be recovered here. Agents that only
+    synced constants through linked MCPs still have schemas in ``MCPConfigOption``.
+    Standalone agents without a re-push must be updated from weni-cli YAML.
+    """
+    Agent = apps.get_model("inline_agents", "Agent")
+    AgentConstant = apps.get_model("inline_agents", "AgentConstant")
+    MCPConfigOption = apps.get_model("inline_agents", "MCPConfigOption")
+
+    for agent in Agent.objects.iterator():
+        if AgentConstant.objects.filter(agents=agent).exists():
+            continue
+
+        mcp_ids = list(agent.mcps.values_list("pk", flat=True))
+        if not mcp_ids:
+            continue
+
+        for option in MCPConfigOption.objects.filter(mcp_id__in=mcp_ids).order_by("order", "name"):
+            row, _created = AgentConstant.objects.get_or_create(
+                project_id=agent.project_id,
+                key=option.name,
+                defaults={
+                    "label": option.label,
+                    "type": option.type,
+                    "options": option.options,
+                    "default_value": option.default_value,
+                    "is_required": option.is_required,
+                    "definition": {},
+                },
+            )
+            row.agents.add(agent)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -47,5 +83,9 @@ class Migration(migrations.Migration):
             options={
                 "unique_together": {("project", "key")},
             },
+        ),
+        migrations.RunPython(
+            backfill_agent_constants_from_mcp_options,
+            migrations.RunPython.noop,
         ),
     ]

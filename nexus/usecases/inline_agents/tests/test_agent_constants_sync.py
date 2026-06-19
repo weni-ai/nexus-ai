@@ -52,3 +52,17 @@ class TestSyncAgentConstantsFromPayload(TestCase):
         sync_agent_constants_from_payload(self.agent_a, self.project, {}, prune_missing=True)
 
         self.assertFalse(AgentConstant.objects.filter(project=self.project, key="DISPLAY_MODE").exists())
+
+    def test_shared_constant_update_uses_locked_project_row(self):
+        sync_agent_constants_from_payload(self.agent_a, self.project, {"DISPLAY_MODE": DISPLAY_MODE})
+        sync_agent_constants_from_payload(self.agent_b, self.project, {"DISPLAY_MODE": DISPLAY_MODE})
+
+        updated = {
+            **DISPLAY_MODE,
+            "label": "Updated catalog mode",
+        }
+        sync_agent_constants_from_payload(self.agent_a, self.project, {"DISPLAY_MODE": updated})
+
+        row = AgentConstant.objects.get(project=self.project, key="DISPLAY_MODE")
+        self.assertEqual(row.label, "Updated catalog mode")
+        self.assertEqual(row.agents.count(), 2)
