@@ -6,6 +6,7 @@ from nexus.events import notify_async
 from nexus.inline_agents.models import (
     MCP,
     Agent,
+    AgentConstant,
     AgentCredential,
     AgentGroup,
     InlineAgentMessage,
@@ -13,6 +14,7 @@ from nexus.inline_agents.models import (
 )
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
+from nexus.usecases.inline_agents.agent_constant_definitions import fields_from_yaml_constant
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.mcp_definition_sync import sync_mcp_templates_from_agent_payload
@@ -55,6 +57,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
         self.update_credentials(agent_obj, project, agent_data.get("credentials", {}))
+        self.update_constants(agent_obj, project, agent_data.get("constants", {}))
 
         old_group = agent_obj.group
 
@@ -83,7 +86,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 elif isinstance(mcp_val, str) and mcp_val:
                     mcps_data = [mcp_val]
 
-            agent_obj.mcps.clear()  # Clear existing to handle removals/updates
+            agent_obj.mcps.clear()
 
             for mcp_item in mcps_data:
                 if isinstance(mcp_item, str):
@@ -122,6 +125,54 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         invalidate_team_cache_for_agent_integration_projects(agent_obj)
 
         return agent_data
+
+    def update_constants(self, agent: Agent, project: Project, constants: Dict):
+        if not constants:
+            return
+
+        existing_constants = {row.key: row for row in AgentConstant.objects.filter(project=project)}
+
+        for key, constant_def in constants.items():
+            if not isinstance(constant_def, dict):
+                continue
+            fields = fields_from_yaml_constant(key, constant_def)
+            if key in existing_constants:
+                logger.info(f"Updating constant - key: {key}")
+                row = existing_constants[key]
+                row.label = fields["label"]
+                row.type = fields["type"]
+                row.options = fields["options"]
+                row.default_value = fields["default_value"]
+                row.is_required = fields["is_required"]
+                row.definition = fields["definition"]
+                row.save()
+                if agent not in row.agents.all():
+                    row.agents.add(agent)
+                del existing_constants[key]
+            else:
+                logger.info(f"Creating constant - key: {key}")
+                row = AgentConstant.objects.create(
+                    project=project,
+                    key=fields["key"],
+                    label=fields["label"],
+                    type=fields["type"],
+                    options=fields["options"],
+                    default_value=fields["default_value"],
+                    is_required=fields["is_required"],
+                    definition=fields["definition"],
+                )
+                row.agents.add(agent)
+
+        for row in existing_constants.values():
+            linked_agents = list(row.agents.all())
+            if not linked_agents:
+                logger.info(f"Deleting empty constant - key: {row.key}, project_uuid: {str(project.uuid)}")
+                row.delete()
+            elif len(linked_agents) == 1 and agent in linked_agents:
+                logger.info(f"Deleting constant - key: {row.key}, project_uuid: {str(project.uuid)}")
+                row.delete()
+            elif agent in linked_agents:
+                row.agents.remove(agent)
 
     def update_credentials(self, agent: Agent, project: Project, credentials: Dict):
         if not credentials:
