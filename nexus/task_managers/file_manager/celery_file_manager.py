@@ -6,7 +6,7 @@ from rest_framework import status as http_status
 from nexus.projects.models import Project
 from nexus.task_managers import tasks, tasks_bedrock
 from nexus.task_managers.file_database.file_database import FileDataBase
-from nexus.task_managers.tasks_bedrock import start_ingestion_job
+from nexus.task_managers.tasks_bedrock import trigger_bedrock_ingestion
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.usecases.intelligences.intelligences_dto import (
     ContentBaseFileDTO,
@@ -102,7 +102,7 @@ class CeleryFileManager:
         except Exception:
             project_uuid = None
 
-        start_ingestion_job(str(task_manager.uuid), project_uuid=project_uuid)
+        trigger_bedrock_ingestion(str(task_manager.uuid), project_uuid=project_uuid)
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
 
     def upload_and_ingest_inline_file(
@@ -141,7 +141,7 @@ class CeleryFileManager:
         except Exception:
             project_uuid = None
 
-        start_ingestion_job(str(task_manager.uuid), project_uuid=project_uuid)
+        trigger_bedrock_ingestion(str(task_manager.uuid), project_uuid=project_uuid)
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
 
     def upload_file(
