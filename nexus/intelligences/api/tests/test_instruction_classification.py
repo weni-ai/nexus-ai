@@ -5,6 +5,7 @@ from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from nexus.intelligences.api.views import InstructionsClassificationAPIView
+from nexus.intelligences.models import ContentBaseInstruction
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
@@ -183,3 +184,53 @@ class TestInstructionsClassificationAPIView(TestCase):
         self._mock_instruction_classify.assert_called_once()
         call_kwargs = self._mock_instruction_classify.call_args.kwargs
         self.assertEqual(call_kwargs["instructions_categories"], [])
+
+    def test_post_excludes_id_from_lambda_comparison_on_revalidate(self):
+        content_base = get_default_content_base_by_project(str(self.project.uuid))
+        content_base.instructions.all().delete()
+        existing = ContentBaseInstruction.objects.create(
+            content_base=content_base,
+            instruction="Don't talk about things that are outside your scope.",
+        )
+        ContentBaseInstruction.objects.create(
+            content_base=content_base,
+            instruction="Always greet the customer",
+        )
+
+        request = self.factory.post(
+            self.url,
+            {
+                "instruction": "Don't talk about things that are outside your scope.",
+                "id": existing.id,
+                "instructions_categories": ["policy", "greeting"],
+                "language": "en",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        call_kwargs = self._mock_instruction_classify.call_args.kwargs
+        self.assertEqual(
+            call_kwargs["instructions"],
+            [{"instruction": "Always greet the customer", "type": "custom"}],
+        )
+
+    def test_post_returns_404_for_unknown_id(self):
+        request = self.factory.post(
+            self.url,
+            {
+                "instruction": "Always greet the customer",
+                "id": 99999,
+                "language": "en",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 404, response.data)
+        self._mock_instruction_classify.assert_not_called()

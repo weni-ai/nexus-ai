@@ -266,7 +266,7 @@ class OpenAIBackend(InlineAgentsBackend):
             sentry_sdk.capture_exception(e)
             return None
 
-    def invoke_agents(
+    def invoke_agents(  # noqa: C901
         self,
         team: list[dict],
         input_text: str,

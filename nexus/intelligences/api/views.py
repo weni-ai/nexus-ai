@@ -2092,7 +2092,8 @@ class InstructionsClassificationAPIView(APIView):
         description=(
             "Classifies an instruction based on the project description, available categories, "
             "and existing content base instructions. Returns classification, suggested category, "
-            "and an improvement suggestion."
+            "and an improvement suggestion. When revalidating during edit, send id to "
+            "exclude that instruction from duplicate comparison."
         ),
         request=InstructionClassificationRequestSerializer,
         parameters=[
@@ -2133,9 +2134,16 @@ class InstructionsClassificationAPIView(APIView):
             goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
             adjective = content_base.agent.personality if content_base.agent else "friendly"
 
-            instructions = []
-            for instruction_obj in content_base.instructions.all():
-                instructions.append({"instruction": instruction_obj.instruction, "type": "custom"})
+            existing_instruction_id = serializer.validated_data.get("id")
+            instructions_qs = content_base.instructions.all()
+            if existing_instruction_id is not None:
+                if not instructions_qs.filter(id=existing_instruction_id).exists():
+                    return Response({"error": "Instruction not found"}, status=status.HTTP_404_NOT_FOUND)
+                instructions_qs = instructions_qs.exclude(id=existing_instruction_id)
+
+            instructions = [
+                {"instruction": instruction_obj.instruction, "type": "custom"} for instruction_obj in instructions_qs
+            ]
 
             from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 
