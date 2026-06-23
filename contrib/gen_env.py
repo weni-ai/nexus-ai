@@ -225,7 +225,6 @@ def generate_env():
         "APM_SERVER_URL": "",
         "APM_SERVICE_DEBUG": "False",
         "APM_SERVICE_NAME": "",
-        "ELASTIC_APM_LAMBDA_ENABLED": "False",
         "ELASTIC_APM_LAMBDA_APM_SERVER": "",
         "ELASTIC_APM_LAMBDA_SECRET_TOKEN": "",
         "ELASTIC_APM_ENVIRONMENT": "",
