@@ -45,6 +45,7 @@ class ContentBaseTextDTO:
     user_email: str
     file: str = None
     file_name: str = None
+    title: str = None
 
 
 @dataclass

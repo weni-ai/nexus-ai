@@ -7,6 +7,16 @@ from weni.feature_flags.shortcuts import is_feature_active_for_attributes
 from nexus.projects.models import Project
 
 
+def build_feature_flag_attributes(request: Request, project: Project) -> dict[str, str]:
+    attributes = {
+        "weni_project": str(project.uuid),
+        "projectUUID": str(project.uuid),
+    }
+    if request.user.is_authenticated and request.user.email:
+        attributes["userEmail"] = request.user.email
+    return attributes
+
+
 class FeatureFlagPermission(BasePermission):
     """
     Permission to check if a feature flag is active for the project in the request.
@@ -25,7 +35,7 @@ class FeatureFlagPermission(BasePermission):
 
         return is_feature_active_for_attributes(
             feature_key,
-            {"weni_project": str(project.uuid)},
+            build_feature_flag_attributes(request, project),
         )
 
     def _get_project_from_request(self, request: Request, view: APIView):

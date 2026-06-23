@@ -25,14 +25,6 @@ class ProjectMinimalSerializer(serializers.ModelSerializer):
         read_only_fields = ["name", "uuid"]
 
 
-class ConversationClassificationSerializer(serializers.Serializer):
-    topic = serializers.CharField(required=False, allow_null=True)
-    subtopic = serializers.CharField(required=False, allow_null=True)
-    confidence = serializers.FloatField(required=False, allow_null=True)
-    created_at = serializers.DateTimeField(required=False, allow_null=True)
-    updated_at = serializers.DateTimeField(required=False, allow_null=True)
-
-
 class ConversationSerializer(serializers.Serializer):
     uuid = serializers.UUIDField()
     contact_urn = serializers.CharField(required=False, allow_null=True)
@@ -46,4 +38,4 @@ class ConversationSerializer(serializers.Serializer):
     csat = serializers.CharField(required=False, allow_null=True)
     nps = serializers.IntegerField(required=False, allow_null=True)
     created_at = serializers.DateTimeField(required=False, allow_null=True)
-    classification = ConversationClassificationSerializer(required=False, allow_null=True)
+    topic = serializers.CharField(required=False, allow_null=True)

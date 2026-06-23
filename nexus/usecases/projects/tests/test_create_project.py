@@ -9,6 +9,7 @@ from nexus.actions.models import Flow
 from nexus.agents.models import Agent
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.intelligences.models import ContentBaseText
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -38,6 +39,29 @@ class MockExternalAgentClient:
 
     def create_agent_alias(self, **kwargs):
         return "sub_agent_alias_id", "sub_agent_alias_arn", "v1"
+
+
+class TestCreateProjectInlineContentBaseText(TestCase):
+    def test_create_project_with_inline_switch_has_no_content_base_text(self):
+        org = OrgFactory()
+        user = org.created_by
+        project_dto = ProjectCreationDTO(
+            uuid=uuid4().hex,
+            name="inline_no_default_text",
+            org_uuid=org.uuid,
+            is_template=False,
+            template_type_uuid=None,
+            brain_on=False,
+            authorizations=[],
+            inline_agent_switch=True,
+        )
+        project = ProjectsUseCase(event_manager_notify=mock_event_manager_notify).create_project(
+            project_dto=project_dto, user_email=user.email
+        )
+        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
+        content_base = get_default_content_base_by_project(str(project.uuid))
+        self.assertEqual(ContentBaseText.objects.filter(content_base=content_base).count(), 0)
 
 
 @skip("temporarily skipped: team provisioning differs per backend; stabilizing")

@@ -4,7 +4,12 @@ from rest_framework import serializers
 class FlowsDbCohortReconcileRequestSerializer(serializers.Serializer):
     """Body for POST ``/api/v2/<project_uuid>/flows-db-cohort`` (nexus-ai proxy)."""
 
+    DELIVERY_EMAIL = "email"
+    DELIVERY_JSON = "json"
+    DELIVERY_CHOICES = (DELIVERY_EMAIL, DELIVERY_JSON)
+
     flows_api_token = serializers.CharField(write_only=True, trim_whitespace=False)
+    delivery = serializers.ChoiceField(choices=DELIVERY_CHOICES, default=DELIVERY_EMAIL, required=False)
     date_start = serializers.CharField()
     date_end = serializers.CharField()
     apply_terminal_cohort_filter = serializers.BooleanField(default=True)
@@ -25,29 +30,52 @@ class FlowsDbCohortReconcileRequestSerializer(serializers.Serializer):
             parse_api_utc,
             validate_reconcile_date_range,
         )
+        from nexus.projects.services.reconcile_window import (
+            calendar_range_day_count,
+            parse_requested_calendar_range,
+        )
 
-        max_days = int(getattr(django_settings, "FLOWS_DB_COHORT_MAX_RANGE_DAYS", 31))
+        delivery = attrs.get("delivery", self.DELIVERY_EMAIL)
+        if delivery == self.DELIVERY_JSON:
+            max_days = int(getattr(django_settings, "FLOWS_DB_COHORT_JSON_MAX_RANGE_DAYS", 1))
+        else:
+            max_days = int(getattr(django_settings, "FLOWS_DB_COHORT_MAX_RANGE_DAYS", 31))
 
-        try:
-            start_bound = parse_api_utc(str(attrs["date_start"]).strip())
-        except ValueError as e:
-            raise serializers.ValidationError({"date_start": str(e)}) from e
-
+        start_raw = str(attrs["date_start"]).strip()
         end_raw = str(attrs["date_end"]).strip()
         try:
-            end_bound = parse_api_utc(end_raw)
+            cal_range = parse_requested_calendar_range(start_raw, end_raw)
         except ValueError as e:
             raise serializers.ValidationError({"date_end": str(e)}) from e
 
-        try:
-            validate_reconcile_date_range(start_bound, end_bound, max_days)
-        except ValueError as e:
-            raise serializers.ValidationError({"date_end": str(e)}) from e
+        if cal_range is not None:
+            cal_start, cal_end = cal_range
+            try:
+                day_count = calendar_range_day_count(cal_start, cal_end)
+                if day_count > max_days:
+                    raise ValueError(f"Date range spans {day_count} days; maximum is {max_days}")
+            except ValueError as e:
+                raise serializers.ValidationError({"date_end": str(e)}) from e
+        else:
+            try:
+                start_bound = parse_api_utc(start_raw)
+            except ValueError as e:
+                raise serializers.ValidationError({"date_start": str(e)}) from e
+
+            try:
+                end_bound = parse_api_utc(end_raw)
+            except ValueError as e:
+                raise serializers.ValidationError({"date_end": str(e)}) from e
+
+            try:
+                validate_reconcile_date_range(start_bound, end_bound, max_days)
+            except ValueError as e:
+                raise serializers.ValidationError({"date_end": str(e)}) from e
 
         token = str(attrs.get("flows_api_token", "")).strip()
         if not token:
             raise serializers.ValidationError({"flows_api_token": "This field may not be blank."})
         attrs["flows_api_token"] = token
-        attrs["date_start"] = str(attrs["date_start"]).strip()
+        attrs["date_start"] = start_raw
         attrs["date_end"] = end_raw
         return attrs

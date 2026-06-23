@@ -395,8 +395,10 @@ class SupervisorPublicConversationsViewV2(APIView):
 
     def _transform_conversation(self, item, messages=None):
         """Transform nexus-conversations item to SupervisorPublicConversationItem format."""
-        classification = item.get("classification") or {}
-        topic = classification.get("topic") if isinstance(classification, dict) else None
+        topic = item.get("topic")
+        if topic is None:
+            classification = item.get("classification") or {}
+            topic = classification.get("topic") if isinstance(classification, dict) else None
         messages = messages if messages is not None else (item.get("messages") or [])
 
         return {

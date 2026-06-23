@@ -243,7 +243,7 @@ class OpenAIBackend(InlineAgentsBackend):
             sentry_sdk.capture_exception(e)
             return None
 
-    def invoke_agents(
+    def invoke_agents(  # noqa: C901
         self,
         team: list[dict],
         input_text: str,
@@ -319,6 +319,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
         message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
         skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)
+        hooks_state.message_conversation_log_uuid = message_conversation_log_uuid
 
         save_inline_message_async.delay(
             project_uuid=project_uuid,

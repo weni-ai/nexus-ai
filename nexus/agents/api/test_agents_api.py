@@ -1,11 +1,14 @@
 import json
+from datetime import timedelta
 from unittest import mock
 from urllib.parse import urlencode
 
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Max
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
 from nexus.agents.api.views import InternalCommunicationPermission
@@ -67,6 +70,31 @@ class AgentViewsetSetTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content), 2)
+        for row in content:
+            self.assertIn("last_updated", row)
+            self.assertIsNone(row["last_updated"])
+
+    def test_get_my_agents_last_updated_from_latest_cli_version(self):
+        from nexus.inline_agents.api.serializers.catalog import format_agent_last_updated
+
+        older = timezone.now() - timedelta(days=2)
+        newer = timezone.now() - timedelta(hours=1)
+        v1 = Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        v2 = Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        Version.objects.filter(pk=v1.pk).update(created_on=older)
+        Version.objects.filter(pk=v2.pk).update(created_on=newer)
+        expected = format_agent_last_updated(
+            Version.objects.filter(agent=self.agent).aggregate(last=Max("created_on"))["last"]
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(r for r in content if r["uuid"] == str(self.agent.uuid))
+        self.assertEqual(row["last_updated"], expected)
 
     def test_get_my_agents_with_search(self):
         query_params = {"search": "information"}
@@ -341,6 +369,36 @@ class TeamViewsetSetTestCase(TestCase):
         )
         self.assertIsNone(row.get("group"))
 
+    def test_get_team_last_updated_from_latest_cli_version(self):
+        from nexus.inline_agents.api.serializers.catalog import format_agent_last_updated
+
+        agent = InlineAgent.objects.create(
+            name="Versioned Agent",
+            slug="versioned_agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        IntegratedAgent.objects.create(agent=agent, project=self.project)
+        older = timezone.now() - timedelta(days=2)
+        newer = timezone.now() - timedelta(hours=1)
+        v1 = Version.objects.create(skills=[], display_skills=[], agent=agent)
+        v2 = Version.objects.create(skills=[], display_skills=[], agent=agent)
+        Version.objects.filter(pk=v1.pk).update(created_on=older)
+        Version.objects.filter(pk=v2.pk).update(created_on=newer)
+        expected = format_agent_last_updated(
+            Version.objects.filter(agent=agent).aggregate(last=Max("created_on"))["last"]
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        row = next(r for r in json.loads(response.content)["agents"] if r["uuid"] == str(agent.uuid))
+        self.assertEqual(row["last_updated"], expected)
+
     def test_get_team_excludes_inactive_integrated_agents(self):
         """Agents with is_active=False on IntegratedAgent do not appear in team list."""
 
@@ -524,6 +582,33 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(len(row["mcps"]), 1)
         self.assertEqual(row["mcps"][0]["name"], "Team Config MCP")
         self.assertEqual(row["mcps"][0]["config"], {"Country": "BRA"})
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=False)
+    def test_get_team_internal_communication_permission_grants_access(self, _mock_has_project_perm):
+        internal_user = UserFactory()
+        content_type = ContentType.objects.get_for_model(internal_user)
+        permission, _ = Permission.objects.get_or_create(
+            codename="can_communicate_internally",
+            name="can communicate internally",
+            content_type=content_type,
+        )
+        internal_user.user_permissions.add(permission)
+        internal_user = type(internal_user).objects.get(pk=internal_user.pk)
+
+        client = APIClient()
+        client.force_authenticate(user=internal_user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=False)
+    def test_get_team_unauthorized_user_returns_403(self, _mock_has_project_perm):
+        unauthorized_user = UserFactory()
+        client = APIClient()
+        client.force_authenticate(user=unauthorized_user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        self.assertEqual(response.status_code, 403)
 
 
 class ActivateAgentViewTestCase(TestCase):
@@ -1356,8 +1441,15 @@ class CatalogRowKeyParityTestCase(TestCase):
     def _assert_catalog_row_keys(self, row: dict) -> None:
         self.assertEqual(frozenset(row.keys()), self.expected_keys)
         self.assertNotIn("agents", row)
+        self.assertNotIn("last_updated", row)
 
-    def test_my_agents_and_team_share_row_keys(self):
+    def _assert_my_agents_row_keys(self, row: dict) -> None:
+        from nexus.inline_agents.api.serializers.catalog import MY_AGENTS_LAST_UPDATED_KEY
+
+        self.assertEqual(frozenset(row.keys()), self.expected_keys | {MY_AGENTS_LAST_UPDATED_KEY})
+        self.assertNotIn("agents", row)
+
+    def test_my_agents_uses_catalog_row_keys(self):
         client = APIClient()
         client.force_authenticate(user=self.user)
         project_uuid = str(self.project.uuid)
@@ -1365,21 +1457,22 @@ class CatalogRowKeyParityTestCase(TestCase):
         my_resp = client.get(reverse("my-agents", kwargs={"project_uuid": project_uuid}))
         my_resp.render()
         my_row = next(r for r in json.loads(my_resp.content) if r["uuid"] == str(self.agent.uuid))
+        self._assert_my_agents_row_keys(my_row)
+
+    def test_team_roster_includes_last_updated(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        project_uuid = str(self.project.uuid)
 
         team_resp = client.get(reverse("teams", kwargs={"project_uuid": project_uuid}))
         team_resp.render()
         team_row = next(r for r in json.loads(team_resp.content)["agents"] if r["uuid"] == str(self.agent.uuid))
-
-        for row in (my_row, team_row):
-            self._assert_catalog_row_keys(row)
+        self.assertIn("last_updated", team_row)
+        self.assertIsNotNone(team_row["last_updated"])
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_v1_official_group_row_matches_custom_agent_row_keys(self, mock_has_permission):
         mock_has_permission.return_value = True
-        owner = ProjectFactory()
-        self.agent.project = owner
-        self.agent.save(update_fields=["project"])
-
         client = APIClient()
         client.force_authenticate(user=self.user)
         project_uuid = str(self.project.uuid)
@@ -1398,7 +1491,8 @@ class CatalogRowKeyParityTestCase(TestCase):
         group_row = next(r for r in _official_v1_grouped_rows(resp.json()) if r["group"] == self.group.slug)
         self._assert_catalog_row_keys(group_row)
         self.assertEqual(group_row["name"], "Parity Display")
-        self.assertEqual(frozenset(group_row.keys()), frozenset(my_row.keys()))
+        self._assert_my_agents_row_keys(my_row)
+        self.assertNotIn("last_updated", group_row)
 
 
 class OfficialAvailableSystemsV1TestCase(TestCase):
