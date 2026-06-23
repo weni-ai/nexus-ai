@@ -503,7 +503,7 @@ class InstructionClassificationRequestSerializer(serializers.Serializer):
         required=True,
         help_text=("Language code for classification context (e.g., pt-br, en, es)."),
     )
-    instruction_id = serializers.IntegerField(
+    id = serializers.IntegerField(
         required=False,
         help_text=(
             "When revalidating an existing instruction, its ID. "

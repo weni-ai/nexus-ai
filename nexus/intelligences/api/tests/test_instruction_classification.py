@@ -185,7 +185,7 @@ class TestInstructionsClassificationAPIView(TestCase):
         call_kwargs = self._mock_instruction_classify.call_args.kwargs
         self.assertEqual(call_kwargs["instructions_categories"], [])
 
-    def test_post_excludes_instruction_id_from_lambda_comparison_on_revalidate(self):
+    def test_post_excludes_id_from_lambda_comparison_on_revalidate(self):
         content_base = get_default_content_base_by_project(str(self.project.uuid))
         content_base.instructions.all().delete()
         existing = ContentBaseInstruction.objects.create(
@@ -201,7 +201,7 @@ class TestInstructionsClassificationAPIView(TestCase):
             self.url,
             {
                 "instruction": "Don't talk about things that are outside your scope.",
-                "instruction_id": existing.id,
+                "id": existing.id,
                 "instructions_categories": ["policy", "greeting"],
                 "language": "en",
             },
@@ -218,12 +218,12 @@ class TestInstructionsClassificationAPIView(TestCase):
             [{"instruction": "Always greet the customer", "type": "custom"}],
         )
 
-    def test_post_returns_404_for_unknown_instruction_id(self):
+    def test_post_returns_404_for_unknown_id(self):
         request = self.factory.post(
             self.url,
             {
                 "instruction": "Always greet the customer",
-                "instruction_id": 99999,
+                "id": 99999,
                 "language": "en",
             },
             format="json",
