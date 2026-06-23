@@ -13,7 +13,7 @@ from nexus.inline_agents.models import (
 )
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
-from nexus.usecases.inline_agents.bedrock import BedrockClient
+from nexus.usecases.inline_agents.bedrock import APM_INSTRUMENTATION_UNCHANGED, BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.mcp_definition_sync import sync_mcp_templates_from_agent_payload
 from nexus.usecases.inline_agents.tools import ToolsUseCase
@@ -43,7 +43,14 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def __init__(self, agent_backend_client=BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
-    def update_agent(self, agent_obj: Agent, agent_data: dict, project: Project, files: dict):
+    def update_agent(
+        self,
+        agent_obj: Agent,
+        agent_data: dict,
+        project: Project,
+        files: dict,
+        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
+    ):
         instructions: str = self.handle_instructions(
             agent_data.get("instructions", []), agent_data.get("guardrails", []), agent_data.get("components", [])
         )
@@ -53,7 +60,9 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         agent_obj.instruction = instructions
         agent_obj.save()
 
-        self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
+        self.handle_tools(
+            agent_obj, project, agent_data["tools"], files, str(project.uuid), apm_instrumentation
+        )
         self.update_credentials(agent_obj, project, agent_data.get("credentials", {}))
 
         old_group = agent_obj.group
