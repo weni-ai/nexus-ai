@@ -46,6 +46,11 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
+from nexus.usecases.inline_agents.bedrock import (
+    APM_INSTRUMENTATION_UNCHANGED,
+    APMNotConfiguredError,
+    VALID_APM_INSTRUMENTATION,
+)
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
@@ -190,8 +195,22 @@ class PushAgents(APIView):
         if "agents" not in agents or not isinstance(agents.get("agents"), dict):
             raise ValueError("agents.agents must be an object")
         project_uuid = request.data.get("project_uuid")
+        apm_instrumentation = self._parse_apm_instrumentation(request)
 
-        return files, agents, project_uuid
+        return files, agents, project_uuid, apm_instrumentation
+
+    def _parse_apm_instrumentation(self, request) -> str:
+        raw_value = request.data.get("apm_instrumentation")
+        if raw_value is None or raw_value == "":
+            return APM_INSTRUMENTATION_UNCHANGED
+
+        if raw_value not in VALID_APM_INSTRUMENTATION:
+            raise ValueError(
+                f"Invalid apm_instrumentation value: {raw_value}. "
+                f"Must be one of: {', '.join(sorted(VALID_APM_INSTRUMENTATION))}"
+            )
+
+        return raw_value
 
     def _check_can_edit_official_agent(self, agents, user_email):
         for key in agents:
@@ -211,7 +230,7 @@ class PushAgents(APIView):
         update_agent_usecase = UpdateAgentUseCase()
 
         try:
-            files, agents, project_uuid = self._validate_request(request)
+            files, agents, project_uuid, apm_instrumentation = self._validate_request(request)
             agents = agents["agents"]
         except (ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
             return Response({"error": str(e)}, status=400)
@@ -253,10 +272,12 @@ class PushAgents(APIView):
                 existing_agent = agent_qs.exists()
                 if existing_agent:
                     logger.info(f"Updating agent - key: {key}")
-                    update_agent_usecase.update_agent(agent_qs.first(), agents[key], project, files)
+                    update_agent_usecase.update_agent(
+                        agent_qs.first(), agents[key], project, files, apm_instrumentation
+                    )
                 else:
                     logger.info(f"Creating agent - key: {key}")
-                    agent_usecase.create_agent(key, agents[key], project, files)
+                    agent_usecase.create_agent(key, agents[key], project, files, apm_instrumentation)
 
             # Fire cache invalidation event for team update (agents are part of team) (async observer)
             notify_async(
@@ -264,6 +285,8 @@ class PushAgents(APIView):
                 project_uuid=project_uuid,
             )
 
+        except APMNotConfiguredError as e:
+            return Response({"error": str(e)}, status=400)
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
 
