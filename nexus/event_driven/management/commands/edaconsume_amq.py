@@ -4,6 +4,7 @@ import signal
 from weni.eda.django.eda_app.management.commands.edaconsume import Command as WeniEDACommand
 
 AMQ_PARAMS_CLASS = "weni.eda.django.AMQConnectionParamsFactory"
+AMQ_CONNECTION_BACKEND = "weni.eda.backends.pyamqp_backend.PyAMQPConnectionBackend"
 AMQ_CONSUMERS_HANDLE = "nexus.event_driven.handle_amq.handle_amq_consumers"
 
 
@@ -37,4 +38,5 @@ class Command(WeniEDACommand):
         signal.signal(signal.SIGTERM, handle_sigterm)
         options["params_class"] = AMQ_PARAMS_CLASS
         options["handle"] = AMQ_CONSUMERS_HANDLE
+        options["backend"] = AMQ_CONNECTION_BACKEND
         super().handle(*args, **options)
