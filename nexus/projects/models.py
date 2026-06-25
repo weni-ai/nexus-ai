@@ -209,3 +209,20 @@ class ProjectApiToken(models.Model):
         salt = secrets.token_hex(16)
         token_hash = ProjectApiToken.hash_token(token, salt)
         return token, salt, token_hash
+
+
+class ProjectAIResolutionCriterion(BaseModel, SoftDeleteModel):
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="ai_resolution_criteria",
+    )
+    text = models.TextField()
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "project_ai_resolution_criteria"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.project.uuid} - {self.uuid}"
