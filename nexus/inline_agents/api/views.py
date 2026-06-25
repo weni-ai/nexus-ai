@@ -235,6 +235,11 @@ class PushAgents(APIView):
         except (ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
             return Response({"error": str(e)}, status=400)
 
+        logger.info(
+            "Push agents request for project %s (apm_instrumentation=%s)",
+            project_uuid,
+            apm_instrumentation,
+        )
         logger.debug(f"Agents payload - agent_keys: {list(agents.keys()) if isinstance(agents, dict) else None}")
         logger.debug(f"Files payload - file_count: {len(files) if hasattr(files, '__len__') else None}")
 

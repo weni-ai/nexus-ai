@@ -401,6 +401,47 @@ class TestBedrockClientElasticAPM(TestCase):
         AWS_BEDROCK_REGION_NAME="us-east-1",
     )
     @patch.object(BedrockClient, "update_lambda_alias")
+    def test_update_lambda_function_applies_config_before_publish_when_removing_apm(self, mock_update_alias):
+        """Configuration changes must happen before publish so the version snapshot excludes APM."""
+        mock_lambda_client = Mock()
+        mock_lambda_client.update_function_code.return_value = {
+            "Version": "2",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
+        }
+        mock_lambda_client.get_waiter.return_value.wait = Mock()
+        apm_extension_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-x86_64:1"
+        apm_python_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-python-ver-6-25-0:1"
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
+            "Layers": [
+                {"Arn": apm_extension_layer},
+                {"Arn": apm_python_layer},
+            ],
+            "Environment": {
+                "Variables": {
+                    "AWS_LAMBDA_EXEC_WRAPPER": "/opt/python/bin/elasticapm-lambda",
+                    "ELASTIC_APM_LAMBDA_APM_SERVER": "https://apm-server.example.com",
+                    "ELASTIC_APM_SECRET_TOKEN": "old-token",
+                }
+            },
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.update_lambda_function(
+            self.lambda_name, self.zip_buffer, apm_instrumentation=APM_INSTRUMENTATION_DISABLED
+        )
+
+        call_names = [call[0] for call in mock_lambda_client.method_calls]
+        config_index = call_names.index("update_function_configuration")
+        code_index = call_names.index("update_function_code")
+        self.assertLess(config_index, code_index)
+        mock_update_alias.assert_called_once_with(self.lambda_name, "2")
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    @patch.object(BedrockClient, "update_lambda_alias")
     def test_update_lambda_function_removes_apm_when_disabled(self, mock_update_alias):
         """Tests that disabled instrumentation removes APM layers and variables"""
         mock_lambda_client = Mock()
@@ -716,51 +757,20 @@ class TestBedrockClientElasticAPM(TestCase):
     )
     @patch.object(BedrockClient, "update_lambda_alias")
     @patch("nexus.usecases.inline_agents.bedrock.logger")
-    def test_update_lambda_function_with_apm_enabled_handles_exception(self, mock_logger, mock_update_alias):
-        """Tests that update handles exceptions when getting current configuration and logs the error"""
+    def test_update_lambda_function_with_apm_enabled_raises_when_config_unavailable(self, mock_logger, mock_update_alias):
+        """Tests that explicit APM updates fail when current configuration cannot be read"""
         mock_lambda_client = Mock()
-        mock_lambda_client.update_function_code.return_value = {
-            "Version": "2",
-            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
-        }
         mock_lambda_client.get_waiter.return_value.wait = Mock()
         config_error = Exception("Config error")
         mock_lambda_client.get_function_configuration.side_effect = config_error
         self.client.lambda_client = mock_lambda_client
 
-        self.client.update_lambda_function(
-            self.lambda_name, self.zip_buffer, apm_instrumentation=APM_INSTRUMENTATION_ENABLED
-        )
+        with self.assertRaises(RuntimeError):
+            self.client.update_lambda_function(
+                self.lambda_name, self.zip_buffer, apm_instrumentation=APM_INSTRUMENTATION_ENABLED
+            )
 
-        # Verify that error was logged with proper context
         mock_logger.error.assert_called_once()
-        error_call_args = mock_logger.error.call_args
-        self.assertEqual(error_call_args.args[0], "Failed to get current Lambda function configuration")
-        self.assertIn("lambda_name", error_call_args.kwargs["extra"])
-        self.assertEqual(error_call_args.kwargs["extra"]["lambda_name"], self.lambda_name)
-        self.assertIn("error_type", error_call_args.kwargs["extra"])
-        self.assertIn("error_message", error_call_args.kwargs["extra"])
-        self.assertTrue(error_call_args.kwargs["exc_info"])
-
-        # Verify that update_function_configuration was called even with error
-        mock_lambda_client.update_function_configuration.assert_called_once()
-
-        # Verify that only APM variables were used (fallback)
-        call_args = mock_lambda_client.update_function_configuration.call_args
-        call_kwargs = call_args.kwargs
-        env_vars = call_kwargs["Environment"]["Variables"]
-
-        self.assertEqual(len(env_vars), 6)
-        self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
-        self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
-        self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
-        self.assertIn("ELASTIC_APM_LOG_LEVEL", env_vars)
-        self.assertEqual(env_vars["ELASTIC_APM_LOG_LEVEL"], "off")
-
-        # Verify that layers fallback to settings architecture (x86_64) when config fetch fails
-        self.assertIn("Layers", call_kwargs)
-        layers = call_kwargs["Layers"]
-        expected_extension_layer = (
-            "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-x86_64:1"
-        )
-        self.assertIn(expected_extension_layer, layers)
+        mock_lambda_client.update_function_code.assert_not_called()
+        mock_lambda_client.update_function_configuration.assert_not_called()
+        mock_update_alias.assert_not_called()
