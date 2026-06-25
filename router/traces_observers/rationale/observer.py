@@ -112,29 +112,7 @@ class RationaleObserver(EventObserver):
         **kwargs,
     ) -> None:
         """Process rationale from inline traces."""
-        from router.traces_observers.rationale.channel_hint import (
-            channel_hint_from_contact_urn,
-            supports_progressive_feedback,
-        )
-
         if not rationale_switch or turn_off_rationale:
-            return
-
-        channel_type = kwargs.get("channel_type", "")
-        if not supports_progressive_feedback(
-            contact_urn,
-            channel_type,
-            preview=preview,
-            preview_websocket=preview_websocket,
-        ):
-            logger.info(
-                "[ProgressiveFeedback] Skipped rationale processing project_uuid=%s channel_from_urn=%s "
-                "contact_urn=%s channel_type=%s reason=non_webchat",
-                project_uuid,
-                channel_hint_from_contact_urn(contact_urn),
-                contact_urn,
-                channel_type or None,
-            )
             return
 
         try:
