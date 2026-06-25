@@ -790,7 +790,7 @@ class BatchContentBaseFileMixin:
         user_email: str = user.email
         extension_file: str = request.data.get("extension_file")
 
-        project_error = self._validate_direct_bedrock_project(content_base_uuid)
+        project_error = self._validate_bedrock_project_for_batch(content_base_uuid)
         if project_error:
             return project_error
 
@@ -804,7 +804,7 @@ class BatchContentBaseFileMixin:
         )
         return Response(data=data, status=response_status)
 
-    def _validate_direct_bedrock_project(self, content_base_uuid: str):
+    def _validate_bedrock_project_for_batch(self, content_base_uuid: str):
         from rest_framework import status as http_status
 
         try:
@@ -818,18 +818,12 @@ class BatchContentBaseFileMixin:
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
-        if project.bedrock_ingestion_strategy != Project.BEDROCK_INGESTION_DIRECT:
-            return Response(
-                data={"message": "This endpoint requires direct Bedrock ingestion strategy"},
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
-
         return None
 
     def _handle_batch_ingestion_progress(self, request, content_base_uuid: str):
         from rest_framework import status as http_status
 
-        project_error = self._validate_direct_bedrock_project(content_base_uuid)
+        project_error = self._validate_bedrock_project_for_batch(content_base_uuid)
         if project_error:
             return project_error
 

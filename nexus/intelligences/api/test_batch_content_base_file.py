@@ -105,9 +105,15 @@ class BatchContentBaseFileViewsetTestCase(TestCase):
         submitted_filenames = mock_batch_submit.call_args.args[2]
         self.assertEqual(submitted_filenames, ["file-a.txt", "file-b.txt"])
 
-    def test_batch_create_rejects_job_strategy(self):
+    @patch("nexus.task_managers.file_manager.celery_file_manager.direct_ingest_batch_submit.delay")
+    @patch("nexus.task_managers.file_database.bedrock.BedrockFileDatabase")
+    def test_batch_create_accepts_job_strategy(self, mock_bedrock_cls, mock_batch_submit):
         self.project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_JOB
         self.project.save(update_fields=["bedrock_ingestion_strategy"])
+
+        mock_bedrock = MagicMock()
+        mock_bedrock_cls.return_value = mock_bedrock
+        mock_bedrock.multipart_upload.return_value = ("file-a.txt", "https://example.com/file-a.txt")
 
         files = [SimpleUploadedFile("file-a.txt", b"content a")]
         response = self.client.post(
@@ -116,5 +122,9 @@ class BatchContentBaseFileViewsetTestCase(TestCase):
             format="multipart",
         )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["message"], "This endpoint requires direct Bedrock ingestion strategy")
+        self.assertEqual(response.status_code, 201)
+        mock_bedrock_cls.assert_called_with(
+            project_uuid=str(self.project.uuid),
+            force_direct_ingest=True,
+        )
+        mock_batch_submit.assert_called_once()

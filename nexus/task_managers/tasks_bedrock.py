@@ -137,6 +137,7 @@ def _schedule_direct_ingest_poll(
     file_type: str,
     project_uuid: str | None,
     poll_count: int,
+    force_direct_ingest: bool = False,
 ) -> None:
     direct_ingest.delay(
         celery_task_manager_uuid,
@@ -145,6 +146,7 @@ def _schedule_direct_ingest_poll(
         waiting_time=DIRECT_INGEST_POLL_WAIT_SECONDS,
         ingest_submitted=True,
         poll_count=poll_count,
+        force_direct_ingest=force_direct_ingest,
     )
 
 
@@ -156,6 +158,7 @@ def direct_ingest(
     waiting_time: int = 0,
     ingest_submitted: bool = False,
     poll_count: int = 0,
+    force_direct_ingest: bool = False,
 ):
     if waiting_time:
         sleep(waiting_time)
@@ -176,7 +179,7 @@ def direct_ingest(
         task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
         return True
 
-    file_database = BedrockFileDatabase(project_uuid=project_uuid)
+    file_database = BedrockFileDatabase(project_uuid=project_uuid, force_direct_ingest=force_direct_ingest)
 
     if ingest_submitted:
         logger.info("🦑 BEDROCK: Polling direct ingest document status")
@@ -218,7 +221,9 @@ def direct_ingest(
     if doc_status in DIRECT_INGEST_IN_PROGRESS_STATUSES or doc_status is None:
         processing_status = TaskManager.status_map.get("IN_PROGRESS")
         task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
-        _schedule_direct_ingest_poll(celery_task_manager_uuid, file_type, project_uuid, poll_count + 1)
+        _schedule_direct_ingest_poll(
+            celery_task_manager_uuid, file_type, project_uuid, poll_count + 1, force_direct_ingest
+        )
         return True
 
     if doc_status == DIRECT_INGEST_SUCCESS_STATUS:
@@ -234,7 +239,9 @@ def direct_ingest(
             logger.warning(f"🦑 BEDROCK: Document indexed but not yet searchable, will retry. Error: {e}")
             processing_status = TaskManager.status_map.get("IN_PROGRESS")
             task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
-            _schedule_direct_ingest_poll(celery_task_manager_uuid, file_type, project_uuid, poll_count + 1)
+            _schedule_direct_ingest_poll(
+                celery_task_manager_uuid, file_type, project_uuid, poll_count + 1, force_direct_ingest
+            )
         return True
 
     logger.warning(f"🦑 BEDROCK: Unknown direct ingest status: {doc_status}")
@@ -270,7 +277,7 @@ def direct_ingest_batch_submit(
             task_manager_usecase.update_task_status(task_manager_uuid, TaskManager.STATUS_FAIL, "file")
         return True
 
-    file_database = BedrockFileDatabase(project_uuid=project_uuid)
+    file_database = BedrockFileDatabase(project_uuid=project_uuid, force_direct_ingest=True)
     chunk_size = settings.BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST
 
     try:
@@ -290,6 +297,7 @@ def direct_ingest_batch_submit(
             project_uuid=project_uuid,
             ingest_submitted=True,
             poll_count=0,
+            force_direct_ingest=True,
         )
     return True
 
