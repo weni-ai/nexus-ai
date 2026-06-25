@@ -1,7 +1,8 @@
 import csv
 import io
-from typing import Any
+from typing import Any, List, Optional
 
+from django.conf import settings
 from django.forms.models import model_to_dict
 
 from nexus.events import event_manager, notify_async
@@ -215,3 +216,24 @@ class ProjectInstructionsUseCase:
                 new_instruction_data=model_to_dict(instruction),
                 user=user,
             )
+
+
+def resolve_retail_instructions(request_instructions: Optional[List[str]]) -> List[str]:
+    if request_instructions is not None:
+        return request_instructions
+    return settings.DEFAULT_RETAIL_INSTRUCTIONS
+
+
+def build_instruction_create_payload(instructions: List[str]) -> List[dict]:
+    return [{"instruction": instruction} for instruction in instructions]
+
+
+def build_initial_retail_instruction_payload(
+    content_base: ContentBase,
+    request_instructions: Optional[List[str]],
+) -> List[dict]:
+    if content_base.instructions.exists():
+        return []
+
+    instructions = resolve_retail_instructions(request_instructions)
+    return build_instruction_create_payload(instructions)
