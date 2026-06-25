@@ -1,3 +1,6 @@
+from uuid import UUID
+
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 
 from nexus.projects.ai_resolution_criteria_constants import (
@@ -36,19 +39,23 @@ class AIResolutionCriteriaUseCase:
         normalized_text = self._normalize_text(text)
         mode = "update" if criterion_id else "create"
 
+        parsed_criterion_id = None
         if criterion_id:
-            self._ensure_not_base_criterion(criterion_id)
-            if not self._active_custom_queryset(project).filter(uuid=criterion_id).exists():
+            parsed_criterion_id = self._parse_custom_criterion_id(criterion_id)
+            if not self._active_custom_queryset(project).filter(uuid=parsed_criterion_id).exists():
                 raise ResolutionCriterionNotFound()
 
-        existing_criteria = self._build_existing_criteria(project, exclude_criterion_id=criterion_id)
+        existing_criteria = self._build_existing_criteria(
+            project,
+            exclude_criterion_id=str(parsed_criterion_id) if parsed_criterion_id else None,
+        )
         lambda_usecase = LambdaUseCase()
         is_valid, code, message = lambda_usecase.validate_resolution_criterion(
             project_id=str(project.uuid),
             candidate_text=normalized_text,
             existing_criteria=existing_criteria,
             mode=mode,
-            criterion_id=str(criterion_id) if criterion_id else None,
+            criterion_id=str(parsed_criterion_id) if parsed_criterion_id else None,
         )
 
         if not is_valid:
@@ -68,13 +75,13 @@ class AIResolutionCriteriaUseCase:
         return serialize_custom_criterion(criterion)
 
     def update_criterion(self, project_uuid: str, criterion_id: str, text: str, user) -> dict:
-        self._ensure_not_base_criterion(criterion_id)
+        parsed_criterion_id = self._parse_custom_criterion_id(criterion_id)
         project = self.get_project(project_uuid)
         normalized_text = self._normalize_text(text)
 
         try:
-            criterion = self._active_custom_queryset(project).get(uuid=criterion_id)
-        except ProjectAIResolutionCriterion.DoesNotExist as exc:
+            criterion = self._active_custom_queryset(project).get(uuid=parsed_criterion_id)
+        except (ProjectAIResolutionCriterion.DoesNotExist, DjangoValidationError) as exc:
             raise ResolutionCriterionNotFound() from exc
 
         criterion.text = normalized_text
@@ -84,12 +91,12 @@ class AIResolutionCriteriaUseCase:
         return serialize_custom_criterion(criterion)
 
     def delete_criterion(self, project_uuid: str, criterion_id: str) -> None:
-        self._ensure_not_base_criterion(criterion_id)
+        parsed_criterion_id = self._parse_custom_criterion_id(criterion_id)
         project = self.get_project(project_uuid)
 
         try:
-            criterion = self._active_custom_queryset(project).get(uuid=criterion_id)
-        except ProjectAIResolutionCriterion.DoesNotExist as exc:
+            criterion = self._active_custom_queryset(project).get(uuid=parsed_criterion_id)
+        except (ProjectAIResolutionCriterion.DoesNotExist, DjangoValidationError) as exc:
             raise ResolutionCriterionNotFound() from exc
 
         criterion.is_active = False
@@ -110,7 +117,11 @@ class AIResolutionCriteriaUseCase:
 
         custom_queryset = self._active_custom_queryset(project)
         if exclude_criterion_id:
-            custom_queryset = custom_queryset.exclude(uuid=exclude_criterion_id)
+            try:
+                exclude_uuid = UUID(str(exclude_criterion_id))
+            except (ValueError, AttributeError, TypeError):
+                exclude_uuid = exclude_criterion_id
+            custom_queryset = custom_queryset.exclude(uuid=exclude_uuid)
 
         for criterion in custom_queryset:
             existing.append(
@@ -125,6 +136,13 @@ class AIResolutionCriteriaUseCase:
     def _ensure_not_base_criterion(self, criterion_id: str) -> None:
         if criterion_id in get_base_criterion_ids():
             raise UnauthorizedBaseCriterionChange()
+
+    def _parse_custom_criterion_id(self, criterion_id: str) -> UUID:
+        self._ensure_not_base_criterion(criterion_id)
+        try:
+            return UUID(str(criterion_id))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ResolutionCriterionNotFound() from exc
 
     def _normalize_text(self, text: str) -> str:
         normalized = (text or "").strip()
