@@ -9,6 +9,8 @@ from rest_framework.test import APIClient, APIRequestFactory
 from nexus.events import notify_async_sync
 from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
+from router.repositories.mocks import MockCacheRepository
+from router.services.cache_service import CacheService
 
 _TEST_ERROR_MESSAGES = {
     "en-us": "Sorry, I was unable to process your request. Try again.",
@@ -325,6 +327,17 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         self.url = reverse("project-api-error-message", kwargs={"project_uuid": str(self.project.uuid)})
+        self.cache_repo = MockCacheRepository()
+        self.cache_service = CacheService(cache_repository=self.cache_repo)
+        self.cache_service_patcher = mock.patch(
+            "inline_agents.backends.openai.backend.CacheService",
+            return_value=self.cache_service,
+        )
+        self.cache_service_patcher.start()
+
+    def tearDown(self):
+        self.cache_service_patcher.stop()
+        self.cache_repo.clear()
 
     @override_settings(DEFAULT_ERROR_MESSAGES=_TEST_ERROR_MESSAGES)
     @mock.patch("inline_agents.backends.openai.backend.ConnectRESTClient")

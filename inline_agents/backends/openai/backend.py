@@ -48,6 +48,7 @@ from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.services.cache_service import CacheService
 from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
