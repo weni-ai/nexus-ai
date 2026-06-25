@@ -70,6 +70,7 @@ from nexus.usecases.intelligences.exceptions import (
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.usecases.intelligences.instructions import build_initial_retail_instruction_payload
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -1308,15 +1309,9 @@ class RouterRetailViewSet(views.APIView):
 
         agent_data = request.data.get("agent")
 
-        instructions_objects = []
-        if not content_base.instructions.exists():
-            default_instructions: list = settings.DEFAULT_RETAIL_INSTRUCTIONS
-            for instruction in default_instructions:
-                instructions_objects.append(
-                    {
-                        "instruction": instruction,
-                    }
-                )
+        instructions_objects = build_initial_retail_instruction_payload(
+            content_base, request.data.get("instructions")
+        )
 
         agent = {"agent": agent_data, "instructions": instructions_objects}
         request.data["instructions"] = instructions_objects

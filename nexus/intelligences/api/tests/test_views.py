@@ -590,6 +590,32 @@ class TestRetailRouterViewset(APITestCase):
         self.assertEqual(instructions[1]["instruction"], "Dont change the subject")
 
     @mock.patch("django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS", ["Try to use emojis", "Dont change the subject"])
+    def test_with_request_instructions(self):
+        data = {
+            "agent": {
+                "name": "test",
+                "role": "Doubt analyst",
+                "personality": "Friendly",
+                "goal": "Answer user questions",
+            },
+            "instructions": ["Use a formal tone", "Always mention promotions"],
+        }
+
+        request = self.factory.post(self.url, data=data, format="json")
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+
+        response_json = json.loads(response.content)
+        instructions = response_json.get("personalization").get("instructions")
+
+        self.assertEqual(len(instructions), 2)
+        self.assertEqual(instructions[0]["instruction"], "Use a formal tone")
+        self.assertEqual(instructions[1]["instruction"], "Always mention promotions")
+
+    @mock.patch("django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS", ["Try to use emojis", "Dont change the subject"])
     def test_without_links(self):
         data = {
             "agent": {
