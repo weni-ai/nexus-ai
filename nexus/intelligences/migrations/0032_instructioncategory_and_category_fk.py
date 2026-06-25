@@ -9,7 +9,7 @@ def reset_existing_instructions_to_uncategorized(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("intelligences", "0029_contentbaseinstruction_suggested_category"),
+        ("intelligences", "0031_contentbaseinstruction_suggested_category"),
     ]
 
     operations = [
