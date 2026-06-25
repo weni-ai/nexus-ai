@@ -81,7 +81,7 @@ class BedrockFileDatabase(FileDataBase):
         return f"{cleaned}/" if cleaned else ""
 
     def _resolve_s3_key_prefix(self, project_uuid: str | None) -> str:
-        if self.force_direct_ingest and settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX:
+        if getattr(self, "force_direct_ingest", False) and settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX:
             return self._normalize_s3_prefix(settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX)
 
         if not project_uuid or not settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID:
