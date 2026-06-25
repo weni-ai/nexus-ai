@@ -11,10 +11,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from inline_agents.backends.openai.backend import OpenAIBackend
 from nexus.agents.api.views import InternalCommunicationPermission
+from nexus.events import notify_async
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.api.serializers import ConversationSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
+from nexus.projects.models import Project
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -24,6 +27,10 @@ from nexus.usecases.projects.update import ProjectUpdateUseCase
 from .serializers import ProjectSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _get_effective_api_error_message(project_uuid: str) -> str:
+    return OpenAIBackend._get_default_error_message(str(project_uuid))
 
 
 class ProjectUpdateViewset(views.APIView):
@@ -746,4 +753,45 @@ class FlowsDbCohortReconcileProxyView(APIView):
                 "requested_range": requested_range,
             },
             status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class ProjectApiErrorMessageView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            Project.objects.only("api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        return Response(data={"error_message": _get_effective_api_error_message(project_uuid)})
+
+    def patch(self, request, project_uuid):
+        try:
+            project = Project.objects.only("uuid", "api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        if "error_message" not in request.data:
+            return Response(data={"error": "error_message is required"}, status=400)
+
+        error_message = request.data.get("error_message")
+        if error_message is not None and not isinstance(error_message, str):
+            return Response(data={"error": "error_message must be a string"}, status=400)
+
+        normalized_message = error_message.strip() if isinstance(error_message, str) else None
+        if normalized_message == "":
+            normalized_message = None
+
+        project.api_error_message = normalized_message
+        project.save(update_fields=["api_error_message"])
+
+        notify_async(event="cache_invalidation:project", project=project)
+
+        return Response(
+            data={
+                "message": "Error message updated successfully",
+                "error_message": _get_effective_api_error_message(project_uuid),
+            }
         )
