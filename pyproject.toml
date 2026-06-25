@@ -68,6 +68,7 @@ grpcio = "^1.76.0"
 grpcio-tools = "^1.76.0"
 protobuf = ">=6.31,<7.0"
 weni-feature-flags = ">=2.1.0,<3.0.0"
+weni-eda = "0.2.0a6"
 
 
 
