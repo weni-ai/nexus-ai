@@ -756,6 +756,36 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
 
         self.assertEqual(result, _TEST_ERROR_MESSAGES["pt-br"])
 
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_caches_resolved_default(self, mock_connect_cls):
+        from django.core.cache import cache
+
+        project = ProjectFactory()
+        mock_connect_cls.return_value.get_project_language.return_value = "pt-br"
+        cache.delete(f"project:api_error_message:{project.uuid}")
+
+        uuid = str(project.uuid)
+        result1 = self.backend._get_default_error_message(uuid)
+        result2 = self.backend._get_default_error_message(uuid)
+
+        self.assertEqual(result1, _TEST_ERROR_MESSAGES["pt-br"])
+        self.assertEqual(result2, _TEST_ERROR_MESSAGES["pt-br"])
+        mock_connect_cls.return_value.get_project_language.assert_called_once_with(uuid)
+
+    @patch("inline_agents.backends.openai.backend.cache")
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_does_not_cache_missing_project(self, mock_connect_cls, mock_cache):
+        from inline_agents.backends.openai.backend import _NOT_CACHED
+
+        mock_cache.get.return_value = _NOT_CACHED
+        mock_connect_cls.return_value.get_project_language.return_value = "en-us"
+        fake_uuid = "00000000-0000-0000-0000-000000000000"
+
+        result = self.backend._get_default_error_message(fake_uuid)
+
+        self.assertEqual(result, _TEST_ERROR_MESSAGES["en-us"])
+        mock_cache.set.assert_not_called()
+
     @patch("inline_agents.backends.openai.backend.sentry_sdk")
     @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
     @patch("inline_agents.backends.openai.backend.save_inline_message_async")

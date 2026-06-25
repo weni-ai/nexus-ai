@@ -91,24 +91,29 @@ class OpenAIBackend(InlineAgentsBackend):
         cache_key = f"project:api_error_message:{project_uuid}"
         cached = cache.get(cache_key, _NOT_CACHED)
         if cached is not _NOT_CACHED:
-            if cached:
-                return cached
-        else:
-            api_error_message = None
-            try:
-                project = Project.objects.only("api_error_message").get(uuid=project_uuid)
-                api_error_message = project.api_error_message or None
-            except Exception:
-                pass
-            cache.set(cache_key, api_error_message, _API_ERROR_MESSAGE_CACHE_TTL)
-            if api_error_message:
-                return api_error_message
+            return cached
+
+        try:
+            project = Project.objects.only("api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            project = None
+        except Exception:
+            project = None
+
+        if project is not None and project.api_error_message:
+            cache.set(cache_key, project.api_error_message, _API_ERROR_MESSAGE_CACHE_TTL)
+            return project.api_error_message
 
         try:
             language = ConnectRESTClient().get_project_language(project_uuid)
         except Exception:
             language = fallback_language
-        return messages.get(language, messages.get(fallback_language, ""))
+        resolved = messages.get(language, messages.get(fallback_language, ""))
+
+        if project is not None:
+            cache.set(cache_key, resolved, _API_ERROR_MESSAGE_CACHE_TTL)
+
+        return resolved
 
     def get_supervisor(
         self,
