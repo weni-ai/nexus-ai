@@ -218,3 +218,131 @@ class TestAIResolutionCriteriaViews(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["error"]["code"], "CRITERION_NOT_FOUND")
+
+    def test_list_returns_empty_custom_criteria(self):
+        request = self.factory.get(f"/api/{self.project_uuid}/ai-resolution-criteria/")
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["custom_criteria"], [])
+
+    def test_list_timestamps_use_iso8601_z_format(self):
+        ProjectAIResolutionCriterion.objects.create(
+            project=self.project,
+            text="Custom criterion",
+            created_by=self.user,
+        )
+
+        request = self.factory.get(f"/api/{self.project_uuid}/ai-resolution-criteria/")
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=self.project_uuid)
+
+        created_at = response.data["custom_criteria"][0]["created_at"]
+        updated_at = response.data["custom_criteria"][0]["updated_at"]
+        self.assertRegex(created_at, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+        self.assertRegex(updated_at, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+        self.assertEqual(created_at, updated_at)
+
+    def test_list_project_not_found(self):
+        missing_uuid = "00000000-0000-0000-0000-000000000001"
+        request = self.factory.get(f"/api/{missing_uuid}/ai-resolution-criteria/")
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=missing_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["error"], "Project not found")
+
+    def test_validate_update_mode_excludes_current_criterion(self):
+        criterion = ProjectAIResolutionCriterion.objects.create(
+            project=self.project,
+            text="Existing criterion",
+            created_by=self.user,
+        )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-validation-criteria/",
+            {
+                "text": "Updated criterion text",
+                "criterion_id": str(criterion.uuid),
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        call_kwargs = self._mock_validate.call_args.kwargs
+        self.assertEqual(call_kwargs["mode"], "update")
+        self.assertEqual(call_kwargs["criterion_id"], str(criterion.uuid))
+
+    def test_validate_returns_ambiguous_error(self):
+        self._mock_validate.return_value = (
+            False,
+            "AMBIGUOUS_CRITERION",
+            "The criterion is ambiguous and needs to be rewritten",
+        )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-validation-criteria/",
+            {"text": "Ambiguous criterion"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "AMBIGUOUS_CRITERION")
+
+    def test_validate_returns_invalid_error(self):
+        self._mock_validate.return_value = (
+            False,
+            "INVALID_CRITERION",
+            "The criterion is invalid",
+        )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-validation-criteria/",
+            {"text": "Invalid criterion"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "INVALID_CRITERION")
+
+    def test_viewer_cannot_create_criterion(self):
+        from nexus.usecases.users.tests.user_factory import UserFactory
+
+        viewer = UserFactory()
+        self.project.authorizations.update_or_create(
+            user=viewer,
+            defaults={"role": ProjectAuthorizationRole.VIEWER.value},
+        )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-resolution-criteria/",
+            {"text": "Viewer attempt"},
+            format="json",
+        )
+        force_authenticate(request, user=viewer)
+        response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_patch_invalid_uuid_returns_404(self):
+        request = self.factory.patch(
+            f"/api/{self.project_uuid}/ai-resolution-criteria/not-a-uuid/",
+            {"text": "Updated text"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaDetailView.as_view()(
+            request,
+            project_uuid=self.project_uuid,
+            criterion_id="not-a-uuid",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["error"]["code"], "CRITERION_NOT_FOUND")

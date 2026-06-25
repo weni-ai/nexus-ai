@@ -1,4 +1,7 @@
+from datetime import timezone as dt_timezone
+
 from django.conf import settings
+from django.utils import timezone
 
 CRITERION_TYPE_BASE = "base"
 CRITERION_TYPE_CUSTOM = "custom"
@@ -20,6 +23,12 @@ def get_base_criterion_ids() -> set[str]:
     return {item["id"] for item in get_base_criteria_config()}
 
 
+def format_iso8601_z(value) -> str:
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, dt_timezone.utc)
+    return value.astimezone(dt_timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def serialize_base_criterion(item: dict) -> dict:
     return {
         "id": item["id"],
@@ -38,6 +47,6 @@ def serialize_custom_criterion(criterion) -> dict:
         "type": CRITERION_TYPE_CUSTOM,
         "editable": True,
         "deletable": True,
-        "created_at": criterion.created_at.isoformat().replace("+00:00", "Z"),
-        "updated_at": updated_at.isoformat().replace("+00:00", "Z"),
+        "created_at": format_iso8601_z(criterion.created_at),
+        "updated_at": format_iso8601_z(updated_at),
     }
