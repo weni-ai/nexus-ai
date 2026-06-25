@@ -469,6 +469,7 @@ class TestBedrockClientElasticAPM(TestCase):
                     "ELASTIC_APM_ENVIRONMENT": "staging",
                 }
             },
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
         }
         self.client.lambda_client = mock_lambda_client
 
@@ -526,6 +527,7 @@ class TestBedrockClientElasticAPM(TestCase):
                 {"Arn": apm_python_layer},
             ],
             "Environment": {"Variables": {"OTHER_VAR": "value"}},
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
         }
         self.client.lambda_client = mock_lambda_client
 
@@ -569,6 +571,7 @@ class TestBedrockClientElasticAPM(TestCase):
             "Architectures": ["x86_64"],
             "Layers": [],
             "Environment": {"Variables": {"EXISTING_VAR": "existing_value", "ANOTHER_VAR": "another_value"}},
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
         }
         self.client.lambda_client = mock_lambda_client
 
@@ -627,6 +630,7 @@ class TestBedrockClientElasticAPM(TestCase):
             "Architectures": ["x86_64"],
             "Layers": [{"Arn": other_layer}],
             "Environment": {"Variables": {"OTHER_VAR": "value"}},
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
         }
         self.client.lambda_client = mock_lambda_client
 
@@ -669,6 +673,7 @@ class TestBedrockClientElasticAPM(TestCase):
         mock_lambda_client.get_function_configuration.return_value = {
             "Architectures": ["x86_64"],
             "Environment": {"Variables": {}},  # No existing environment variables
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
         }
         self.client.lambda_client = mock_lambda_client
 
@@ -722,6 +727,7 @@ class TestBedrockClientElasticAPM(TestCase):
             "Architectures": ["arm64"],
             "Layers": [],
             "Environment": {"Variables": {}},
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
         }
         self.client.lambda_client = mock_lambda_client
 

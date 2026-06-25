@@ -1,6 +1,6 @@
 import logging
 from io import BytesIO
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import boto3
 from django.conf import settings
@@ -222,30 +222,57 @@ class BedrockClient:
         }
         return var_name in apm_var_names
 
-    def update_lambda_function(
+    def _wait_for_function_updated(self, lambda_name: str) -> None:
+        waiter = self.lambda_client.get_waiter("function_updated")
+        waiter.wait(FunctionName=lambda_name, WaiterConfig={"Delay": 5, "MaxAttempts": 60})
+
+    def _read_lambda_configuration(self, lambda_name: str) -> Tuple[Dict, List[str], Dict[str, str], str, int]:
+        current_config = self.lambda_client.get_function_configuration(FunctionName=lambda_name)
+        current_layers = current_config.get("Layers", [])
+        current_layer_arns = [layer.get("Arn", "") for layer in current_layers if layer.get("Arn")]
+        environment = current_config.get("Environment") or {}
+        existing_vars = environment.get("Variables", {})
+        current_architectures = current_config.get("Architectures", ["x86_64"])
+        current_architecture = current_architectures[0] if current_architectures else "x86_64"
+        current_memory_size = current_config.get("MemorySize", 128)
+        return current_config, current_layer_arns, existing_vars, current_architecture, current_memory_size
+
+    def _apply_non_apm_configuration_updates(
         self,
         lambda_name: str,
-        zip_buffer: BytesIO,
-        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
-    ) -> Dict[str, str]:
-        use_apm = self._resolve_apm_use_enabled(apm_instrumentation)
-        apm_action = "enable" if use_apm is True else "disable" if use_apm is False else "unchanged"
-        logger.info(
-            "Updating Lambda function %s (apm_instrumentation=%s, apm_action=%s)",
-            lambda_name,
-            apm_instrumentation,
-            apm_action,
-        )
+        current_config: Dict,
+        current_memory_size: int,
+    ) -> None:
+        desired_memory_size = getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512)
 
+        needs_update = False
+        update_config_params = {"FunctionName": lambda_name}
+
+        if current_memory_size != desired_memory_size:
+            update_config_params["MemorySize"] = desired_memory_size
+            needs_update = True
+
+        desired_log_group = getattr(settings, "AWS_LAMBDA_LOG_GROUP", "")
+        if desired_log_group:
+            current_log_group = current_config.get("LoggingConfig", {}).get("LogGroup", "")
+            if current_log_group != desired_log_group:
+                update_config_params["LoggingConfig"] = {"LogGroup": desired_log_group}
+                needs_update = True
+
+        if needs_update:
+            self.lambda_client.update_function_configuration(**update_config_params)
+
+    def _apply_apm_configuration_before_publish(
+        self,
+        lambda_name: str,
+        *,
+        use_apm: bool,
+        apm_action: str,
+    ) -> None:
         try:
-            current_config = self.lambda_client.get_function_configuration(FunctionName=lambda_name)
-            current_layers = current_config.get("Layers", [])
-            current_layer_arns = [layer.get("Arn", "") for layer in current_layers if layer.get("Arn")]
-            environment = current_config.get("Environment") or {}
-            existing_vars = environment.get("Variables", {})
-            current_architectures = current_config.get("Architectures", ["x86_64"])
-            current_architecture = current_architectures[0] if current_architectures else "x86_64"
-            current_memory_size = current_config.get("MemorySize", 128)
+            _, current_layer_arns, existing_vars, current_architecture, _ = self._read_lambda_configuration(
+                lambda_name
+            )
         except Exception as e:
             logger.error(
                 "Failed to get current Lambda function configuration for %s",
@@ -257,62 +284,68 @@ class BedrockClient:
                 },
                 exc_info=True,
             )
-            if use_apm is not None:
-                raise RuntimeError(
-                    f"Cannot update APM configuration for Lambda {lambda_name}: "
-                    "failed to read current function configuration"
-                ) from e
-            current_config = {}
-            current_layer_arns = []
-            existing_vars = {}
-            current_architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
-            current_memory_size = 128
+            raise RuntimeError(
+                f"Cannot update APM configuration for Lambda {lambda_name}: "
+                "failed to read current function configuration"
+            ) from e
 
-        desired_memory_size = getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512)
-
-        needs_update = False
         update_config_params = {"FunctionName": lambda_name}
-
-        if current_memory_size != desired_memory_size:
-            update_config_params["MemorySize"] = desired_memory_size
-            needs_update = True
-
-        if self._apply_apm_configuration_updates(
+        needs_apm_update = self._apply_apm_configuration_updates(
             update_config_params,
             use_apm=use_apm,
             current_layer_arns=current_layer_arns,
             existing_vars=existing_vars,
             architecture=current_architecture,
-        ):
-            needs_update = True
+        )
 
-        desired_log_group = getattr(settings, "AWS_LAMBDA_LOG_GROUP", "")
-        if desired_log_group:
-            current_log_group = current_config.get("LoggingConfig", {}).get("LogGroup", "")
-            if current_log_group != desired_log_group:
-                update_config_params["LoggingConfig"] = {"LogGroup": desired_log_group}
-                needs_update = True
-
-        if needs_update:
+        if needs_apm_update:
             logger.info(
-                "Applying Lambda configuration update before publish for %s (apm_action=%s)",
+                "Applying APM configuration before publish for %s (apm_action=%s)",
                 lambda_name,
                 apm_action,
             )
             self.lambda_client.update_function_configuration(**update_config_params)
-            config_waiter = self.lambda_client.get_waiter("function_updated")
-            config_waiter.wait(FunctionName=lambda_name, WaiterConfig={"Delay": 5, "MaxAttempts": 60})
-        elif use_apm is False:
+            self._wait_for_function_updated(lambda_name)
+        elif use_apm is True:
             logger.info(
-                "No Lambda configuration changes required for %s (APM already disabled)",
+                "No APM configuration changes required for %s (APM already enabled)",
                 lambda_name,
             )
+        elif use_apm is False:
+            logger.info(
+                "No APM configuration changes required for %s (APM already disabled)",
+                lambda_name,
+            )
+
+    def update_lambda_function(
+        self,
+        lambda_name: str,
+        zip_buffer: BytesIO,
+        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
+    ) -> Dict[str, str]:
+        """
+        Update Lambda code and optionally control APM instrumentation.
+
+        - enabled (--use-apm): add APM layers/vars if missing, then publish code
+        - disabled (--remove-apm): remove APM layers/vars, then publish code
+        - unchanged (no flag): publish code only; APM state is not modified
+        """
+        use_apm = self._resolve_apm_use_enabled(apm_instrumentation)
+        apm_action = "enable" if use_apm is True else "disable" if use_apm is False else "unchanged"
+        logger.info(
+            "Updating Lambda function %s (apm_instrumentation=%s, apm_action=%s)",
+            lambda_name,
+            apm_instrumentation,
+            apm_action,
+        )
+
+        if use_apm is not None:
+            self._apply_apm_configuration_before_publish(lambda_name, use_apm=use_apm, apm_action=apm_action)
 
         response = self.lambda_client.update_function_code(
             FunctionName=lambda_name, ZipFile=zip_buffer.getvalue(), Publish=True
         )
-        code_waiter = self.lambda_client.get_waiter("function_updated")
-        code_waiter.wait(FunctionName=lambda_name, WaiterConfig={"Delay": 5, "MaxAttempts": 60})
+        self._wait_for_function_updated(lambda_name)
         new_version = response["Version"]
         lambda_arn = response["FunctionArn"]
 
@@ -322,6 +355,24 @@ class BedrockClient:
             lambda_name,
             apm_action,
         )
+
+        try:
+            current_config, _, _, _, current_memory_size = self._read_lambda_configuration(lambda_name)
+        except Exception as e:
+            logger.error(
+                "Failed to get current Lambda function configuration for %s",
+                lambda_name,
+                extra={
+                    "lambda_name": lambda_name,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                exc_info=True,
+            )
+            current_config = {}
+            current_memory_size = 128
+
+        self._apply_non_apm_configuration_updates(lambda_name, current_config, current_memory_size)
 
         self.update_lambda_alias(lambda_name, new_version)
         return {"lambda": lambda_arn}
