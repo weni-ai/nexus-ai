@@ -4,7 +4,6 @@ from uuid import UUID
 
 import requests
 from django.conf import settings
-from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import HttpResponse
 from rest_framework import serializers, status, views
@@ -737,7 +736,6 @@ class ProjectApiErrorMessageView(APIView):
         project.api_error_message = normalized_message
         project.save(update_fields=["api_error_message"])
 
-        cache.delete(f"project:api_error_message:{project_uuid}")
         notify_async(event="cache_invalidation:project", project=project)
 
         return Response(
