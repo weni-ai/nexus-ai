@@ -48,8 +48,13 @@ class BedrockFileDatabase(FileDataBase):
         agent_foundation_model: List = settings.AWS_BEDROCK_AGENTS_MODEL_ID,
         supervisor_foundation_model: List = settings.AWS_BEDROCK_SUPERVISOR_MODEL_ID,
         project_uuid: str | None = None,
+        force_direct_ingest: bool = False,
     ) -> None:
-        self.data_source_id = get_datasource_id(project_uuid)
+        self.force_direct_ingest = force_direct_ingest
+        if force_direct_ingest and settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID:
+            self.data_source_id = settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID
+        else:
+            self.data_source_id = get_datasource_id(project_uuid)
         self.knowledge_base_id = settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
@@ -76,6 +81,9 @@ class BedrockFileDatabase(FileDataBase):
         return f"{cleaned}/" if cleaned else ""
 
     def _resolve_s3_key_prefix(self, project_uuid: str | None) -> str:
+        if self.force_direct_ingest and settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX:
+            return self._normalize_s3_prefix(settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX)
+
         if not project_uuid or not settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID:
             return ""
 

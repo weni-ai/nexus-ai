@@ -36,6 +36,7 @@ class CeleryFileManager:
         extension_file: str,
         user_email: str,
         project_uuid: str | None = None,
+        force_direct_ingest: bool = False,
     ):
         from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
         from nexus.task_managers.file_database.file_database import FileResponseDTO
@@ -53,7 +54,10 @@ class CeleryFileManager:
                 content_base_file=content_base_file_dto
             )
             content_base_file_uuid = str(content_base_file.uuid)
-            file_database = BedrockFileDatabase(project_uuid=project_uuid)
+            file_database = BedrockFileDatabase(
+                project_uuid=project_uuid,
+                force_direct_ingest=force_direct_ingest,
+            )
             file_name, file_url = file_database.multipart_upload(file, content_base_uuid, content_base_file_uuid)
             file_database.add_metadata_json_file(file_name, content_base_uuid, content_base_file_uuid)
             response = FileResponseDTO(
@@ -174,6 +178,7 @@ class CeleryFileManager:
                 extension_file,
                 user_email,
                 project_uuid=project_uuid,
+                force_direct_ingest=True,
             )
 
             if file_database_response.status != 0:
