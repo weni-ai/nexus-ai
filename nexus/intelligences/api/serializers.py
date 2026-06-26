@@ -370,7 +370,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 
                     else:
                         created_instruction = instance.instructions.create(
-                            instruction=instruction_data.get("instruction")
+                            instruction=instruction_data.get("instruction"),
                         )
                         event_manager.notify(
                             event="contentbase_instruction_activity",
@@ -492,9 +492,23 @@ class InstructionClassificationRequestSerializer(serializers.Serializer):
         required=True,
         help_text=("Instruction text to classify against existing content base instructions."),
     )
+    instructions_categories = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+        allow_empty=True,
+        help_text="Instruction category names available for classification.",
+    )
     language = serializers.CharField(
         required=True,
         help_text=("Language code for classification context (e.g., pt-br, en, es)."),
+    )
+    id = serializers.IntegerField(
+        required=False,
+        help_text=(
+            "When revalidating an existing instruction, its ID. "
+            "That instruction is excluded from duplicate comparison."
+        ),
     )
 
 
@@ -517,6 +531,11 @@ class InstructionClassificationResponseSerializer(serializers.Serializer):
     classification = ClassificationItemSerializer(
         many=True,
         help_text="Classifications for the instruction; each has category and optional reason.",
+    )
+    suggested_category = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Suggested instruction category returned by classification",
     )
     suggestion = serializers.CharField(
         required=False,

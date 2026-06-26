@@ -20,11 +20,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
+from weni.feature_flags.shortcuts import is_feature_active_for_attributes
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
+from nexus.intelligences.constants import INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseFile,
@@ -638,9 +640,7 @@ class InlineContentBaseTextViewset(ModelViewSet):
         try:
             user_email = request.user.email
 
-            write_serializer = InlineContentBaseTextWriteSerializer(
-                data=request.data, context={"is_create": True}
-            )
+            write_serializer = InlineContentBaseTextWriteSerializer(data=request.data, context={"is_create": True})
             write_serializer.is_valid(raise_exception=True)
 
             text = write_serializer.validated_data["text"]
@@ -1845,8 +1845,10 @@ class InstructionsClassificationAPIView(APIView):
         operation_id="instruction_classify",
         summary="Classify instruction",
         description=(
-            "Classifies an instruction based on the project's existing content base instructions. "
-            "Returns suggested categories and an improvement suggestion."
+            "Classifies an instruction based on the project description, available categories, "
+            "and existing content base instructions. Returns classification, suggested category, "
+            "and an improvement suggestion. When revalidating during edit, send id to "
+            "exclude that instruction from duplicate comparison."
         ),
         request=InstructionClassificationRequestSerializer,
         parameters=[
@@ -1877,7 +1879,7 @@ class InstructionsClassificationAPIView(APIView):
             language = serializer.validated_data["language"]
 
             user = request.user
-            name = user.name or user.email.split("@")[0]
+            name = getattr(user, "name", None) or user.email.split("@")[0]
             occupation = getattr(user, "occupation", "Customer Service Agent")
 
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
@@ -1887,15 +1889,52 @@ class InstructionsClassificationAPIView(APIView):
             goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
             adjective = content_base.agent.personality if content_base.agent else "friendly"
 
-            instructions = []
-            for instruction_obj in content_base.instructions.all():
-                instructions.append({"instruction": instruction_obj.instruction, "type": "custom"})
+            existing_instruction_id = serializer.validated_data.get("id")
+            instructions_qs = content_base.instructions.all()
+            if existing_instruction_id is not None:
+                if not instructions_qs.filter(id=existing_instruction_id).exists():
+                    return Response({"error": "Instruction not found"}, status=status.HTTP_404_NOT_FOUND)
+                instructions_qs = instructions_qs.exclude(id=existing_instruction_id)
+
+            instructions = [
+                {"instruction": instruction_obj.instruction, "type": "custom"} for instruction_obj in instructions_qs
+            ]
 
             from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 
             lambda_usecase = LambdaUseCase()
 
-            classification, suggestion = lambda_usecase.instruction_classify(
+            use_enhanced_classification = is_feature_active_for_attributes(
+                INSTRUCTION_CATEGORIZATION_FEATURE_FLAG,
+                {"weni_project": str(project_uuid)},
+            )
+
+            if use_enhanced_classification:
+                instructions_categories = serializer.validated_data.get("instructions_categories", [])
+                project_description = content_base.intelligence.description or ""
+
+                classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
+                    name=name,
+                    occupation=occupation,
+                    goal=goal,
+                    adjective=adjective,
+                    instructions=instructions,
+                    instruction_to_classify=instruction,
+                    instructions_categories=instructions_categories,
+                    language=language,
+                    project_description=project_description,
+                )
+
+                return Response(
+                    {
+                        "classification": classification,
+                        "suggested_category": suggested_category,
+                        "suggestion": suggestion,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            classification, suggestion = lambda_usecase.instruction_classify_legacy(
                 name=name,
                 occupation=occupation,
                 goal=goal,
@@ -1905,7 +1944,10 @@ class InstructionsClassificationAPIView(APIView):
                 language=language,
             )
 
-            return Response({"classification": classification, "suggestion": suggestion}, status=status.HTTP_200_OK)
+            return Response(
+                {"classification": classification, "suggestion": suggestion},
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             sentry_sdk.capture_exception(e)

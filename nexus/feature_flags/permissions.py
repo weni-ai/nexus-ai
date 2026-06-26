@@ -2,9 +2,19 @@ from django.shortcuts import get_object_or_404
 from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.views import APIView
-from weni.feature_flags.shortcuts import is_feature_active
+from weni.feature_flags.shortcuts import is_feature_active_for_attributes
 
 from nexus.projects.models import Project
+
+
+def build_feature_flag_attributes(request: Request, project: Project) -> dict[str, str]:
+    attributes = {
+        "weni_project": str(project.uuid),
+        "projectUUID": str(project.uuid),
+    }
+    if request.user.is_authenticated and request.user.email:
+        attributes["userEmail"] = request.user.email
+    return attributes
 
 
 class FeatureFlagPermission(BasePermission):
@@ -23,8 +33,10 @@ class FeatureFlagPermission(BasePermission):
         if not project:
             return False
 
-        user_email = request.user.email if request.user.is_authenticated else None
-        return is_feature_active(feature_key, user=user_email, project=project.uuid)
+        return is_feature_active_for_attributes(
+            feature_key,
+            build_feature_flag_attributes(request, project),
+        )
 
     def _get_project_from_request(self, request: Request, view: APIView):
         project_uuid = (

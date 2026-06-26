@@ -1,0 +1,1 @@
+INSTRUCTION_CATEGORIZATION_FEATURE_FLAG = "categorization_of_instructions"

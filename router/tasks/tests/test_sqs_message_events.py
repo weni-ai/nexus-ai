@@ -111,9 +111,7 @@ class TestToolResultHasFinalOutput(unittest.TestCase):
         self.assertTrue(tool_result_has_final_output({"is_final_output": True}))
 
     def test_nested_flag(self):
-        self.assertTrue(
-            tool_result_has_final_output({"result": {"is_final_output": True}, "messages_sent": []})
-        )
+        self.assertTrue(tool_result_has_final_output({"result": {"is_final_output": True}, "messages_sent": []}))
 
     def test_no_flag(self):
         self.assertFalse(tool_result_has_final_output({"messages_sent": [{"text": "a"}]}))
