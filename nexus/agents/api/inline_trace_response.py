@@ -40,7 +40,7 @@ def remap_inline_traces_config_agent_names(traces: list[Any], *, project_uuid: s
     except Exception:
         logger.exception(
             "inline trace agentName remap skipped (returning raw traces)",
-            extra={"project_uuid": project_uuid},
+            f"project_uuid: {project_uuid}",
         )
         return traces
 

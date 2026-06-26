@@ -197,21 +197,12 @@ class PerformanceLoggingMiddleware(ObserverMiddleware):
             logger.warning(
                 f"Slow observer execution: '{observer_name}' for event '{event}' "
                 f"took {duration:.3f}s (threshold: {self.slow_threshold}s)",
-                extra={
-                    "observer": observer_name,
-                    "event": event,
-                    "duration": duration,
-                    "slow": True,
-                },
+                f"observer: {observer_name}, event: {event}, duration: {duration}, slow: True",
             )
         else:
             logger.debug(
                 f"Observer '{observer_name}' for event '{event}' took {duration:.3f}s",
-                extra={
-                    "observer": observer_name,
-                    "event": event,
-                    "duration": duration,
-                },
+                f"observer: {observer_name}, event: {event}, duration: {duration}",
             )
 
     def on_error(self, observer, event: str, error: Exception, duration: float, **kwargs) -> None:
@@ -222,12 +213,7 @@ class PerformanceLoggingMiddleware(ObserverMiddleware):
         observer_name = getattr(observer.__class__, "__name__", "Unknown")
         logger.debug(
             f"Observer '{observer_name}' for event '{event}' failed after {duration:.3f}s",
-            extra={
-                "observer": observer_name,
-                "event": event,
-                "duration": duration,
-                "error": True,
-            },
+            f"observer: {observer_name}, event: {event}, duration: {duration}, error: True",
         )
 
 

@@ -101,7 +101,7 @@ class RedisSession:  # type: ignore[misc]
         read_client: Optional[redis.Redis] = None,
         write_client: Optional[redis.Redis] = None,
     ):
-        logger.debug("RedisSession", extra={"session_id": session_id})
+        logger.debug("RedisSession", f"session_id: {session_id}")
         self._key = session_id
         self._write_client = write_client if write_client is not None else r
         self._read_client = read_client if read_client is not None else r
@@ -137,7 +137,7 @@ class RedisSession:  # type: ignore[misc]
 
     async def get_items(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         limit = limit or self.limit
-        logger.debug("Session limit", extra={"limit": limit})
+        logger.debug("Session limit", f"limit: {limit}")
         try:
             read_client = self._read_client
             write_client = self._write_client
@@ -225,7 +225,7 @@ class RedisSession:  # type: ignore[misc]
                     )
                     continue
 
-            logger.debug("Session items", extra={"count": len(items)})
+            logger.debug("Session items", f"count: {len(items)}")
             return items
 
         except redis.RedisError as e:
