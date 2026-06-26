@@ -650,6 +650,20 @@ except FileNotFoundError:
 CONVERSATION_TOPIC_CLASSIFIER_NAME = env.str("CONVERSATION_TOPIC_CLASSIFIER_NAME")
 CONVERSATION_RESOLUTION_NAME = env.str("CONVERSATION_RESOLUTION_NAME")
 INSTRUCTION_CLASSIFY_NAME = env.str("INSTRUCTION_CLASSIFY_NAME")
+AI_RESOLUTION_CRITERIA_VALIDATION_NAME = env.str("AI_RESOLUTION_CRITERIA_VALIDATION_NAME", default="")
+AI_RESOLUTION_BASE_CRITERIA = env.json(
+    "AI_RESOLUTION_BASE_CRITERIA",
+    [
+        {
+            "id": "base_resolved",
+            "text": "Mark as resolved when the customer confirms the issue was solved",
+        },
+        {
+            "id": "base_unresolved",
+            "text": "Mark as unresolved when the customer is still waiting for a response or solution",
+        },
+    ],
+)
 AGENT_UUID_CSAT = env.str("AGENT_UUID_CSAT")
 AGENT_UUID_NPS = env.str("AGENT_UUID_NPS")
 
