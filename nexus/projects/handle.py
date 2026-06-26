@@ -1,7 +1,7 @@
 from amqp.channel import Channel
 
-from .consumers.flow_consumer import FlowConsumer
 from .consumers.channel_wwc_consumer import ChannelWwcConsumer
+from .consumers.flow_consumer import FlowConsumer
 from .consumers.integrated_feature import (
     CreateIntegratedFeatureConsumer,
     DeleteIntegratedFeatureConsumer,
