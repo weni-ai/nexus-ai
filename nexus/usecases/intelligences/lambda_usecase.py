@@ -767,6 +767,90 @@ class LambdaUseCase:
             sentry_sdk.capture_exception(e)
             raise e
 
+    def validate_resolution_criterion(
+        self,
+        project_id: str,
+        candidate_text: str,
+        existing_criteria: list,
+        mode: str,
+        criterion_id: str | None = None,
+    ) -> tuple[bool, str, str]:
+        from nexus.projects.ai_resolution_criteria_constants import VALIDATION_REJECTED_CODES
+        from nexus.projects.exceptions import LambdaValidationFailedError
+
+        lambda_name = settings.AI_RESOLUTION_CRITERIA_VALIDATION_NAME
+        if not lambda_name:
+            raise LambdaValidationFailedError()
+
+        payload = {
+            "project_id": project_id,
+            "candidate_text": candidate_text,
+            "existing_criteria": existing_criteria,
+            "mode": mode,
+        }
+        if criterion_id:
+            payload["criterion_id"] = criterion_id
+
+        try:
+            response = self.invoke_lambda(lambda_name=str(lambda_name), payload=payload)
+
+            if "FunctionError" in response:
+                error_payload = json.loads(response.get("Payload").read())
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(lambda_name),
+                        "full_error_payload": error_payload,
+                        "request_payload": payload,
+                    },
+                )
+                sentry_sdk.capture_message(
+                    f"Lambda FunctionError in validate_resolution_criterion: {error_payload}",
+                    level="error",
+                )
+                raise LambdaValidationFailedError()
+
+            response_data = json.loads(response.get("Payload").read())
+
+            if "body" in response_data:
+                body_data = response_data.get("body")
+                if isinstance(body_data, str):
+                    body_data = json.loads(body_data)
+                response_data = body_data
+
+            status_code = response_data.get("statusCode")
+            if status_code and status_code >= 400:
+                sentry_sdk.capture_message(
+                    f"Lambda returned error status {status_code} in validate_resolution_criterion",
+                    level="error",
+                )
+                raise LambdaValidationFailedError()
+
+            is_valid = response_data.get("is_valid")
+            code = response_data.get("code", "INVALID_CRITERION")
+            message = response_data.get("message", "")
+
+            if is_valid is None:
+                sentry_sdk.capture_message(
+                    "Unexpected lambda response format in validate_resolution_criterion",
+                    level="error",
+                )
+                raise LambdaValidationFailedError()
+
+            if is_valid:
+                return True, code, message
+
+            if code not in VALIDATION_REJECTED_CODES:
+                code = "INVALID_CRITERION"
+
+            return False, code, message
+
+        except LambdaValidationFailedError:
+            raise
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
+            raise LambdaValidationFailedError() from exc
+
 
 @celery_app.task(bind=True)
 def create_lambda_conversation(

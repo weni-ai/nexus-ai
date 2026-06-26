@@ -12,7 +12,6 @@ import pendulum
 import sentry_sdk
 from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
 from django.conf import settings
-from django.core.cache import cache
 from langfuse import get_client
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
@@ -50,13 +49,11 @@ from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.services.cache_service import CacheService
 from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
-
-_NOT_CACHED = object()
-_API_ERROR_MESSAGE_CACHE_TTL = 300  # 5 minutes
 
 
 def _is_final_out_debug(msg: str) -> None:
@@ -88,9 +85,9 @@ class OpenAIBackend(InlineAgentsBackend):
         fallback_language = "en-us"
         messages = getattr(settings, "DEFAULT_ERROR_MESSAGES", {})
 
-        cache_key = f"project:api_error_message:{project_uuid}"
-        cached = cache.get(cache_key, _NOT_CACHED)
-        if cached is not _NOT_CACHED:
+        cache_service = CacheService()
+        cached = cache_service.get_api_error_message(project_uuid)
+        if cached is not None:
             return cached
 
         try:
@@ -101,7 +98,7 @@ class OpenAIBackend(InlineAgentsBackend):
             project = None
 
         if project is not None and project.api_error_message:
-            cache.set(cache_key, project.api_error_message, _API_ERROR_MESSAGE_CACHE_TTL)
+            cache_service.set_api_error_message(project_uuid, project.api_error_message)
             return project.api_error_message
 
         try:
@@ -111,7 +108,7 @@ class OpenAIBackend(InlineAgentsBackend):
         resolved = messages.get(language, messages.get(fallback_language, ""))
 
         if project is not None:
-            cache.set(cache_key, resolved, _API_ERROR_MESSAGE_CACHE_TTL)
+            cache_service.set_api_error_message(project_uuid, resolved)
 
         return resolved
 
