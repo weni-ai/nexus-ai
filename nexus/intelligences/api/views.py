@@ -2113,16 +2113,15 @@ class InstructionsClassificationAPIView(APIView):
             instruction = serializer.validated_data["instruction"]
             language = serializer.validated_data["language"]
 
-            user = request.user
-            name = user.name or user.email.split("@")[0]
-            occupation = getattr(user, "occupation", "Customer Service Agent")
-
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
             project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            agent = content_base.agent
 
-            goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
-            adjective = content_base.agent.personality if content_base.agent else "friendly"
+            name = agent.name if agent and agent.name else "Agent"
+            occupation = agent.role if agent and agent.role else "Customer Service Agent"
+            goal = agent.goal if agent else "Provide excellent customer support"
+            adjective = agent.personality if agent else "friendly"
 
             instructions = []
             for instruction_obj in content_base.instructions.all():
