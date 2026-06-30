@@ -22,6 +22,7 @@ from django.template.defaultfilters import slugify
 
 from nexus.agents.components import get_all_formats_list
 from nexus.agents.models import Agent, Credential, Team
+from nexus.projects.models import Project
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.utils import get_datasource_id
 
@@ -47,8 +48,13 @@ class BedrockFileDatabase(FileDataBase):
         agent_foundation_model: List = settings.AWS_BEDROCK_AGENTS_MODEL_ID,
         supervisor_foundation_model: List = settings.AWS_BEDROCK_SUPERVISOR_MODEL_ID,
         project_uuid: str | None = None,
+        force_direct_ingest: bool = False,
     ) -> None:
-        self.data_source_id = get_datasource_id(project_uuid)
+        self.force_direct_ingest = force_direct_ingest
+        if force_direct_ingest and settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID:
+            self.data_source_id = settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID
+        else:
+            self.data_source_id = get_datasource_id(project_uuid)
         self.knowledge_base_id = settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
@@ -63,8 +69,36 @@ class BedrockFileDatabase(FileDataBase):
         self.s3_client = self.__get_s3_client()
 
         self._suffix = f"{self.region_name}-{self.account_id}"
+        self.s3_key_prefix = self._resolve_s3_key_prefix(project_uuid)
         self.agent_foundation_model = agent_foundation_model
         self.supervisor_foundation_model = supervisor_foundation_model
+
+    @staticmethod
+    def _normalize_s3_prefix(prefix: str) -> str:
+        if not prefix:
+            return ""
+        cleaned = prefix.strip("/")
+        return f"{cleaned}/" if cleaned else ""
+
+    def _resolve_s3_key_prefix(self, project_uuid: str | None) -> str:
+        if getattr(self, "force_direct_ingest", False) and settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX:
+            return self._normalize_s3_prefix(settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX)
+
+        if not project_uuid or not settings.AWS_BEDROCK_DIRECT_DATASOURCE_ID:
+            return ""
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return ""
+
+        if project.bedrock_ingestion_strategy != Project.BEDROCK_INGESTION_DIRECT:
+            return ""
+
+        return self._normalize_s3_prefix(settings.AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX)
+
+    def _build_s3_key(self, content_base_uuid: str, filename: str) -> str:
+        return f"{self.s3_key_prefix}{content_base_uuid}/{filename}"
 
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
@@ -154,7 +188,7 @@ class BedrockFileDatabase(FileDataBase):
         }
 
         filename_metadata_json = f"{filename}.metadata.json"
-        key = f"{content_base_uuid}/{filename_metadata_json}"
+        key = self._build_s3_key(content_base_uuid, filename_metadata_json)
         logger.debug("Bedrock metadata file", extra={"filename": filename_metadata_json, "key": key})
         bytes_stream = BytesIO(json.dumps(data).encode("utf-8"))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
@@ -163,7 +197,7 @@ class BedrockFileDatabase(FileDataBase):
         s3_client = self.s3_client
         bucket_name = self.bucket_name
         file_name = self.__create_unique_filename(basename(file.name))
-        key = f"{content_base_uuid}/{file_name}"
+        key = self._build_s3_key(content_base_uuid, file_name)
 
         response = s3_client.create_multipart_upload(Bucket=bucket_name, Key=key)
         upload_id = response["UploadId"]
@@ -199,7 +233,7 @@ class BedrockFileDatabase(FileDataBase):
             logger.info("[Bedrock] Adding file to bucket")
 
             file_name = self.__create_unique_filename(basename(file.name))
-            file_path = f"{content_base_uuid}/{file_name}"
+            file_path = self._build_s3_key(content_base_uuid, file_name)
 
             response = FileResponseDTO(
                 status=0,
@@ -606,6 +640,69 @@ class BedrockFileDatabase(FileDataBase):
         )
         ingestion_job_id = response.get("ingestionJob").get("ingestionJobId")
         return ingestion_job_id
+
+    def _build_s3_uri(self, content_base_uuid: str, filename: str) -> str:
+        return f"s3://{self.bucket_name}/{self._build_s3_key(content_base_uuid, filename)}"
+
+    def _build_ingest_document(self, content_base_uuid: str, filename: str) -> dict:
+        s3_uri = self._build_s3_uri(content_base_uuid, filename)
+        metadata_uri = self._build_s3_uri(content_base_uuid, f"{filename}.metadata.json")
+        return {
+            "content": {
+                "dataSourceType": "S3",
+                "s3": {"s3Location": {"uri": s3_uri}},
+            },
+            "metadata": {
+                "type": "S3_LOCATION",
+                "s3Location": {"uri": metadata_uri},
+            },
+        }
+
+    def direct_ingest(self, content_base_uuid: str, filename: str) -> list:
+        logger.info("[Bedrock] Direct ingesting document", extra={"document_filename": filename})
+        return self.direct_ingest_batch(content_base_uuid, [filename])
+
+    def direct_ingest_batch(self, content_base_uuid: str, filenames: List[str]) -> list:
+        if not filenames:
+            return []
+
+        logger.info(
+            "[Bedrock] Direct ingesting documents",
+            extra={"document_count": len(filenames), "content_base_uuid": content_base_uuid},
+        )
+        documents = [self._build_ingest_document(content_base_uuid, filename) for filename in filenames]
+        response = self.bedrock_agent.ingest_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            documents=documents,
+        )
+        return response.get("documentDetails", [])
+
+    def get_direct_ingest_document_status(self, content_base_uuid: str, filename: str) -> list:
+        """Consulta status do documento sem reenviar ingestão."""
+        s3_uri = self._build_s3_uri(content_base_uuid, filename)
+        response = self.bedrock_agent.get_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            documentIdentifiers=[{"dataSourceType": "S3", "s3": {"uri": s3_uri}}],
+        )
+        return response.get("documentDetails", [])
+
+    def direct_delete(self, content_base_uuid: str, filename: str) -> dict:
+        logger.info("[Bedrock] Direct deleting document", extra={"document_filename": filename})
+        s3_uri = self._build_s3_uri(content_base_uuid, filename)
+
+        response = self.bedrock_agent.delete_knowledge_base_documents(
+            knowledgeBaseId=self.knowledge_base_id,
+            dataSourceId=self.data_source_id,
+            documentIdentifiers=[
+                {
+                    "dataSourceType": "S3",
+                    "s3": {"uri": s3_uri},
+                }
+            ],
+        )
+        return response.get("documentDetails", [])
 
     def get_agent(self, agent_id: str):
         return self.bedrock_agent.get_agent(agentId=agent_id)
