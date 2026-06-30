@@ -15,6 +15,7 @@ from nexus.inline_agents.models import (
 )
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
+from nexus.usecases.inline_agents.agent_constants_sync import sync_agent_constants_from_payload
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.mcp_definition_sync import sync_mcp_templates_from_agent_payload
@@ -43,6 +44,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         )
         self.handle_tools(agent_obj, project, agent["tools"], files, str(project.uuid))
         self.create_credentials(agent_obj, project, agent.get("credentials", {}))
+        self.create_constants(agent_obj, project, agent.get("constants", {}))
 
         if agent.get("group"):
             group = AgentGroup.objects.filter(slug=agent.get("group")).first()
@@ -102,14 +104,10 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         logger.info(f"Created agent - agent_key: {agent_key}")
         return agent_obj
 
-    def _process_constants(self, constants: Dict) -> Dict | None:
-        """Process constants from weni-cli YAML format to stored format"""
+    def create_constants(self, agent: Agent, project: Project, constants: Dict):
         if not constants:
-            return None
-        processed = {}
-        for key, constant_def in constants.items():
-            processed[key] = {"value": constant_def.get("default", ""), "definition": constant_def}
-        return processed
+            return
+        sync_agent_constants_from_payload(agent, project, constants)
 
     def create_credentials(self, agent: Agent, project: Project, credentials: Dict):
         created_credentials = []

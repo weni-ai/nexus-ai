@@ -13,6 +13,7 @@ from nexus.inline_agents.models import (
 )
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
+from nexus.usecases.inline_agents.agent_constants_sync import sync_agent_constants_from_payload
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.mcp_definition_sync import sync_mcp_templates_from_agent_payload
@@ -55,6 +56,13 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
         self.update_credentials(agent_obj, project, agent_data.get("credentials", {}))
+        if "constants" in agent_data:
+            sync_agent_constants_from_payload(
+                agent_obj,
+                project,
+                agent_data.get("constants") or {},
+                prune_missing=True,
+            )
 
         old_group = agent_obj.group
 
@@ -83,7 +91,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 elif isinstance(mcp_val, str) and mcp_val:
                     mcps_data = [mcp_val]
 
-            agent_obj.mcps.clear()  # Clear existing to handle removals/updates
+            agent_obj.mcps.clear()
 
             for mcp_item in mcps_data:
                 if isinstance(mcp_item, str):
