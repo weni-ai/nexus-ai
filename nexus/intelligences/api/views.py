@@ -2120,8 +2120,8 @@ class InstructionsClassificationAPIView(APIView):
 
             name = agent.name if agent and agent.name else "Agent"
             occupation = agent.role if agent and agent.role else "Customer Service Agent"
-            goal = agent.goal if agent else "Provide excellent customer support"
-            adjective = agent.personality if agent else "friendly"
+            goal = agent.goal if agent and agent.goal else "Provide excellent customer support"
+            adjective = agent.personality if agent and agent.personality else "friendly"
 
             instructions = []
             for instruction_obj in content_base.instructions.all():

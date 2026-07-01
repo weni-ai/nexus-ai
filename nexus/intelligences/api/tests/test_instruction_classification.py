@@ -100,7 +100,9 @@ class TestInstructionsClassificationAPIView(TestCase):
     def test_uses_defaults_when_agent_profile_fields_are_empty(self):
         self.agent.name = None
         self.agent.role = None
-        self.agent.save(update_fields=["name", "role"])
+        self.agent.personality = None
+        self.agent.goal = ""
+        self.agent.save(update_fields=["name", "role", "personality", "goal"])
 
         response = self._post_classify()
 
@@ -108,6 +110,8 @@ class TestInstructionsClassificationAPIView(TestCase):
         call_kwargs = self._mock_instruction_classify.call_args.kwargs
         self.assertEqual(call_kwargs["name"], "Agent")
         self.assertEqual(call_kwargs["occupation"], "Customer Service Agent")
+        self.assertEqual(call_kwargs["goal"], "Provide excellent customer support")
+        self.assertEqual(call_kwargs["adjective"], "friendly")
 
     def test_returns_lambda_classification_response(self):
         self._mock_instruction_classify.return_value = (
