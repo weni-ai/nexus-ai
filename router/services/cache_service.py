@@ -25,6 +25,7 @@ class CacheService:
         "inline_agent_config": {"ttl": INLINE_AGENT_CONFIG_TTL, "key_suffix": "inline_agent_config"},
         "instructions": {"ttl": INSTRUCTIONS_TTL, "key_suffix": "instructions"},
         "agent": {"ttl": AGENT_DATA_TTL, "key_suffix": "agent"},
+        "api_error_message": {"ttl": PROJECT_DATA_TTL, "key_suffix": "api_error_message"},
     }
 
     # Required cache types for composite cache
@@ -166,6 +167,15 @@ class CacheService:
         """Cache data for a specific workflow."""
         cache_key = f"workflow:{workflow_id}:{data_type}"
         self.cache_repository.set(cache_key, data, ttl or self.WORKFLOW_CACHE_TTL)
+
+    def get_api_error_message(self, project_uuid: str) -> Optional[str]:
+        """Get cached effective API error message for a project."""
+        return self.cache_repository.get(self._get_cache_key(project_uuid, "api_error_message"))
+
+    def set_api_error_message(self, project_uuid: str, message: str) -> None:
+        """Cache resolved API error message (cleared by invalidate_project_cache)."""
+        cache_key = self._get_cache_key(project_uuid, "api_error_message")
+        self.cache_repository.set(cache_key, message, self.PROJECT_DATA_TTL)
 
     def get_workflow_data(self, workflow_id: str, data_type: str) -> Optional[Any]:
         """Get cached data for a workflow."""

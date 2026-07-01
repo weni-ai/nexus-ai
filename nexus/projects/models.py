@@ -29,6 +29,14 @@ class Project(BaseModel, SoftDeleteModel):
         (BEDROCK, "Bedrock"),
     )
 
+    BEDROCK_INGESTION_JOB = "JOB"
+    BEDROCK_INGESTION_DIRECT = "DIRECT"
+
+    BEDROCK_INGESTION_STRATEGY_CHOICES = (
+        (BEDROCK_INGESTION_JOB, "Job"),
+        (BEDROCK_INGESTION_DIRECT, "Direct"),
+    )
+
     DEFAULT_BACKEND = "OpenAIBackend"
 
     name = models.CharField(max_length=255)
@@ -42,6 +50,11 @@ class Project(BaseModel, SoftDeleteModel):
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
     indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
+    bedrock_ingestion_strategy = models.CharField(
+        max_length=10,
+        choices=BEDROCK_INGESTION_STRATEGY_CHOICES,
+        default=BEDROCK_INGESTION_JOB,
+    )
     agents_backend = models.CharField(max_length=100, default=DEFAULT_BACKEND)
 
     human_support = models.BooleanField(default=False)
@@ -69,6 +82,7 @@ class Project(BaseModel, SoftDeleteModel):
     formatter_send_only_assistant_message = models.BooleanField(default=False)
     formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
     audio_orchestration_welcome_message = models.TextField(null=True, blank=True)
+    api_error_message = models.TextField(null=True, blank=True)
     manager_agent = models.ForeignKey("inline_agents.ManagerAgent", on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
