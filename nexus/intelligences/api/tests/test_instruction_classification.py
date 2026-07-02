@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from nexus.intelligences.api.views import InstructionsClassificationAPIView
-from nexus.intelligences.models import ContentBaseInstruction
+from nexus.intelligences.models import ContentBaseAgent, ContentBaseInstruction
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
@@ -20,6 +20,9 @@ class TestInstructionsClassificationAPIView(TestCase):
         self.content_base = ContentBaseFactory(is_router=True)
         self.org = self.content_base.intelligence.org
         self.user = self.org.created_by
+        self.user.name = "vanessa.souza"
+        self.user.occupation = "Platform Admin"
+
         self.project = ProjectFactory(
             brain_on=True,
             name=self.content_base.intelligence.name,
@@ -35,6 +38,17 @@ class TestInstructionsClassificationAPIView(TestCase):
         self.content_base.intelligence.is_router = True
         self.content_base.intelligence.description = "Project description for classification"
         self.content_base.intelligence.save(update_fields=["description", "is_router"])
+
+        content_base = get_default_content_base_by_project(str(self.project.uuid))
+        self.agent, _ = ContentBaseAgent.objects.update_or_create(
+            content_base=content_base,
+            defaults={
+                "name": "Especialista STIHL",
+                "role": "Assistente inteligente",
+                "personality": "Amigável",
+                "goal": "Responder perguntas dos clientes e vender produtos.",
+            },
+        )
 
         self.url = f"{self.project.uuid}/instructions-classification/"
 
@@ -74,6 +88,62 @@ class TestInstructionsClassificationAPIView(TestCase):
         self._feature_flag_patcher.stop()
         self._lambda_patcher.stop()
         self._patcher.stop()
+
+    def _post_classify(self, instruction="Always greet the customer", **extra):
+        payload = {"instruction": instruction, "language": "pt-br", **extra}
+        request = self.factory.post(self.url, payload, format="json")
+        force_authenticate(request, user=self.user)
+        return InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
+
+    def test_passes_agent_identity_not_user_identity_to_lambda(self):
+        response = self._post_classify(
+            instruction="Você sempre se apresenta e se refere a si mesmo no gênero masculino."
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self._mock_instruction_classify.assert_called_once()
+        call_kwargs = self._mock_instruction_classify.call_args.kwargs
+
+        self.assertEqual(call_kwargs["name"], "Especialista STIHL")
+        self.assertEqual(call_kwargs["occupation"], "Assistente inteligente")
+        self.assertEqual(call_kwargs["goal"], "Responder perguntas dos clientes e vender produtos.")
+        self.assertEqual(call_kwargs["adjective"], "Amigável")
+        self.assertNotEqual(call_kwargs["name"], "vanessa.souza")
+        self.assertNotEqual(call_kwargs["occupation"], "Platform Admin")
+
+    def test_uses_defaults_when_agent_profile_fields_are_empty(self):
+        self.agent.name = None
+        self.agent.role = None
+        self.agent.personality = None
+        self.agent.goal = ""
+        self.agent.save(update_fields=["name", "role", "personality", "goal"])
+
+        response = self._post_classify()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        call_kwargs = self._mock_instruction_classify.call_args.kwargs
+        self.assertEqual(call_kwargs["name"], "Agent")
+        self.assertEqual(call_kwargs["occupation"], "Customer Service Agent")
+        self.assertEqual(call_kwargs["goal"], "Provide excellent customer support")
+        self.assertEqual(call_kwargs["adjective"], "friendly")
+
+    def test_returns_lambda_classification_response(self):
+        self._mock_instruction_classify.return_value = (
+            [{"name": "Conflitos", "reason": "Potential conflict with existing instructions"}],
+            "Clarify the instruction scope",
+            "",
+        )
+
+        response = self._post_classify()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(
+            content["classification"],
+            [{"name": "Conflitos", "reason": "Potential conflict with existing instructions"}],
+        )
+        self.assertEqual(content["suggestion"], "Clarify the instruction scope")
 
     def test_post_passes_project_description_and_categories_to_lambda_when_flag_active(self):
         request = self.factory.post(

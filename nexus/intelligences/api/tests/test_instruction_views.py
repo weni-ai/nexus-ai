@@ -167,7 +167,71 @@ class TestProjectInstructionsViewSet(TestCase):
         existing.refresh_from_db()
         self.assertEqual(existing.instruction, "Updated text")
 
-    def test_patch_rejects_create_without_id(self):
+    def test_patch_creates_category_by_name_and_moves_uncategorized_instruction(self):
+        existing = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            instruction="When a user asks for a human agent",
+        )
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "name": "PERSONALIDADE",
+                        "instructions": [{"id": existing.id, "instruction": "When a user asks for a human agent"}],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        category = InstructionCategory.objects.get(content_base=self.content_base, name="PERSONALIDADE")
+        existing.refresh_from_db()
+        self.assertEqual(existing.category_id, category.id)
+        self.assertEqual(existing.suggested_category, "PERSONALIDADE")
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(content["categories"][0]["name"], "PERSONALIDADE")
+        self.assertNotIn("uncategorized_instructions", content)
+
+    def test_patch_uses_existing_category_by_name(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="policy")
+        existing = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            instruction="Uncategorized instruction",
+        )
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "name": "policy",
+                        "instructions": [{"id": existing.id, "instruction": "Uncategorized instruction"}],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(InstructionCategory.objects.filter(content_base=self.content_base).count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.category_id, category.id)
+
+    def test_patch_rejects_category_without_id_or_name(self):
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "instructions": [{"id": 1, "instruction": "Always greet the customer"}],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_patch_rejects_instruction_without_id(self):
         response = self._patch(
             {
                 "categories": [

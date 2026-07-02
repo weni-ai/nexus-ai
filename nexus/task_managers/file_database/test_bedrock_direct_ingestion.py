@@ -122,6 +122,7 @@ class BedrockDirectIngestS3PrefixTestCase(SimpleTestCase):
         mock_project_get.return_value = project
 
         bedrock = BedrockFileDatabase.__new__(BedrockFileDatabase)
+        bedrock.force_direct_ingest = False
         bedrock.s3_key_prefix = bedrock._resolve_s3_key_prefix("project-uuid")
         self.assertEqual(bedrock.s3_key_prefix, "direct-ingest/")
         self.assertEqual(
@@ -136,6 +137,7 @@ class BedrockDirectIngestS3PrefixTestCase(SimpleTestCase):
         mock_project_get.return_value = project
 
         bedrock = BedrockFileDatabase.__new__(BedrockFileDatabase)
+        bedrock.force_direct_ingest = False
         self.assertEqual(bedrock._resolve_s3_key_prefix("project-uuid"), "")
 
     @override_settings(AWS_BEDROCK_DIRECT_DATASOURCE_ID="")
@@ -146,7 +148,18 @@ class BedrockDirectIngestS3PrefixTestCase(SimpleTestCase):
         mock_project_get.return_value = project
 
         bedrock = BedrockFileDatabase.__new__(BedrockFileDatabase)
+        bedrock.force_direct_ingest = False
         self.assertEqual(bedrock._resolve_s3_key_prefix("project-uuid"), "")
+
+    @patch("nexus.projects.models.Project.objects.get")
+    def test_resolves_prefix_for_job_strategy_when_force_direct_ingest(self, mock_project_get):
+        project = MagicMock()
+        project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_JOB
+        mock_project_get.return_value = project
+
+        bedrock = BedrockFileDatabase.__new__(BedrockFileDatabase)
+        bedrock.force_direct_ingest = True
+        self.assertEqual(bedrock._resolve_s3_key_prefix("project-uuid"), "direct-ingest/")
 
 
 class TriggerBedrockIngestionTestCase(SimpleTestCase):
@@ -368,6 +381,7 @@ class DirectIngestTaskTestCase(SimpleTestCase):
             waiting_time=30,
             ingest_submitted=True,
             poll_count=1,
+            force_direct_ingest=False,
         )
         file_database.search_data.assert_not_called()
         file_database.get_direct_ingest_document_status.assert_not_called()
@@ -431,12 +445,14 @@ class DirectIngestBatchSubmitTestCase(SimpleTestCase):
 
         file_database.direct_ingest_batch.assert_called_once_with("content-base-uuid", filenames)
         self.assertEqual(mock_direct_ingest.delay.call_count, 3)
+        mock_bedrock_cls.assert_called_once_with(project_uuid="project-uuid", force_direct_ingest=True)
         mock_direct_ingest.delay.assert_any_call(
             "task-0",
             file_type="file",
             project_uuid="project-uuid",
             ingest_submitted=True,
             poll_count=0,
+            force_direct_ingest=True,
         )
 
 

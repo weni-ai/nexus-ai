@@ -30,9 +30,16 @@ class InstructionCategoryCreateRefSerializer(serializers.Serializer):
 
 
 class InstructionCategoryPatchSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
+    id = serializers.IntegerField(required=False)
     name = serializers.CharField(required=False, allow_blank=True)
     instructions = GroupedInstructionPatchItemSerializer(many=True, required=False)
+
+    def validate(self, attrs):
+        if attrs.get("id") is not None:
+            return attrs
+        if (attrs.get("name") or "").strip():
+            return attrs
+        raise serializers.ValidationError("Category id or name is required")
 
 
 class ProjectInstructionsResponseSerializer(serializers.Serializer):
