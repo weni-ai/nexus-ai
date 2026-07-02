@@ -27,9 +27,11 @@ class ProjectAdmin(admin.ModelAdmin):
         "conversation_turns_to_include",
         "exclude_previous_thinking_steps",
         "guardrail",
+        "bedrock_ingestion_strategy",
     )
     list_filter = (
         "agents_backend",
+        "bedrock_ingestion_strategy",
         "human_support",
         "rationale_switch",
         "inline_agent_switch",
@@ -67,6 +69,7 @@ class ProjectAdmin(admin.ModelAdmin):
                     "conversation_turns_to_include",
                     "exclude_previous_thinking_steps",
                     "guardrail",
+                    "bedrock_ingestion_strategy",
                     "manager_agent",
                 )
             },

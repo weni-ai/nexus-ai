@@ -498,6 +498,8 @@ ACTION_GENERATE_NAME_MODEL_AUTHORIZATION = env.str("ACTION_GENERATE_NAME_MODEL_A
 
 AWS_BEDROCK_DATASOURCE_ID = env.str("AWS_BEDROCK_DATASOURCE_ID")
 AWS_BEDROCK_LARGE_DATASOURCE_ID = env.str("AWS_BEDROCK_LARGE_DATASOURCE_ID")
+AWS_BEDROCK_DIRECT_DATASOURCE_ID = env.str("AWS_BEDROCK_DIRECT_DATASOURCE_ID", default="")
+AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX = env.str("AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX", default="direct-ingest/")
 AWS_BEDROCK_KNOWLEDGE_BASE_ID = env.str("AWS_BEDROCK_KNOWLEDGE_BASE_ID")
 AWS_BEDROCK_BUCKET_NAME = env.str("AWS_BEDROCK_BUCKET_NAME")
 AWS_BEDROCK_ACCESS_KEY = env.str("AWS_BEDROCK_ACCESS_KEY")
@@ -582,6 +584,8 @@ if not CREDENTIAL_ENCRYPTION_KEY and not TESTING:
     CREDENTIAL_ENCRYPTION_KEY = Fernet.generate_key()
 
 BEDROCK_FILE_SIZE_LIMIT = env.int("BEDROCK_FILE_SIZE_LIMIT", 50)
+BEDROCK_INGESTION_JOB_ENABLED = env.bool("BEDROCK_INGESTION_JOB_ENABLED", False)
+BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST = env.int("BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST", 25)
 
 
 HUMAN_SUPPORT_AGENT_ID = env.str("HUMAN_SUPPORT_AGENT_ID", "")
@@ -669,7 +673,6 @@ if not (128 <= AWS_LAMBDA_MEMORY_SIZE <= 10240):
 AWS_LAMBDA_LOG_GROUP = env.str("AWS_LAMBDA_LOG_GROUP", "")
 
 # Elastic APM Lambda configuration
-ELASTIC_APM_LAMBDA_ENABLED = env.bool("ELASTIC_APM_LAMBDA_ENABLED", False)
 ELASTIC_APM_LAMBDA_APM_SERVER = env.str("ELASTIC_APM_LAMBDA_APM_SERVER", "")
 ELASTIC_APM_LAMBDA_SECRET_TOKEN = env.str("ELASTIC_APM_LAMBDA_SECRET_TOKEN", "")
 ELASTIC_APM_ENVIRONMENT = env.str("ELASTIC_APM_ENVIRONMENT", "")  # staging, production, etc.
@@ -702,6 +705,18 @@ LEGACY_MANAGER_AGENT_UUIDS = env.list("LEGACY_MANAGER_AGENT_UUIDS", default=[])
 
 
 def get_datasource_id(project_uuid: str | None) -> str:
+    if project_uuid:
+        try:
+            from nexus.projects.models import Project
+
+            project = Project.objects.get(uuid=project_uuid)
+            if (
+                project.bedrock_ingestion_strategy == Project.BEDROCK_INGESTION_DIRECT
+                and AWS_BEDROCK_DIRECT_DATASOURCE_ID
+            ):
+                return AWS_BEDROCK_DIRECT_DATASOURCE_ID
+        except Project.DoesNotExist:
+            pass
     if project_uuid in PROJECTS_WITH_LARGE_DATASOURCE:
         return AWS_BEDROCK_LARGE_DATASOURCE_ID
     return AWS_BEDROCK_DATASOURCE_ID

@@ -172,6 +172,48 @@ class AgentCredential(models.Model):
         return self.value
 
 
+class AgentConstant(models.Model):
+    """Agent-level constant definitions (schema), mirroring AgentCredential for config options."""
+
+    TEXT = "TEXT"
+    NUMBER = "NUMBER"
+    CHECKBOX = "CHECKBOX"
+    SELECT = "SELECT"
+    RADIO = "RADIO"
+    SWITCH = "SWITCH"
+
+    TYPE_CHOICES = (
+        (TEXT, "Text"),
+        (NUMBER, "Number"),
+        (CHECKBOX, "Checkbox"),
+        (SELECT, "Select"),
+        (RADIO, "Radio"),
+        (SWITCH, "Switch"),
+    )
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_constants")
+    key = models.CharField(max_length=255)
+    label = models.CharField(max_length=255)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TEXT)
+    options = models.JSONField(default=list, blank=True)
+    default_value = models.JSONField(default=None, null=True, blank=True)
+    is_required = models.BooleanField(default=False)
+    definition = models.JSONField(default=dict, blank=True)
+    agents = models.ManyToManyField(Agent)
+
+    class Meta:
+        unique_together = ("project", "key")
+
+    def __str__(self):
+        return self.label
+
+    def save(self, *args, **kwargs):
+        if self.type in (self.SWITCH, self.NUMBER, self.TEXT, self.CHECKBOX):
+            if not isinstance(self.options, list):
+                self.options = []
+        super().save(*args, **kwargs)
+
+
 class ContactField(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="inline_contact_fields")
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_contact_fields")

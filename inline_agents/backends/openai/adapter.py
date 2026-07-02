@@ -6,6 +6,7 @@ import boto3
 import pendulum
 import sentry_sdk
 from django.conf import settings
+from django.db.models import Prefetch
 from django.template import Context as TemplateContext
 from django.template import Template
 from django.utils.text import slugify
@@ -23,11 +24,13 @@ from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, 
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
+    AgentConstant,
     AgentCredential,
     Guardrail,
     InlineAgentsConfiguration,
     IntegratedAgent,
 )
+from nexus.usecases.inline_agents.agent_constants_sync import iter_agent_constant_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -274,9 +277,7 @@ class OpenAITeamAdapter(TeamAdapter):
         json_tools = cls._get_tools(supervisor["tools"])
         if not use_components:
             component_tool_names_to_strip = all_component_tool_names(formatter_tools_descriptions)
-            json_tools = [
-                t for t in json_tools if getattr(t, "name", None) not in component_tool_names_to_strip
-            ]
+            json_tools = [t for t in json_tools if getattr(t, "name", None) not in component_tool_names_to_strip]
 
         supervisor_tools: List[Any] = list(json_tools)
         supervisor_tools.extend(agents_as_tools)
@@ -289,12 +290,8 @@ class OpenAITeamAdapter(TeamAdapter):
             legacy_component_tool_name_set = all_component_tool_names(formatter_tools_descriptions)
             streaming_merge_tool_name_set = streaming_merge_tool_names(formatter_tools_descriptions)
             names_to_strip = legacy_component_tool_name_set | streaming_merge_tool_name_set
-            supervisor_tools = [
-                t for t in supervisor_tools if getattr(t, "name", None) not in names_to_strip
-            ]
-            supervisor_tools.extend(
-                get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions)
-            )
+            supervisor_tools = [t for t in supervisor_tools if getattr(t, "name", None) not in names_to_strip]
+            supervisor_tools.extend(get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions))
 
         supervisor_agent = SupervisorEntity(
             name="manager",
@@ -583,9 +580,16 @@ class OpenAITeamAdapter(TeamAdapter):
                 f"Searching for agent with tool '{function_name}' in project '{project_uuid}'"
                 f" - function_name: {function_name}, project_uuid: {project_uuid}"
             )
-            integrated_agents = IntegratedAgent.objects.filter(
-                project__uuid=project_uuid, is_active=True
-            ).select_related("agent")
+            integrated_agents = (
+                IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+                .select_related("agent")
+                .prefetch_related(
+                    Prefetch(
+                        "agent__agentconstant_set",
+                        queryset=AgentConstant.objects.all(),
+                    )
+                )
+            )
 
             integrated_agents_count = integrated_agents.count()
             logger.debug(
@@ -661,11 +665,8 @@ class OpenAITeamAdapter(TeamAdapter):
     @classmethod
     def _prepare_agent_constants(cls, agent, integrated_agent=None):
         """Extract constants from agent configuration."""
-        constants = {}
-        if hasattr(agent, "constants") and agent.constants:
-            constants = {k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()}
+        constants = iter_agent_constant_defaults(agent)
 
-        # Inject mcp_config into constants
         if integrated_agent and integrated_agent.metadata:
             mcp_config = integrated_agent.metadata.get("mcp_config", {})
             if isinstance(mcp_config, dict):

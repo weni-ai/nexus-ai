@@ -45,8 +45,10 @@ from nexus.inline_agents.backends.openai.repository import (
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.internals.connect import ConnectRESTClient
+from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.services.cache_service import CacheService
 from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
@@ -81,11 +83,33 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_default_error_message(project_uuid: str) -> str:
         fallback_language = "en-us"
         messages = getattr(settings, "DEFAULT_ERROR_MESSAGES", {})
+
+        cache_service = CacheService()
+        cached = cache_service.get_api_error_message(project_uuid)
+        if cached is not None:
+            return cached
+
+        try:
+            project = Project.objects.only("api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            project = None
+        except Exception:
+            project = None
+
+        if project is not None and project.api_error_message:
+            cache_service.set_api_error_message(project_uuid, project.api_error_message)
+            return project.api_error_message
+
         try:
             language = ConnectRESTClient().get_project_language(project_uuid)
         except Exception:
             language = fallback_language
-        return messages.get(language, messages.get(fallback_language, ""))
+        resolved = messages.get(language, messages.get(fallback_language, ""))
+
+        if project is not None:
+            cache_service.set_api_error_message(project_uuid, resolved)
+
+        return resolved
 
     def get_supervisor(
         self,

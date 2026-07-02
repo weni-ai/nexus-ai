@@ -15,6 +15,7 @@ from drf_spectacular.utils import (
     extend_schema,
 )
 from rest_framework import parsers, status, views
+from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -62,9 +63,10 @@ from nexus.task_managers.tasks import (
 from nexus.task_managers.tasks_bedrock import (
     bedrock_send_link,
     bedrock_upload_text_file,
-    start_ingestion_job,
+    trigger_bedrock_ingestion,
 )
 from nexus.usecases import intelligences
+from nexus.usecases.intelligences.batch_ingestion_progress import BatchIngestionProgressUseCase
 from nexus.usecases.intelligences.exceptions import (
     ContentBaseDoesNotExist,
     IntelligencePermissionDenied,
@@ -85,6 +87,7 @@ from nexus.usecases.users.exceptions import UserDoesNotExists
 from nexus.users.models import User
 
 from .serializers import (
+    BatchIngestionProgressRequestSerializer,
     ContentBaseFileSerializer,
     ContentBaseLinkSerializer,
     ContentBasePersonalizationSerializer,
@@ -753,12 +756,164 @@ class InlineContentBaseTextViewset(ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ContentBaseFileViewset(ModelViewSet):
+class BatchContentBaseFileMixin:
+    def _validate_batch_file_size(self, file):
+        if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
+            return f"File size is too large: {file.name}"
+
+    def _get_batch_upload_files(self, request):
+        files = request.FILES.getlist("files")
+        if not files:
+            single_file = request.FILES.get("file")
+            if single_file:
+                files = [single_file]
+        return files
+
+    def _handle_batch_file_upload(self, request, content_base_uuid: str, inline: bool = False):
+        from rest_framework import status as http_status
+
+        files = self._get_batch_upload_files(request)
+        if not files:
+            return Response(data={"message": "files is required"}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        max_files = settings.BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST
+        if len(files) > max_files:
+            return Response(
+                data={"message": f"A maximum of {max_files} files is allowed per request"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        for file in files:
+            size_error = self._validate_batch_file_size(file)
+            if size_error:
+                return Response(data={"message": size_error}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        user: User = request.user
+        user_email: str = user.email
+        extension_file: str = request.data.get("extension_file")
+
+        project_error = self._validate_bedrock_project_for_batch(content_base_uuid)
+        if project_error:
+            return project_error
+
+        file_manager = CeleryFileManager()
+        data, response_status = file_manager.upload_and_ingest_batch(
+            files,
+            content_base_uuid,
+            extension_file,
+            user_email,
+            inline=inline,
+        )
+        return Response(data=data, status=response_status)
+
+    def _validate_bedrock_project_for_batch(self, content_base_uuid: str):
+        from rest_framework import status as http_status
+
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+        except ObjectDoesNotExist:
+            return Response(data={"message": "Project not found"}, status=http_status.HTTP_404_NOT_FOUND)
+
+        if project.indexer_database != Project.BEDROCK:
+            return Response(
+                data={"message": "This endpoint is only available for Bedrock projects"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        return None
+
+    def _handle_batch_ingestion_progress(self, request, content_base_uuid: str):
+        from rest_framework import status as http_status
+
+        project_error = self._validate_bedrock_project_for_batch(content_base_uuid)
+        if project_error:
+            return project_error
+
+        serializer = BatchIngestionProgressRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(data=serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+        file_uuids = [str(file_uuid) for file_uuid in serializer.validated_data["file_uuids"]]
+        max_files = settings.BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST
+        if len(file_uuids) > max_files:
+            return Response(
+                data={"message": f"A maximum of {max_files} file UUIDs is allowed per request"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            progress = BatchIngestionProgressUseCase().get_progress(content_base_uuid, file_uuids)
+        except ContentBaseFile.DoesNotExist as e:
+            return Response(data={"message": str(e)}, status=http_status.HTTP_404_NOT_FOUND)
+
+        return Response(data=progress, status=http_status.HTTP_200_OK)
+
+
+class ContentBaseFileViewset(BatchContentBaseFileMixin, ModelViewSet):
     serializer_class = ContentBaseFileSerializer
     pagination_class = CustomCursorPagination
     parser_classes = (parsers.MultiPartParser,)
     permission_classes = [IsAuthenticated]
     lookup_url_kwarg = "contentbase_file_uuid"
+
+    @action(detail=False, methods=["post"], url_path="batch", parser_classes=[parsers.MultiPartParser])
+    def batch_create(self, request, content_base_uuid=None, **kwargs):
+        try:
+            content_base_uuid = content_base_uuid or self.kwargs.get("content_base_uuid")
+            if not content_base_uuid:
+                return Response(
+                    data={"message": "content_base_uuid is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            self.get_queryset()
+            return self._handle_batch_file_upload(request, content_base_uuid, inline=False)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while uploading the files: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="batch/progress",
+        parser_classes=[parsers.JSONParser],
+    )
+    def batch_progress(self, request, content_base_uuid=None, **kwargs):
+        try:
+            content_base_uuid = content_base_uuid or self.kwargs.get("content_base_uuid")
+            if not content_base_uuid:
+                return Response(
+                    data={"message": "content_base_uuid is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            self.get_queryset()
+            return self._handle_batch_ingestion_progress(request, content_base_uuid)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while fetching ingestion progress: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def list(self, request, *args, **kwargs):
         try:
@@ -866,10 +1021,17 @@ class ContentBaseFileViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_file.file_name
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -890,12 +1052,61 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class InlineContentBaseFileViewset(ModelViewSet):
+class InlineContentBaseFileViewset(BatchContentBaseFileMixin, ModelViewSet):
     serializer_class = ContentBaseFileSerializer
     pagination_class = CustomCursorPagination
     parser_classes = (parsers.MultiPartParser,)
     permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
     lookup_url_kwarg = "contentbase_file_uuid"
+
+    @action(detail=False, methods=["post"], url_path="batch", parser_classes=[parsers.MultiPartParser])
+    def batch_create(self, request, project_uuid=None, **kwargs):
+        try:
+            content_base = intelligences.get_by_uuid.get_default_content_base_by_project(
+                project_uuid or self.kwargs.get("project_uuid")
+            )
+            return self._handle_batch_file_upload(request, str(content_base.uuid), inline=True)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while uploading the files: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="batch/progress",
+        parser_classes=[parsers.JSONParser],
+    )
+    def batch_progress(self, request, project_uuid=None, **kwargs):
+        try:
+            content_base = intelligences.get_by_uuid.get_default_content_base_by_project(
+                project_uuid or self.kwargs.get("project_uuid")
+            )
+            return self._handle_batch_ingestion_progress(request, str(content_base.uuid))
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while fetching ingestion progress: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
@@ -971,10 +1182,17 @@ class InlineContentBaseFileViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_file.file_name
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -1057,6 +1275,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_link.name if content_base_link.name else content_base_link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1064,7 +1283,13 @@ class ContentBaseLinkViewset(ModelViewSet):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_link_activity", action_type="D", content_base_link=content_base_link, user=user
@@ -1160,6 +1385,7 @@ class InlineContentBaseLinkViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_link.name if content_base_link.name else content_base_link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1167,7 +1393,13 @@ class InlineContentBaseLinkViewset(ModelViewSet):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_link_activity",
@@ -1364,6 +1596,7 @@ class RouterRetailViewSet(views.APIView):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = link.name if link.name else link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1371,7 +1604,13 @@ class RouterRetailViewSet(views.APIView):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=str(content_base_uuid),
+                    filename=filename,
+                )
 
             event_manager.notify(event="contentbase_link_activity", action_type="D", content_base_link=link, user=user)
 
@@ -1878,16 +2117,15 @@ class InstructionsClassificationAPIView(APIView):
             instruction = serializer.validated_data["instruction"]
             language = serializer.validated_data["language"]
 
-            user = request.user
-            name = getattr(user, "name", None) or user.email.split("@")[0]
-            occupation = getattr(user, "occupation", "Customer Service Agent")
-
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
             project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            agent = content_base.agent
 
-            goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
-            adjective = content_base.agent.personality if content_base.agent else "friendly"
+            name = agent.name if agent and agent.name else "Agent"
+            occupation = agent.role if agent and agent.role else "Customer Service Agent"
+            goal = agent.goal if agent and agent.goal else "Provide excellent customer support"
+            adjective = agent.personality if agent and agent.personality else "friendly"
 
             existing_instruction_id = serializer.validated_data.get("id")
             instructions_qs = content_base.instructions.all()
