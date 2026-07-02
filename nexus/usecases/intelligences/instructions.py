@@ -84,7 +84,7 @@ class ProjectInstructionsUseCase:
     ) -> dict[str, list[dict[str, Any]]]:
         if categories_data:
             for category_data in categories_data:
-                category = self._update_category(content_base, category_data)
+                category = self._resolve_category_for_patch(content_base, category_data)
                 if "instructions" in category_data:
                     self._patch_category_instructions(content_base, category, category_data["instructions"], user)
 
@@ -130,15 +130,23 @@ class ProjectInstructionsUseCase:
     def _uncategorize_instructions_for_category(self, category: InstructionCategory) -> None:
         ContentBaseInstruction.objects.filter(category=category).update(category=None, suggested_category="")
 
-    def _update_category(self, content_base: ContentBase, category_data: dict[str, Any]) -> InstructionCategory:
-        category_id = category_data["id"]
-        category = content_base.instruction_categories.get(id=category_id)
+    def _resolve_category_for_patch(
+        self, content_base: ContentBase, category_data: dict[str, Any]
+    ) -> InstructionCategory:
+        category_id = category_data.get("id")
+        if category_id is not None:
+            category = content_base.instruction_categories.get(id=category_id)
+            name = (category_data.get("name") or "").strip()
+            if name and category.name != name:
+                category.name = name
+                category.save(update_fields=["name"])
+            return category
 
         name = (category_data.get("name") or "").strip()
-        if name and category.name != name:
-            category.name = name
-            category.save(update_fields=["name"])
+        if not name:
+            raise ValueError("Category id or name is required")
 
+        category, _ = InstructionCategory.objects.get_or_create(content_base=content_base, name=name)
         return category
 
     def _patch_category_instructions(

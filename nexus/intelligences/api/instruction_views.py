@@ -116,9 +116,9 @@ class ProjectInstructionsViewSet(ModelViewSet):
         operation_id="patch_project_instructions",
         summary="Update existing project instructions and categories",
         description=(
-            "Updates only existing categories and instructions (id required). "
-            "Use POST to create and DELETE endpoints to remove. "
-            "Omitted categories and instructions are left unchanged."
+            "Updates existing instructions (id required). Categories accept id or name; "
+            "name without id uses get_or_create. Use POST to create instructions and "
+            "DELETE endpoints to remove. Omitted categories and instructions are left unchanged."
         ),
         request=ProjectInstructionsPatchSerializer,
         parameters=[

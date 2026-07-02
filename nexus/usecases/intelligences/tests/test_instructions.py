@@ -84,6 +84,30 @@ class TestProjectInstructionsUseCase(TestCase):
         existing.refresh_from_db()
         self.assertEqual(existing.instruction, "Updated instruction")
 
+    def test_patch_creates_category_by_name_and_assigns_instruction(self):
+        existing = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            instruction="Legacy instruction",
+        )
+
+        self.use_case.patch_grouped_instructions(
+            content_base=self.content_base,
+            categories_data=[
+                {
+                    "name": "greeting",
+                    "instructions": [{"id": existing.id, "instruction": "Legacy instruction"}],
+                }
+            ],
+            uncategorized_data=None,
+            user=self.user,
+            project_uuid=str(self.project.uuid),
+        )
+
+        category = InstructionCategory.objects.get(content_base=self.content_base, name="greeting")
+        existing.refresh_from_db()
+        self.assertEqual(existing.category_id, category.id)
+        self.assertEqual(existing.suggested_category, "greeting")
+
     def test_delete_category_moves_instructions_to_uncategorized(self):
         category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
         instruction = ContentBaseInstruction.objects.create(
