@@ -1,7 +1,6 @@
 import base64
 import json
 import logging
-from functools import lru_cache
 from typing import Any
 
 import boto3
@@ -15,7 +14,6 @@ class OpenSearchKnowledgeBaseError(Exception):
     pass
 
 
-@lru_cache(maxsize=1)
 def get_opensearch_kb_config() -> dict[str, str]:
     try:
         bedrock_agent_client = boto3.client("bedrock-agent", region_name=settings.AWS_BEDROCK_REGION_NAME)
@@ -28,10 +26,10 @@ def get_opensearch_kb_config() -> dict[str, str]:
 
         os_conf = storage_conf["opensearchServerlessConfiguration"]
         collection_arn = os_conf["collectionArn"]
-        partes_arn = collection_arn.split(":")
-        regiao = partes_arn[3]
-        collection_id = partes_arn[5].replace("collection/", "")
-        host = f"{collection_id}.{regiao}.aoss.amazonaws.com"
+        arn_parts = collection_arn.split(":")
+        region = arn_parts[3]
+        collection_id = arn_parts[5].replace("collection/", "")
+        host = f"{collection_id}.{region}.aoss.amazonaws.com"
 
         field_mapping = os_conf.get("fieldMapping", {})
         metadata_field = field_mapping.get("metadataField")
@@ -44,17 +42,14 @@ def get_opensearch_kb_config() -> dict[str, str]:
             "host": host,
             "metadata_field": metadata_field,
             "text_field": text_field,
-            "region": regiao,
+            "region": region,
             "index_name": settings.AWS_BEDROCK_OPENSEARCH_INDEX_NAME,
         }
-    except OpenSearchKnowledgeBaseError:
-        raise
     except Exception as e:
         logger.exception("Failed to fetch OpenSearch KB config")
         raise OpenSearchKnowledgeBaseError(f"Failed to fetch Knowledge Base config: {e}") from e
 
 
-@lru_cache(maxsize=1)
 def get_opensearch_client() -> OpenSearch:
     config = get_opensearch_kb_config()
     credentials = boto3.Session().get_credentials()
