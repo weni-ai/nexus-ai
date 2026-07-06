@@ -1,3 +1,5 @@
+import csv
+import io
 from typing import Any
 
 from django.forms.models import model_to_dict
@@ -31,6 +33,21 @@ class ProjectInstructionsUseCase:
             payload["uncategorized_instructions"] = uncategorized_instructions
 
         return payload
+
+    def build_instructions_csv(self, content_base: ContentBase) -> str:
+        output = io.StringIO()
+        writer = csv.writer(output, lineterminator="\n")
+        writer.writerow(["category", "instruction"])
+
+        for category in content_base.instruction_categories.prefetch_related("instructions").order_by("id"):
+            for instruction in category.instructions.all().order_by("id"):
+                writer.writerow([category.name, instruction.instruction])
+
+        uncategorized = content_base.instructions.filter(category__isnull=True).order_by("id")
+        for instruction in uncategorized:
+            writer.writerow(["", instruction.instruction])
+
+        return output.getvalue()
 
     def create_instruction(
         self,

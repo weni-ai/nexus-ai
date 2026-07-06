@@ -120,6 +120,11 @@ urlpatterns = [
         name="project-instructions",
     ),
     path(
+        "<project_uuid>/instructions/export/",
+        ProjectInstructionsViewSet.as_view({"get": "export"}),
+        name="project-instructions-export",
+    ),
+    path(
         "<project_uuid>/instructions/categories/<int:category_id>/",
         ProjectInstructionsViewSet.as_view({"delete": "destroy_category"}),
         name="project-instruction-category-delete",

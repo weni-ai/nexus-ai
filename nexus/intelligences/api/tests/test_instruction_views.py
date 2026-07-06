@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 from unittest import mock
 
@@ -270,6 +272,78 @@ class TestProjectInstructionsViewSet(TestCase):
         response = self._patch({})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_export_returns_csv_with_all_instructions(self):
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=greeting,
+            instruction="Always greet the customer",
+        )
+        ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            instruction="Legacy instruction",
+        )
+
+        export_url = f"{self.project.uuid}/instructions/export/"
+        request = self.factory.get(export_url)
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn(f"instructions_{self.project.uuid}.csv", response["Content-Disposition"])
+
+        rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
+        self.assertEqual(rows[0], ["category", "instruction"])
+        self.assertEqual(
+            rows[1:],
+            [
+                ["greeting", "Always greet the customer"],
+                ["", "Legacy instruction"],
+            ],
+        )
+
+    def test_export_accepts_text_csv_accept_header(self):
+        export_url = f"{self.project.uuid}/instructions/export/"
+        request = self.factory.get(export_url, HTTP_ACCEPT="text/csv")
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+
+    def test_export_returns_header_only_when_no_instructions(self):
+        export_url = f"{self.project.uuid}/instructions/export/"
+        request = self.factory.get(export_url)
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
+        self.assertEqual(rows, [["category", "instruction"]])
+
+    @mock.patch("nexus.feature_flags.permissions.is_feature_active_for_attributes", return_value=False)
+    def test_export_returns_403_when_feature_flag_is_inactive(self, _mock_feature_flag):
+        export_url = f"{self.project.uuid}/instructions/export/"
+        request = self.factory.get(export_url)
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @mock.patch("nexus.feature_flags.permissions.is_feature_active_for_attributes", return_value=False)
     def test_list_returns_403_when_feature_flag_is_inactive(self, _mock_feature_flag):
