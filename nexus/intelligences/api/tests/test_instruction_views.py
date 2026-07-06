@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from nexus.intelligences.api.instruction_views import ProjectInstructionsViewSet
+from nexus.intelligences.constants import DUPLICATE_CATEGORY_NAME_ERROR
 from nexus.intelligences.models import ContentBaseInstruction, InstructionCategory
 from nexus.projects.models import Project
 from nexus.projects.permissions import has_project_permission
@@ -61,6 +62,62 @@ class TestProjectInstructionsViewSet(TestCase):
             request,
             project_uuid=str(self.project.uuid),
         )
+
+    def _export_payload(self, **overrides):
+        payload = {
+            "columns": {"category": "Categoria", "instruction": "Instrução"},
+            "category_labels": {
+                "uncategorized": "Sem categoria",
+                "default": "Instruções padrão",
+            },
+            "default_instructions": [],
+        }
+        payload.update(overrides)
+        return payload
+
+    def _export(self, data=None):
+        export_url = f"{self.project.uuid}/instructions/export/"
+        request = self.factory.post(export_url, data or self._export_payload(), format="json")
+        force_authenticate(request, user=self.user)
+        return ProjectInstructionsViewSet.as_view({"post": "export"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+    def test_post_returns_409_when_creating_duplicate_category_by_name(self):
+        InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+
+        response = self._post(
+            {
+                "instruction": "Always greet the customer",
+                "category": {"name": "greeting"},
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(content["error"], DUPLICATE_CATEGORY_NAME_ERROR)
+
+    def test_patch_returns_409_when_renaming_category_to_duplicate_name(self):
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        policy = InstructionCategory.objects.create(content_base=self.content_base, name="policy")
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "id": greeting.id,
+                        "name": "policy",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        greeting.refresh_from_db()
+        self.assertEqual(greeting.name, "greeting")
+        self.assertTrue(InstructionCategory.objects.filter(id=policy.id).exists())
 
     def test_list_returns_grouped_categories_including_empty_category(self):
         greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
@@ -285,13 +342,7 @@ class TestProjectInstructionsViewSet(TestCase):
             instruction="Legacy instruction",
         )
 
-        export_url = f"{self.project.uuid}/instructions/export/"
-        request = self.factory.get(export_url)
-        force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
+        response = self._export()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
@@ -299,20 +350,53 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertIn(f"instructions_{self.project.uuid}.csv", response["Content-Disposition"])
 
         rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
-        self.assertEqual(rows[0], ["category", "instruction"])
+        self.assertEqual(rows[0], ["Categoria", "Instrução"])
         self.assertEqual(
             rows[1:],
             [
                 ["greeting", "Always greet the customer"],
-                ["", "Legacy instruction"],
+                ["Sem categoria", "Legacy instruction"],
             ],
         )
 
+    def test_export_includes_default_instructions_from_request_body(self):
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=greeting,
+            instruction="Always greet the customer",
+        )
+
+        response = self._export(
+            self._export_payload(
+                default_instructions=[
+                    "Default instruction one",
+                    "Default instruction two",
+                ]
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
+        self.assertEqual(
+            rows[1:],
+            [
+                ["greeting", "Always greet the customer"],
+                ["Instruções padrão", "Default instruction one"],
+                ["Instruções padrão", "Default instruction two"],
+            ],
+        )
+
+    def test_export_returns_400_when_columns_are_missing(self):
+        response = self._export({"category_labels": {"uncategorized": "Sem categoria", "default": "Padrão"}})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_export_accepts_text_csv_accept_header(self):
         export_url = f"{self.project.uuid}/instructions/export/"
-        request = self.factory.get(export_url, HTTP_ACCEPT="text/csv")
+        request = self.factory.post(export_url, self._export_payload(), format="json", HTTP_ACCEPT="text/csv")
         force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
+        response = ProjectInstructionsViewSet.as_view({"post": "export"})(
             request,
             project_uuid=str(self.project.uuid),
         )
@@ -321,27 +405,15 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
 
     def test_export_returns_header_only_when_no_instructions(self):
-        export_url = f"{self.project.uuid}/instructions/export/"
-        request = self.factory.get(export_url)
-        force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
+        response = self._export()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
-        self.assertEqual(rows, [["category", "instruction"]])
+        self.assertEqual(rows, [["Categoria", "Instrução"]])
 
     @mock.patch("nexus.feature_flags.permissions.is_feature_active_for_attributes", return_value=False)
     def test_export_returns_403_when_feature_flag_is_inactive(self, _mock_feature_flag):
-        export_url = f"{self.project.uuid}/instructions/export/"
-        request = self.factory.get(export_url)
-        force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"get": "export"})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
+        response = self._export()
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 

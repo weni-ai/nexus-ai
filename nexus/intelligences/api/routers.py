@@ -121,7 +121,7 @@ urlpatterns = [
     ),
     path(
         "<project_uuid>/instructions/export/",
-        ProjectInstructionsViewSet.as_view({"get": "export"}),
+        ProjectInstructionsViewSet.as_view({"post": "export"}),
         name="project-instructions-export",
     ),
     path(
