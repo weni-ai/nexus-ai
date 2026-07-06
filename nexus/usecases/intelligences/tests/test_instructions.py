@@ -7,6 +7,7 @@ from django.test import TestCase
 from nexus.intelligences.models import ContentBaseInstruction, InstructionCategory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.intelligences.instructions import (
+    DuplicateCategoryNameError,
     ProjectInstructionsUseCase,
     build_initial_retail_instruction_payload,
     build_instruction_create_payload,
@@ -58,23 +59,51 @@ class TestProjectInstructionsUseCase(TestCase):
             instruction="Legacy instruction",
         )
 
-        csv_content = self.use_case.build_instructions_csv(self.content_base)
+        csv_content = self.use_case.build_instructions_csv(
+            self.content_base,
+            category_column="Categoria",
+            instruction_column="Instrução",
+            uncategorized_label="Sem categoria",
+            default_label="Instruções padrão",
+        )
         rows = list(csv.reader(io.StringIO(csv_content)))
 
-        self.assertEqual(rows[0], ["category", "instruction"])
+        self.assertEqual(rows[0], ["Categoria", "Instrução"])
         self.assertEqual(
             rows[1:],
             [
                 ["greeting", "Always greet the customer"],
-                ["", "Legacy instruction"],
+                ["Sem categoria", "Legacy instruction"],
             ],
         )
 
-    def test_build_instructions_csv_returns_header_only_when_no_instructions(self):
-        csv_content = self.use_case.build_instructions_csv(self.content_base)
+    def test_build_instructions_csv_includes_default_instructions(self):
+        csv_content = self.use_case.build_instructions_csv(
+            self.content_base,
+            category_column="Categoria",
+            instruction_column="Instrução",
+            uncategorized_label="Sem categoria",
+            default_label="Instruções padrão",
+            default_instructions=["Default instruction"],
+        )
         rows = list(csv.reader(io.StringIO(csv_content)))
 
-        self.assertEqual(rows, [["category", "instruction"]])
+        self.assertEqual(
+            rows,
+            [["Categoria", "Instrução"], ["Instruções padrão", "Default instruction"]],
+        )
+
+    def test_build_instructions_csv_returns_header_only_when_no_instructions(self):
+        csv_content = self.use_case.build_instructions_csv(
+            self.content_base,
+            category_column="Categoria",
+            instruction_column="Instrução",
+            uncategorized_label="Sem categoria",
+            default_label="Instruções padrão",
+        )
+        rows = list(csv.reader(io.StringIO(csv_content)))
+
+        self.assertEqual(rows, [["Categoria", "Instrução"]])
 
     def test_create_instruction_uncategorized(self):
         self.use_case.create_instruction(
@@ -151,6 +180,42 @@ class TestProjectInstructionsUseCase(TestCase):
         existing.refresh_from_db()
         self.assertEqual(existing.category_id, category.id)
         self.assertEqual(existing.suggested_category, "greeting")
+
+    def test_create_instruction_raises_when_category_name_already_exists(self):
+        InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+
+        with self.assertRaises(DuplicateCategoryNameError):
+            self.use_case.create_instruction(
+                content_base=self.content_base,
+                instruction_text="Always greet the customer",
+                category_data={"name": "greeting"},
+                user=self.user,
+                project_uuid=str(self.project.uuid),
+            )
+
+    def test_patch_reuses_existing_category_by_name_without_error(self):
+        InstructionCategory.objects.create(content_base=self.content_base, name="policy")
+        existing = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            instruction="Uncategorized instruction",
+        )
+
+        self.use_case.patch_grouped_instructions(
+            content_base=self.content_base,
+            categories_data=[
+                {
+                    "name": "policy",
+                    "instructions": [{"id": existing.id, "instruction": "Uncategorized instruction"}],
+                }
+            ],
+            uncategorized_data=None,
+            user=self.user,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(InstructionCategory.objects.filter(content_base=self.content_base).count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.category.name, "policy")
 
     def test_delete_category_moves_instructions_to_uncategorized(self):
         category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")

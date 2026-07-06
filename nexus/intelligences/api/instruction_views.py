@@ -12,15 +12,16 @@ from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.feature_flags.permissions import FeatureFlagPermission
 from nexus.intelligences.api.instruction_serializers import (
     ProjectInstructionsCreateSerializer,
+    ProjectInstructionsExportSerializer,
     ProjectInstructionsPatchSerializer,
     ProjectInstructionsResponseSerializer,
 )
-from nexus.intelligences.constants import INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
+from nexus.intelligences.constants import DUPLICATE_CATEGORY_NAME_ERROR, INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
 from nexus.intelligences.models import ContentBase, ContentBaseInstruction, InstructionCategory
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.usecases.intelligences import get_default_content_base_by_project
 from nexus.usecases.intelligences.delete import DeleteContentBaseUseCase
-from nexus.usecases.intelligences.instructions import ProjectInstructionsUseCase
+from nexus.usecases.intelligences.instructions import DuplicateCategoryNameError, ProjectInstructionsUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +83,11 @@ class ProjectInstructionsViewSet(ModelViewSet):
         operation_id="export_project_instructions",
         summary="Export project instructions as CSV",
         description=(
-            "Returns a CSV file with all project instructions for download. "
-            "Each row contains category and instruction columns."
+            "Returns a CSV file with project instructions for download. "
+            "The frontend sends localized column headers, category row labels, "
+            "and default instruction texts in the request body."
         ),
+        request=ProjectInstructionsExportSerializer,
         parameters=[
             OpenApiParameter(
                 name="project_uuid",
@@ -103,7 +106,22 @@ class ProjectInstructionsViewSet(ModelViewSet):
     def export(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         content_base = self._get_content_base(project_uuid)
-        csv_content = self.use_case.build_instructions_csv(content_base)
+
+        serializer = ProjectInstructionsExportSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+
+        validated = serializer.validated_data
+        columns = validated["columns"]
+        category_labels = validated["category_labels"]
+
+        csv_content = self.use_case.build_instructions_csv(
+            content_base,
+            category_column=columns["category"],
+            instruction_column=columns["instruction"],
+            uncategorized_label=category_labels["uncategorized"],
+            default_label=category_labels["default"],
+            default_instructions=validated.get("default_instructions"),
+        )
 
         response = HttpResponse(csv_content, content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="instructions_{project_uuid}.csv"'
@@ -114,7 +132,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
         summary="Create a project instruction",
         description=(
             "Creates one instruction. Omit category or send null to store as uncategorized. "
-            "Send category.id for an existing category, or category.name to create or reuse a category by name."
+            "Send category.id for an existing category, or category.name to create a new category by name. "
+            "Creating a category with a duplicate name returns 409."
         ),
         request=ProjectInstructionsCreateSerializer,
         parameters=[
@@ -131,6 +150,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
             400: OpenApiResponse(description="Bad request"),
             403: OpenApiResponse(description="Forbidden"),
             404: OpenApiResponse(description="Category not found"),
+            409: OpenApiResponse(description="Category name already exists"),
         },
         tags=["Instructions"],
     )
@@ -151,6 +171,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
             )
         except ValueError as error:
             return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        except DuplicateCategoryNameError:
+            return Response({"error": DUPLICATE_CATEGORY_NAME_ERROR}, status=status.HTTP_409_CONFLICT)
         except InstructionCategory.DoesNotExist:
             return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as error:
@@ -164,8 +186,10 @@ class ProjectInstructionsViewSet(ModelViewSet):
         summary="Update existing project instructions and categories",
         description=(
             "Updates existing instructions (id required). Categories accept id or name; "
-            "name without id uses get_or_create. Use POST to create instructions and "
-            "DELETE endpoints to remove. Omitted categories and instructions are left unchanged."
+            "name without id reuses an existing category or creates a new one. "
+            "Renaming or creating a category with a duplicate name returns 409. "
+            "Use POST to create instructions and DELETE endpoints to remove. "
+            "Omitted categories and instructions are left unchanged."
         ),
         request=ProjectInstructionsPatchSerializer,
         parameters=[
@@ -181,6 +205,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
             200: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
             400: OpenApiResponse(description="Bad request"),
             403: OpenApiResponse(description="Forbidden"),
+            409: OpenApiResponse(description="Category name already exists"),
         },
         tags=["Instructions"],
     )
@@ -201,6 +226,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
             )
         except ValueError as error:
             return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        except DuplicateCategoryNameError:
+            return Response({"error": DUPLICATE_CATEGORY_NAME_ERROR}, status=status.HTTP_409_CONFLICT)
         except ContentBaseInstruction.DoesNotExist:
             return Response({"error": "Instruction not found"}, status=status.HTTP_404_NOT_FOUND)
         except InstructionCategory.DoesNotExist:

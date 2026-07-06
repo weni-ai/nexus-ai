@@ -3,10 +3,15 @@ import io
 from typing import Any, List, Optional
 
 from django.conf import settings
+from django.db import IntegrityError
 from django.forms.models import model_to_dict
 
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.models import ContentBase, ContentBaseInstruction, InstructionCategory
+
+
+class DuplicateCategoryNameError(Exception):
+    """Raised when creating or renaming a category would duplicate an existing name."""
 
 
 class ProjectInstructionsUseCase:
@@ -35,10 +40,19 @@ class ProjectInstructionsUseCase:
 
         return payload
 
-    def build_instructions_csv(self, content_base: ContentBase) -> str:
+    def build_instructions_csv(
+        self,
+        content_base: ContentBase,
+        *,
+        category_column: str,
+        instruction_column: str,
+        uncategorized_label: str,
+        default_label: str,
+        default_instructions: list[str] | None = None,
+    ) -> str:
         output = io.StringIO()
         writer = csv.writer(output, lineterminator="\n")
-        writer.writerow(["category", "instruction"])
+        writer.writerow([category_column, instruction_column])
 
         for category in content_base.instruction_categories.prefetch_related("instructions").order_by("id"):
             for instruction in category.instructions.all().order_by("id"):
@@ -46,7 +60,12 @@ class ProjectInstructionsUseCase:
 
         uncategorized = content_base.instructions.filter(category__isnull=True).order_by("id")
         for instruction in uncategorized:
-            writer.writerow(["", instruction.instruction])
+            writer.writerow([uncategorized_label, instruction.instruction])
+
+        for instruction_text in default_instructions or []:
+            instruction_text = (instruction_text or "").strip()
+            if instruction_text:
+                writer.writerow([default_label, instruction_text])
 
         return output.getvalue()
 
@@ -142,8 +161,7 @@ class ProjectInstructionsUseCase:
         if not name:
             raise ValueError("Category id or name is required when category is provided")
 
-        category, _ = InstructionCategory.objects.get_or_create(content_base=content_base, name=name)
-        return category
+        return self._create_category_by_name(content_base, name)
 
     def _uncategorize_instructions_for_category(self, category: InstructionCategory) -> None:
         ContentBaseInstruction.objects.filter(category=category).update(category=None, suggested_category="")
@@ -156,16 +174,43 @@ class ProjectInstructionsUseCase:
             category = content_base.instruction_categories.get(id=category_id)
             name = (category_data.get("name") or "").strip()
             if name and category.name != name:
+                self._ensure_category_name_available(content_base, name, exclude_category_id=category.id)
                 category.name = name
-                category.save(update_fields=["name"])
+                try:
+                    category.save(update_fields=["name"])
+                except IntegrityError as error:
+                    raise DuplicateCategoryNameError from error
             return category
 
         name = (category_data.get("name") or "").strip()
         if not name:
             raise ValueError("Category id or name is required")
 
-        category, _ = InstructionCategory.objects.get_or_create(content_base=content_base, name=name)
-        return category
+        existing_category = content_base.instruction_categories.filter(name=name).first()
+        if existing_category:
+            return existing_category
+
+        return self._create_category_by_name(content_base, name)
+
+    def _ensure_category_name_available(
+        self,
+        content_base: ContentBase,
+        name: str,
+        *,
+        exclude_category_id: int | None = None,
+    ) -> None:
+        queryset = content_base.instruction_categories.filter(name=name)
+        if exclude_category_id is not None:
+            queryset = queryset.exclude(id=exclude_category_id)
+        if queryset.exists():
+            raise DuplicateCategoryNameError
+
+    def _create_category_by_name(self, content_base: ContentBase, name: str) -> InstructionCategory:
+        self._ensure_category_name_available(content_base, name)
+        try:
+            return InstructionCategory.objects.create(content_base=content_base, name=name)
+        except IntegrityError as error:
+            raise DuplicateCategoryNameError from error
 
     def _patch_category_instructions(
         self,

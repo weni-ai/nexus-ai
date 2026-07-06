@@ -60,3 +60,28 @@ class ProjectInstructionsPatchSerializer(serializers.Serializer):
         if not attrs.get("categories") and not attrs.get("uncategorized_instructions"):
             raise serializers.ValidationError("At least one of categories or uncategorized_instructions is required")
         return attrs
+
+
+class InstructionsExportColumnsSerializer(serializers.Serializer):
+    category = serializers.CharField()
+    instruction = serializers.CharField()
+
+
+class InstructionsExportCategoryLabelsSerializer(serializers.Serializer):
+    uncategorized = serializers.CharField()
+    default = serializers.CharField()
+
+
+class ProjectInstructionsExportSerializer(serializers.Serializer):
+    columns = InstructionsExportColumnsSerializer(
+        help_text="Localized CSV column headers sent by the frontend.",
+    )
+    category_labels = InstructionsExportCategoryLabelsSerializer(
+        help_text="Localized labels for uncategorized and default instruction rows.",
+    )
+    default_instructions = serializers.ListField(
+        child=serializers.CharField(allow_blank=True),
+        required=False,
+        default=list,
+        help_text="Default instruction texts from the frontend to include in the CSV export.",
+    )
