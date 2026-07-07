@@ -2,6 +2,8 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+from django.conf import settings
+
 from nexus.event_domain.event_manager import AsyncEventManager, EventManager
 
 logger = logging.getLogger(__name__)
@@ -19,8 +21,14 @@ def notify_async(event: str, **kwargs):
     """
     try:
         asyncio.get_running_loop()
-        asyncio.create_task(async_event_manager.notify(event, **kwargs))
     except RuntimeError:
+        # No running loop: dispatch the notification ourselves.
+        if getattr(settings, "TESTING", False):
+            try:
+                asyncio.run(async_event_manager.notify(event, **kwargs))
+            except Exception as e:
+                logger.error(f"Error in async event notification for {event}: {e}", exc_info=True)
+            return
 
         def run_async():
             try:
@@ -29,6 +37,8 @@ def notify_async(event: str, **kwargs):
                 logger.error(f"Error in async event notification for {event}: {e}", exc_info=True)
 
         _executor.submit(run_async)
+    else:
+        asyncio.create_task(async_event_manager.notify(event, **kwargs))
 
 
 def notify_async_sync(event: str, **kwargs):
