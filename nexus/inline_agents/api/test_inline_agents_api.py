@@ -410,3 +410,141 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.assertEqual(response.json()["error_message"], _TEST_ERROR_MESSAGES["en-us"])
         self.project.refresh_from_db()
         self.assertIsNone(self.project.api_error_message)
+
+
+class ProjectActiveAgentsConfigViewTestCase(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.url = reverse("active-agents-config", kwargs={"project_uuid": str(self.project.uuid)})
+
+    def test_get_returns_empty_list_when_no_integrated_agents(self):
+        response = self.client.get(self.url)
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content, [])
+
+    def test_get_returns_agent_config_with_tools(self):
+        from nexus.inline_agents.models import IntegratedAgent, Version
+        from nexus.inline_agents.models import Agent as InlineAgent
+
+        agent = InlineAgent.objects.create(
+            name="Agente de Troca e Devolução",
+            slug="troca-devolucao",
+            instruction="Sempre confirme o número do pedido antes de iniciar o processo de troca",
+            collaboration_instructions="Responsável por processar solicitações de troca e devolução",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(
+            skills=[
+                {
+                    "actionGroupName": "OrderLookup",
+                    "description": "Busca informações de um pedido pelo número ou CPF do cliente",
+                    "functionSchema": {
+                        "functions": [
+                            {
+                                "parameters": [
+                                    {
+                                        "order_id": {
+                                            "type": "string",
+                                            "description": "Número do pedido",
+                                        }
+                                    },
+                                    {
+                                        "cpf": {
+                                            "type": "string",
+                                            "description": "CPF do cliente",
+                                        }
+                                    },
+                                ]
+                            }
+                        ]
+                    },
+                }
+            ],
+            display_skills=[],
+            agent=agent,
+        )
+        IntegratedAgent.objects.create(agent=agent, project=self.project, is_active=True)
+
+        response = self.client.get(self.url)
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content), 1)
+        row = content[0]
+        self.assertEqual(row["name"], "Agente de Troca e Devolução")
+        self.assertEqual(row["description"], "Responsável por processar solicitações de troca e devolução")
+        self.assertEqual(
+            row["instructions"],
+            [{"instruction": "Sempre confirme o número do pedido antes de iniciar o processo de troca"}],
+        )
+        self.assertEqual(len(row["tools"]), 1)
+        tool = row["tools"][0]
+        self.assertEqual(tool["name"], "order-lookup")
+        self.assertEqual(tool["description"], "Busca informações de um pedido pelo número ou CPF do cliente")
+        self.assertEqual(len(tool["parameters"]), 2)
+        param_names = {p["name"] for p in tool["parameters"]}
+        self.assertEqual(param_names, {"order_id", "cpf"})
+
+    def test_get_returns_empty_tools_when_agent_has_no_version(self):
+        from nexus.inline_agents.models import IntegratedAgent
+        from nexus.inline_agents.models import Agent as InlineAgent
+
+        agent = InlineAgent.objects.create(
+            name="Agent Without Version",
+            slug="agent-without-version",
+            instruction="Some instruction",
+            collaboration_instructions="Some description",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        IntegratedAgent.objects.create(agent=agent, project=self.project, is_active=True)
+
+        response = self.client.get(self.url)
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content), 1)
+        self.assertEqual(content[0]["tools"], [])
+
+    def test_get_excludes_inactive_integrated_agents(self):
+        from nexus.inline_agents.models import IntegratedAgent, Version
+        from nexus.inline_agents.models import Agent as InlineAgent
+
+        agent = InlineAgent.objects.create(
+            name="Inactive Agent",
+            slug="inactive-agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        IntegratedAgent.objects.create(agent=agent, project=self.project, is_active=False)
+
+        response = self.client.get(self.url)
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content, [])
+
+    def test_get_returns_403_without_project_access(self):
+        from nexus.projects.models import ProjectAuth
+
+        other_user = UserFactory()
+        ProjectAuth.objects.filter(user=self.user, project=self.project).delete()
+
+        client = APIClient()
+        client.force_authenticate(user=other_user)
+        response = client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
