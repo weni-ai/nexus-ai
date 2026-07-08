@@ -7,7 +7,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0029_project_api_error_message"),
+        ("projects", "0029_project_bedrock_ingestion_strategy"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
