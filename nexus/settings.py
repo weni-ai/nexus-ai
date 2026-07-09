@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -667,6 +668,71 @@ AGENT_UUID_NPS = env.str("AGENT_UUID_NPS")
 
 COMPLEXITY_LAYER_LAMBDA = env.str("COMPLEXITY_LAYER_LAMBDA", "lambda-complexity-layer")
 GUARDRAILS_LAYER_LAMBDA = env.str("GUARDRAILS_LAYER_LAMBDA", "lambda-complexity-layer-openai")
+
+GUARDRAIL_CATEGORY_CATALOG = [
+    {
+        "slug": "politics",
+        "name": "Politics",
+        "description": "Political topics, elections, and government affairs",
+    },
+    {
+        "slug": "physical_health",
+        "name": "Physical health",
+        "description": "Medical advice, diagnoses, and physical health conditions",
+    },
+    {
+        "slug": "sexual_content",
+        "name": "Sexual content",
+        "description": "Explicit or adult sexual material",
+    },
+    {
+        "slug": "bias",
+        "name": "Bias",
+        "description": "Discriminatory or biased statements about groups",
+    },
+    {
+        "slug": "hate",
+        "name": "Hate",
+        "description": "Hate speech and incitement against individuals or groups",
+    },
+    {
+        "slug": "religion",
+        "name": "Religion",
+        "description": "Religious beliefs, practices, and institutions",
+    },
+    {
+        "slug": "suicide",
+        "name": "Suicide",
+        "description": "Suicide methods, encouragement, or glorification",
+    },
+    {
+        "slug": "self_harm",
+        "name": "Self-harm",
+        "description": "Self-injury methods or encouragement",
+    },
+    {
+        "slug": "beliefs",
+        "name": "Beliefs",
+        "description": "Personal belief systems and ideological debates",
+    },
+    {
+        "slug": "gender_identity",
+        "name": "Gender identity",
+        "description": "Gender identity and expression topics",
+    },
+    {
+        "slug": "sexual_relations",
+        "name": "Sexual relations",
+        "description": "Sexual relationships and intimacy topics",
+    },
+]
+
+GUARDRAILS_DEFAULT_BLOCKING_MESSAGE = env.str(
+    "GUARDRAILS_DEFAULT_BLOCKING_MESSAGE",
+    default="This message can't be processed because it may contain sensitive content.",
+)
+
+GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT = datetime(2026, 7, 1, tzinfo=timezone.utc)
 
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")
