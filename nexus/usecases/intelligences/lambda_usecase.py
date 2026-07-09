@@ -772,6 +772,7 @@ class LambdaUseCase:
 
         lambda_name = settings.AI_RESOLUTION_CRITERIA_VALIDATION_NAME
         if not lambda_name:
+            logger.error("AI_RESOLUTION_CRITERIA_VALIDATION_NAME is not configured")
             raise LambdaValidationFailedError()
 
         payload = {"user_rules": user_rules}
@@ -813,9 +814,24 @@ class LambdaUseCase:
 
             valid = body_data.get("valid")
             if valid is None:
+                valid = body_data.get("is_valid")
+            if valid is None:
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(lambda_name),
+                        "raw_response": raw_response,
+                        "parsed_body": body_data,
+                        "request_payload": payload,
+                    },
+                )
                 sentry_sdk.capture_message(
                     "Unexpected lambda response format in validate_resolution_criterion",
                     level="error",
+                )
+                logger.error(
+                    "Unexpected lambda response format in validate_resolution_criterion: %s",
+                    raw_response,
                 )
                 raise LambdaValidationFailedError()
 
