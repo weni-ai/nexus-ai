@@ -148,8 +148,11 @@ class AIResolutionCriteriaValidateView(APIView):
         except ValueError:
             return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
         except ResolutionCriterionValidationError as exc:
+            error_payload = {"code": exc.code, "message": exc.message}
+            if exc.rules:
+                error_payload["rules"] = exc.rules
             return Response(
-                {"error": {"code": exc.code, "message": exc.message}},
+                {"error": error_payload},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except ResolutionCriterionNotFound:

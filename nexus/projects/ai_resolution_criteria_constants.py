@@ -6,14 +6,6 @@ from django.utils import timezone
 CRITERION_TYPE_BASE = "base"
 CRITERION_TYPE_CUSTOM = "custom"
 
-VALIDATION_REJECTED_CODES = frozenset(
-    {
-        "DUPLICATE_CRITERION",
-        "AMBIGUOUS_CRITERION",
-        "INVALID_CRITERION",
-    }
-)
-
 
 def get_base_criteria_config() -> list[dict]:
     return settings.AI_RESOLUTION_BASE_CRITERIA
