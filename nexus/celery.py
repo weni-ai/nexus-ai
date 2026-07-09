@@ -97,3 +97,7 @@ def setup_logfire_and_langfuse(sender, **kwargs):
                 logger.error("Langfuse authentication failed. Check credentials and host.")
         except Exception:
             logger.exception("Failed to connect to Langfuse, worker will continue without it.")
+
+
+# Phase 0: Celery lifecycle timestamps for start_inline_agents latency metrics.
+import router.tasks.celery_latency_signals  # noqa: F401, E402
