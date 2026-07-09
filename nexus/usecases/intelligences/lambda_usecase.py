@@ -767,29 +767,14 @@ class LambdaUseCase:
             sentry_sdk.capture_exception(e)
             raise e
 
-    def validate_resolution_criterion(
-        self,
-        project_id: str,
-        candidate_text: str,
-        existing_criteria: list,
-        mode: str,
-        criterion_id: str | None = None,
-    ) -> tuple[bool, str, str]:
-        from nexus.projects.ai_resolution_criteria_constants import VALIDATION_REJECTED_CODES
+    def validate_resolution_criterion(self, user_rules: list[str]) -> dict:
         from nexus.projects.exceptions import LambdaValidationFailedError
 
         lambda_name = settings.AI_RESOLUTION_CRITERIA_VALIDATION_NAME
         if not lambda_name:
             raise LambdaValidationFailedError()
 
-        payload = {
-            "project_id": project_id,
-            "candidate_text": candidate_text,
-            "existing_criteria": existing_criteria,
-            "mode": mode,
-        }
-        if criterion_id:
-            payload["criterion_id"] = criterion_id
+        payload = {"user_rules": user_rules}
 
         try:
             response = self.invoke_lambda(lambda_name=str(lambda_name), payload=payload)
@@ -810,15 +795,15 @@ class LambdaUseCase:
                 )
                 raise LambdaValidationFailedError()
 
-            response_data = json.loads(response.get("Payload").read())
+            raw_response = json.loads(response.get("Payload").read())
+            status_code = raw_response.get("statusCode")
 
-            if "body" in response_data:
-                body_data = response_data.get("body")
+            body_data = raw_response
+            if "body" in raw_response:
+                body_data = raw_response.get("body")
                 if isinstance(body_data, str):
                     body_data = json.loads(body_data)
-                response_data = body_data
 
-            status_code = response_data.get("statusCode")
             if status_code and status_code >= 400:
                 sentry_sdk.capture_message(
                     f"Lambda returned error status {status_code} in validate_resolution_criterion",
@@ -826,24 +811,15 @@ class LambdaUseCase:
                 )
                 raise LambdaValidationFailedError()
 
-            is_valid = response_data.get("is_valid")
-            code = response_data.get("code", "INVALID_CRITERION")
-            message = response_data.get("message", "")
-
-            if is_valid is None:
+            valid = body_data.get("valid")
+            if valid is None:
                 sentry_sdk.capture_message(
                     "Unexpected lambda response format in validate_resolution_criterion",
                     level="error",
                 )
                 raise LambdaValidationFailedError()
 
-            if is_valid:
-                return True, code, message
-
-            if code not in VALIDATION_REJECTED_CODES:
-                code = "INVALID_CRITERION"
-
-            return False, code, message
+            return {"valid": valid, "rules": body_data.get("rules", [])}
 
         except LambdaValidationFailedError:
             raise

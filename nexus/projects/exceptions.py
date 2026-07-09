@@ -20,9 +20,10 @@ class UnauthorizedBaseCriterionChange(Exception):
 
 
 class ResolutionCriterionValidationError(Exception):
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, rules: list | None = None):
         self.code = code
         self.message = message
+        self.rules = rules or []
         super().__init__(message)
 
 

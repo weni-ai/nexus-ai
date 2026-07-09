@@ -4,8 +4,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 
 from nexus.projects.ai_resolution_criteria_constants import (
-    CRITERION_TYPE_BASE,
-    CRITERION_TYPE_CUSTOM,
     get_base_criteria_config,
     get_base_criterion_ids,
     serialize_base_criterion,
@@ -37,31 +35,29 @@ class AIResolutionCriteriaUseCase:
     def validate_criterion(self, project_uuid: str, text: str, criterion_id: str | None = None) -> dict:
         project = self.get_project(project_uuid)
         normalized_text = self._normalize_text(text)
-        mode = "update" if criterion_id else "create"
 
-        parsed_criterion_id = None
         if criterion_id:
             parsed_criterion_id = self._parse_custom_criterion_id(criterion_id)
             if not self._active_custom_queryset(project).filter(uuid=parsed_criterion_id).exists():
                 raise ResolutionCriterionNotFound()
 
-        existing_criteria = self._build_existing_criteria(
-            project,
-            exclude_criterion_id=str(parsed_criterion_id) if parsed_criterion_id else None,
-        )
-        lambda_usecase = LambdaUseCase()
-        is_valid, code, message = lambda_usecase.validate_resolution_criterion(
-            project_id=str(project.uuid),
-            candidate_text=normalized_text,
-            existing_criteria=existing_criteria,
-            mode=mode,
-            criterion_id=str(parsed_criterion_id) if parsed_criterion_id else None,
-        )
+        lambda_result = LambdaUseCase().validate_resolution_criterion(user_rules=[normalized_text])
 
-        if not is_valid:
-            raise ResolutionCriterionValidationError(code=code, message=message)
+        if not lambda_result["valid"]:
+            invalid_rules = [rule for rule in lambda_result.get("rules", []) if not rule.get("valid", True)]
+            message = "The criterion is invalid"
+            if invalid_rules:
+                message = invalid_rules[0].get("reason") or message
+            raise ResolutionCriterionValidationError(
+                code="INVALID_CRITERION",
+                message=message,
+                rules=lambda_result.get("rules", []),
+            )
 
-        return {"validation": {"status": True, "message": message or "Criterion validated successfully"}}
+        validation = {"status": True, "message": "Criterion validated successfully"}
+        if lambda_result.get("rules"):
+            validation["rules"] = lambda_result["rules"]
+        return {"validation": validation}
 
     def create_criterion(self, project_uuid: str, text: str, user) -> dict:
         project = self.get_project(project_uuid)
@@ -109,29 +105,6 @@ class AIResolutionCriteriaUseCase:
             is_active=True,
             deleted_at__isnull=True,
         )
-
-    def _build_existing_criteria(self, project: Project, exclude_criterion_id: str | None = None) -> list[dict]:
-        existing = [
-            {"id": item["id"], "text": item["text"], "type": CRITERION_TYPE_BASE} for item in get_base_criteria_config()
-        ]
-
-        custom_queryset = self._active_custom_queryset(project)
-        if exclude_criterion_id:
-            try:
-                exclude_uuid = UUID(str(exclude_criterion_id))
-            except (ValueError, AttributeError, TypeError):
-                exclude_uuid = exclude_criterion_id
-            custom_queryset = custom_queryset.exclude(uuid=exclude_uuid)
-
-        for criterion in custom_queryset:
-            existing.append(
-                {
-                    "id": str(criterion.uuid),
-                    "text": criterion.text,
-                    "type": CRITERION_TYPE_CUSTOM,
-                }
-            )
-        return existing
 
     def _ensure_not_base_criterion(self, criterion_id: str) -> None:
         if criterion_id in get_base_criterion_ids():

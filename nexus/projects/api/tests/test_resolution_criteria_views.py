@@ -47,7 +47,7 @@ class TestAIResolutionCriteriaViews(TestCase):
         self._lambda_patcher = mock.patch("nexus.usecases.projects.ai_resolution_criteria.LambdaUseCase")
         self._mock_lambda_class = self._lambda_patcher.start()
         self._mock_validate = self._mock_lambda_class.return_value.validate_resolution_criterion
-        self._mock_validate.return_value = (True, "APPROVED", "Criterion validated successfully")
+        self._mock_validate.return_value = {"valid": True, "rules": []}
 
     def tearDown(self):
         self._lambda_patcher.stop()
@@ -83,12 +83,17 @@ class TestAIResolutionCriteriaViews(TestCase):
         self.assertTrue(response.data["validation"]["status"])
         self._mock_validate.assert_called_once()
 
-    def test_validate_returns_duplicate_error(self):
-        self._mock_validate.return_value = (
-            False,
-            "DUPLICATE_CRITERION",
-            "An equivalent criterion already exists",
-        )
+    def test_validate_returns_invalid_error(self):
+        self._mock_validate.return_value = {
+            "valid": False,
+            "rules": [
+                {
+                    "rule": "Duplicate criterion",
+                    "valid": False,
+                    "reason": "An equivalent criterion already exists",
+                }
+            ],
+        }
 
         request = self.factory.post(
             f"/api/{self.project_uuid}/ai-validation-criteria/",
@@ -99,7 +104,9 @@ class TestAIResolutionCriteriaViews(TestCase):
         response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"]["code"], "DUPLICATE_CRITERION")
+        self.assertEqual(response.data["error"]["code"], "INVALID_CRITERION")
+        self.assertEqual(response.data["error"]["message"], "An equivalent criterion already exists")
+        self.assertEqual(len(response.data["error"]["rules"]), 1)
 
     def test_validate_returns_lambda_failure(self):
         from nexus.projects.exceptions import LambdaValidationFailedError
@@ -253,7 +260,7 @@ class TestAIResolutionCriteriaViews(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["error"], "Project not found")
 
-    def test_validate_update_mode_excludes_current_criterion(self):
+    def test_validate_update_mode_checks_criterion_exists(self):
         criterion = ProjectAIResolutionCriterion.objects.create(
             project=self.project,
             text="Existing criterion",
@@ -272,34 +279,19 @@ class TestAIResolutionCriteriaViews(TestCase):
         response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        call_kwargs = self._mock_validate.call_args.kwargs
-        self.assertEqual(call_kwargs["mode"], "update")
-        self.assertEqual(call_kwargs["criterion_id"], str(criterion.uuid))
+        self._mock_validate.assert_called_once_with(user_rules=["Updated criterion text"])
 
-    def test_validate_returns_ambiguous_error(self):
-        self._mock_validate.return_value = (
-            False,
-            "AMBIGUOUS_CRITERION",
-            "The criterion is ambiguous and needs to be rewritten",
-        )
-
-        request = self.factory.post(
-            f"/api/{self.project_uuid}/ai-validation-criteria/",
-            {"text": "Ambiguous criterion"},
-            format="json",
-        )
-        force_authenticate(request, user=self.user)
-        response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"]["code"], "AMBIGUOUS_CRITERION")
-
-    def test_validate_returns_invalid_error(self):
-        self._mock_validate.return_value = (
-            False,
-            "INVALID_CRITERION",
-            "The criterion is invalid",
-        )
+    def test_validate_returns_invalid_error_from_lambda(self):
+        self._mock_validate.return_value = {
+            "valid": False,
+            "rules": [
+                {
+                    "rule": "Invalid criterion",
+                    "valid": False,
+                    "reason": "The criterion is invalid",
+                }
+            ],
+        }
 
         request = self.factory.post(
             f"/api/{self.project_uuid}/ai-validation-criteria/",
