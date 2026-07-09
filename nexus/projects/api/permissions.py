@@ -1,9 +1,14 @@
 from django.conf import settings
 from rest_framework import permissions
 from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import SAFE_METHODS
 
-from nexus.projects.models import ProjectAuth
-from nexus.projects.permissions import has_external_general_project_permission
+from nexus.projects.models import Project, ProjectAuth
+from nexus.projects.permissions import (
+    get_user_auth,
+    has_external_general_project_permission,
+    is_admin,
+)
 
 
 class ProjectPermission(permissions.BasePermission):
@@ -57,4 +62,54 @@ class CombinedExternalProjectPermission(permissions.BasePermission):
             project_permission = ProjectPermission()
             return project_permission.has_permission(request, view)
 
+        return False
+
+
+class GuardrailsConfigAdminPermission(permissions.BasePermission):
+    message = "You do not have permission to perform this action."
+
+    def has_permission(self, request, view):
+        project_uuid = view.kwargs.get("project_uuid")
+        if not project_uuid:
+            return False
+
+        if request.method.upper() in SAFE_METHODS:
+            return has_external_general_project_permission(
+                request=request,
+                project_uuid=project_uuid,
+                method=request.method,
+            )
+
+        authorization_header = request.headers.get("Authorization")
+        if authorization_header:
+            return _has_external_moderator_permission(request, project_uuid)
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            auth = get_user_auth(request.user, project)
+            return is_admin(auth)
+        except (Project.DoesNotExist, ProjectAuth.DoesNotExist):
+            return False
+
+
+def _has_external_moderator_permission(request, project_uuid: str) -> bool:
+    import requests
+
+    from nexus.projects.permissions import _is_authorized_response
+
+    token = request.headers.get("Authorization")
+    if not token:
+        return False
+
+    base_url = settings.PROJECT_AUTH_API_BASE_URL
+    url = f"{base_url}/v2/projects/{project_uuid}/authorization"
+    moderator_role = 3
+
+    try:
+        response = requests.get(url, headers={"Authorization": token})
+        if not _is_authorized_response(response):
+            return False
+        data = response.json()
+        return data.get("project_authorization") == moderator_role
+    except requests.RequestException:
         return False
