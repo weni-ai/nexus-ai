@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from typing import Any
 
 from django.conf import settings
@@ -9,6 +10,11 @@ from django.core.mail import EmailMessage, get_connection
 logger = logging.getLogger(__name__)
 
 CONSOLE_EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+
+class SendResult(Enum):
+    SENT = "sent"
+    SKIPPED = "skipped"
 
 
 def _format_affected_instructions(instructions: list[dict[str, Any]]) -> str:
@@ -82,13 +88,13 @@ def send_improvement_support_ticket(
     improvement_item: dict[str, Any],
     affected_conversations: list[dict[str, Any]],
     user_email: str,
-) -> int:
+) -> SendResult:
     if not getattr(settings, "SEND_EMAILS", True):
         logger.info(
             "[improvement_support] SEND_EMAILS=false; skipping email for project=%s",
             project_uuid,
         )
-        return 0
+        return SendResult.SKIPPED
 
     support_email = getattr(settings, "VTEX_SUPPORT_EMAIL", "")
     if not support_email:
@@ -114,4 +120,5 @@ def send_improvement_support_ticket(
         reply_to=[user_email],
         connection=connection,
     )
-    return email.send()
+    email.send()
+    return SendResult.SENT

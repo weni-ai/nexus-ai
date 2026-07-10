@@ -7,6 +7,7 @@ from rest_framework.test import force_authenticate
 from nexus.projects.api.tests.test_conversations_proxy_permissions import _PermissionTestBase
 from nexus.projects.api.views import OpenSupportTicketView
 from nexus.projects.services.improvement_support_email import (
+    SendResult,
     build_improvement_support_email_body,
     send_improvement_support_ticket,
 )
@@ -61,7 +62,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         self.view = OpenSupportTicketView.as_view()
         self.url = f"/api/{self.project_uuid}/improvements/open-support-ticket/"
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_project_permission_sends_ticket(self, mock_send_ticket):
         request = self.factory.post(self.url, _payload_for_project(self.project_uuid), format="json")
         force_authenticate(request, user=self.authorized_user)
@@ -76,7 +77,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         self.assertEqual(call_kwargs["improvement_item"]["text"], "Cancellation denied")
         self.assertEqual(len(call_kwargs["affected_conversations"]), 2)
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_internal_permission_sends_ticket(self, mock_send_ticket):
         request = self.factory.post(self.url, _payload_for_project(self.project_uuid), format="json")
         force_authenticate(request, user=self.internal_user)
@@ -92,7 +93,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_project_uuid_mismatch_returns_400(self, mock_send_ticket):
         payload = _payload_for_project("017cd5df-cfc8-4d5c-b659-347fe7a4bee9")
         request = self.factory.post(self.url, payload, format="json")
@@ -102,7 +103,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         mock_send_ticket.assert_not_called()
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_oversized_description_returns_400(self, mock_send_ticket):
         payload = _payload_for_project(self.project_uuid)
         payload["improvement_item"]["description"] = "x" * 5_001
@@ -113,7 +114,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         mock_send_ticket.assert_not_called()
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_too_many_affected_conversations_returns_400(self, mock_send_ticket):
         payload = _payload_for_project(self.project_uuid)
         payload["affected_conversations"] = [
@@ -135,17 +136,17 @@ class TestOpenSupportTicketView(_PermissionTestBase):
     @override_settings(SEND_EMAILS=False)
     @mock.patch("nexus.projects.services.improvement_support_email.EmailMessage")
     def test_send_emails_false_skips_email(self, mock_email_message):
-        sent = send_improvement_support_ticket(
+        result = send_improvement_support_ticket(
             project_uuid=self.project_uuid,
             improvement_item=_payload_for_project(self.project_uuid)["improvement_item"],
             affected_conversations=_payload_for_project(self.project_uuid)["affected_conversations"],
             user_email="agent@example.com",
         )
 
-        self.assertEqual(sent, 0)
+        self.assertEqual(result, SendResult.SKIPPED)
         mock_email_message.assert_not_called()
 
-    @mock.patch(_SEND_TICKET, return_value=0)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SKIPPED)
     def test_send_emails_disabled_returns_skipped(self, mock_send_ticket):
         request = self.factory.post(self.url, _payload_for_project(self.project_uuid), format="json")
         force_authenticate(request, user=self.authorized_user)
@@ -177,13 +178,14 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         mock_email_message.return_value = mock_instance
 
         payload = _payload_for_project(self.project_uuid)
-        send_improvement_support_ticket(
+        result = send_improvement_support_ticket(
             project_uuid=self.project_uuid,
             improvement_item=payload["improvement_item"],
             affected_conversations=payload["affected_conversations"],
             user_email="agent@example.com",
         )
 
+        self.assertEqual(result, SendResult.SENT)
         mock_email_message.assert_called_once_with(
             subject=f"Improvement Item - {self.project_uuid}",
             body=build_improvement_support_email_body(
@@ -209,16 +211,15 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         mock_get_connection.return_value = mock.Mock()
 
         payload = _payload_for_project(self.project_uuid)
-        send_improvement_support_ticket(
+        result = send_improvement_support_ticket(
             project_uuid=self.project_uuid,
             improvement_item=payload["improvement_item"],
             affected_conversations=payload["affected_conversations"],
             user_email="agent@example.com",
         )
 
-        mock_get_connection.assert_called_once_with(
-            backend="django.core.mail.backends.console.EmailBackend"
-        )
+        self.assertEqual(result, SendResult.SENT)
+        mock_get_connection.assert_called_once_with(backend="django.core.mail.backends.console.EmailBackend")
         self.assertEqual(mock_email_message.call_args.kwargs["connection"], mock_get_connection.return_value)
         mock_instance.send.assert_called_once_with()
 
