@@ -57,7 +57,6 @@ def build_improvement_support_email_body(
     return "\n".join(
         [
             f"Project UUID: {project_uuid}",
-            f"Submitted by: {user_email}",
             "",
             "Improvement item",
             f"- UUID: {improvement_item['uuid']}",
