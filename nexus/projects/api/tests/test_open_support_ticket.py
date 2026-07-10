@@ -102,6 +102,36 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         mock_send_ticket.assert_not_called()
 
+    @mock.patch(_SEND_TICKET, return_value=1)
+    def test_oversized_description_returns_400(self, mock_send_ticket):
+        payload = _payload_for_project(self.project_uuid)
+        payload["improvement_item"]["description"] = "x" * 5_001
+        request = self.factory.post(self.url, payload, format="json")
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_send_ticket.assert_not_called()
+
+    @mock.patch(_SEND_TICKET, return_value=1)
+    def test_too_many_affected_conversations_returns_400(self, mock_send_ticket):
+        payload = _payload_for_project(self.project_uuid)
+        payload["affected_conversations"] = [
+            {
+                "uuid": f"f9e8d7c6-b5a4-3210-fedc-ba9876543{index:03d}",
+                "contact_urn": "whatsapp:+5511999999999",
+                "contact_name": "Maria",
+                "started_at": "2026-02-05T12:00:00Z",
+            }
+            for index in range(51)
+        ]
+        request = self.factory.post(self.url, payload, format="json")
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_send_ticket.assert_not_called()
+
     @override_settings(SEND_EMAILS=False)
     @mock.patch("nexus.projects.services.improvement_support_email.EmailMessage")
     def test_send_emails_false_skips_email(self, mock_email_message):
@@ -114,6 +144,17 @@ class TestOpenSupportTicketView(_PermissionTestBase):
 
         self.assertEqual(sent, 0)
         mock_email_message.assert_not_called()
+
+    @mock.patch(_SEND_TICKET, return_value=0)
+    def test_send_emails_disabled_returns_skipped(self, mock_send_ticket):
+        request = self.factory.post(self.url, _payload_for_project(self.project_uuid), format="json")
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "skipped")
+        self.assertEqual(response.data["reason"], "email_sending_disabled")
+        mock_send_ticket.assert_called_once()
 
     @override_settings(SEND_EMAILS=True, VTEX_SUPPORT_EMAIL="")
     def test_missing_support_email_returns_503(self):
@@ -191,10 +232,11 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         )
 
         self.assertIn(f"Project UUID: {self.project_uuid}", body)
-        self.assertIn("Submitted by: agent@example.com", body)
+        self.assertIn("This is an automated email from Nexus.", body)
+        self.assertIn("It was requested by: agent@example.com", body)
+        self.assertEqual(body.count("This is an automated email from Nexus."), 1)
         self.assertIn("Cancellation denied", body)
         self.assertIn("wrong_behavior_due_to_instructions", body)
         self.assertIn("instruction_id=15684", body)
         self.assertIn("Maria (whatsapp:+5511999999999)", body)
         self.assertIn("João (whatsapp:+5511888888888)", body)
-        self.assertTrue(body.strip().endswith("Submitted by: agent@example.com"))

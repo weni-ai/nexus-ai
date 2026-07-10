@@ -56,6 +56,9 @@ def build_improvement_support_email_body(
 ) -> str:
     return "\n".join(
         [
+            "This is an automated email from Nexus.",
+            f"It was requested by: {user_email}",
+            "",
             f"Project UUID: {project_uuid}",
             "",
             "Improvement item",
@@ -69,8 +72,6 @@ def build_improvement_support_email_body(
             "",
             f"Affected conversations ({len(affected_conversations)})",
             _format_affected_conversations(affected_conversations),
-            "",
-            f"Submitted by: {user_email}",
         ]
     )
 

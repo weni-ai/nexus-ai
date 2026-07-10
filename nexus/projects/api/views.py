@@ -1,4 +1,5 @@
 import logging
+import smtplib
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from uuid import UUID
 
@@ -811,7 +812,7 @@ class OpenSupportTicketView(APIView):
 
         validated = serializer.validated_data
         try:
-            send_improvement_support_ticket(
+            sent_count = send_improvement_support_ticket(
                 project_uuid=str(project_uuid),
                 improvement_item=validated["improvement_item"],
                 affected_conversations=validated["affected_conversations"],
@@ -823,11 +824,17 @@ class OpenSupportTicketView(APIView):
                 {"error": "Support email is not configured"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        except Exception as e:
+        except smtplib.SMTPException as e:
             logger.error("Failed to send improvement support ticket email: %s", str(e), exc_info=True)
             return Response(
                 {"error": "Failed to send support ticket email"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if not sent_count:
+            return Response(
+                {"status": "skipped", "reason": "email_sending_disabled"},
+                status=status.HTTP_200_OK,
             )
 
         return Response({"status": "sent"}, status=status.HTTP_200_OK)
