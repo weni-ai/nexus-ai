@@ -102,16 +102,16 @@ def send_improvement_support_ticket(
         user_email=user_email,
     )
 
+    connection = None
+    if settings.DEBUG:
+        connection = get_connection(backend=CONSOLE_EMAIL_BACKEND)
+
     email = EmailMessage(
         subject=subject,
         body=body,
         from_email=settings.DEFAULT_FROM_EMAIL,
         to=[support_email],
         reply_to=[user_email],
+        connection=connection,
     )
-
-    connection = None
-    if settings.DEBUG:
-        connection = get_connection(backend=CONSOLE_EMAIL_BACKEND)
-
-    return email.send(connection=connection)
+    return email.send()

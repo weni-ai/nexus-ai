@@ -154,8 +154,9 @@ class TestOpenSupportTicketView(_PermissionTestBase):
             from_email="no-reply@weni.ai",
             to=["support@vtex.com"],
             reply_to=["agent@example.com"],
+            connection=None,
         )
-        mock_instance.send.assert_called_once_with(connection=None)
+        mock_instance.send.assert_called_once_with()
 
     @override_settings(DEBUG=True, SEND_EMAILS=True, VTEX_SUPPORT_EMAIL="support@vtex.com")
     @mock.patch("nexus.projects.services.improvement_support_email.get_connection")
@@ -177,7 +178,8 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         mock_get_connection.assert_called_once_with(
             backend="django.core.mail.backends.console.EmailBackend"
         )
-        mock_instance.send.assert_called_once_with(connection=mock_get_connection.return_value)
+        self.assertEqual(mock_email_message.call_args.kwargs["connection"], mock_get_connection.return_value)
+        mock_instance.send.assert_called_once_with()
 
     def test_email_body_contains_signature_and_payload_fields(self):
         payload = _payload_for_project(self.project_uuid)
