@@ -15,6 +15,7 @@ from .views import (
     EnableHumanSupportView,
     FlowsDbCohortReconcileProxyView,
     KnowledgeBaseChunksView,
+    OpenSupportTicketView,
     ProjectPromptCreationConfigurationsViewset,
     ProjectUpdateViewset,
 )
@@ -43,6 +44,11 @@ urlpatterns = [
         "<project_uuid>/ai-resolution-criteria/<criterion_id>/",
         AIResolutionCriteriaDetailView.as_view(),
         name="ai-resolution-criterion-detail",
+    ),
+    path(
+        "<project_uuid>/improvements/open-support-ticket/",
+        OpenSupportTicketView.as_view(),
+        name="improvements-open-support-ticket",
     ),
     path("<project_uuid>/ab-project-details", AgentBuilderProjectDetailsView.as_view(), name="ab-project-details"),
     path("v2/projects/resolution-rate", ProjectsResolutionRateView.as_view(), name="projects-resolution-rate-v2"),
