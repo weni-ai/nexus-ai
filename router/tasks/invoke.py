@@ -493,6 +493,7 @@ def _invoke_backend(
             "stream_support": stream_support,
             "message_conversation_log_uuid": message_conversation_log_uuid,
             "skip_conversation_sqs": skip_conversation_sqs,
+            "include_draft_knowledge": preview or preview_websocket,
         }
     )
 

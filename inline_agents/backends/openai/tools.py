@@ -9,7 +9,10 @@ from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
-from nexus.utils import get_datasource_id
+from nexus.task_managers.file_database.knowledge_base_filters import (
+    DEFAULT_KNOWLEDGE_BASE_VERSION,
+    build_knowledge_base_filter,
+)
 
 
 class Supervisor(Agent):  # type: ignore[misc]
@@ -99,19 +102,13 @@ class Supervisor(Agent):  # type: ignore[misc]
             "retrievalQuery": {"text": question},
         }
 
-        combined_filter = {
-            "andAll": [
-                {"equals": {"key": "contentBaseUuid", "value": content_base_uuid}},
-                {
-                    "equals": {
-                        "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(ctx.context.project.get("uuid")),
-                    }
-                },
-            ]
-        }
-
         if content_base_uuid:
+            combined_filter = build_knowledge_base_filter(
+                content_base_uuid=content_base_uuid,
+                project_uuid=ctx.context.project.get("uuid"),
+                knowledge_base_version=ctx.context.content_base.get("version") or DEFAULT_KNOWLEDGE_BASE_VERSION,
+                include_draft=bool(ctx.context.content_base.get("include_draft")),
+            )
             retrieve_params["retrievalConfiguration"] = {
                 "vectorSearchConfiguration": {
                     "filter": combined_filter,

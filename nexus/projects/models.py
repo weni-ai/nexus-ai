@@ -55,6 +55,7 @@ class Project(BaseModel, SoftDeleteModel):
         choices=BEDROCK_INGESTION_STRATEGY_CHOICES,
         default=BEDROCK_INGESTION_JOB,
     )
+    knowledge_base_version = models.CharField(max_length=32, default="1")
     agents_backend = models.CharField(max_length=100, default=DEFAULT_BACKEND)
 
     human_support = models.BooleanField(default=False)

@@ -221,6 +221,8 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale: bool,
         skip_conversation_sqs: bool = False,
         manager_pipeline_version: Optional[str] = None,
+        knowledge_base_version: str = "1",
+        include_draft_knowledge: bool = False,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -326,6 +328,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                knowledge_base_version=knowledge_base_version,
+                include_draft_knowledge=include_draft_knowledge,
             ),
             "user_model_credentials": user_model_credentials,
             "model_vendor": supervisor.get("model_vendor", ""),
@@ -368,6 +372,8 @@ class OpenAITeamAdapter(TeamAdapter):
         business_rules: str = None,
         instructions: list[str] = None,
         agent_data: dict = None,
+        knowledge_base_version: str = "1",
+        include_draft_knowledge: bool = False,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
@@ -505,6 +511,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                knowledge_base_version=knowledge_base_version,
+                include_draft_knowledge=include_draft_knowledge,
             ),
         }
 
@@ -522,6 +530,8 @@ class OpenAITeamAdapter(TeamAdapter):
         session: Optional[Any] = None,
         input_text: str = "",
         hooks_state: Optional[HooksState] = None,
+        knowledge_base_version: str = "1",
+        include_draft_knowledge: bool = False,
     ) -> Context:
         if globals_dict is None:
             globals_dict = {}
@@ -534,7 +544,11 @@ class OpenAITeamAdapter(TeamAdapter):
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
         project = {"uuid": project_uuid, "auth_token": auth_token, "flows_url": settings.FLOWS_REST_ENDPOINT}
-        content_base = {"uuid": content_base_uuid}
+        content_base = {
+            "uuid": content_base_uuid,
+            "version": knowledge_base_version,
+            "include_draft": include_draft_knowledge,
+        }
 
         return Context(
             credentials=credentials,

@@ -90,4 +90,5 @@ class CachedProjectData:
             ),
             "supervisor_agent_uuid": self.project_dict.get("supervisor_agent_uuid"),
             "manager_pipeline_version": manager_pipeline_version,
+            "knowledge_base_version": self.project_dict.get("knowledge_base_version", "1"),
         }
