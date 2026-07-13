@@ -7,6 +7,7 @@ from rest_framework.test import force_authenticate
 from nexus.projects.api.tests.test_conversations_proxy_permissions import _PermissionTestBase
 from nexus.projects.api.views import OpenSupportTicketView
 from nexus.projects.services.improvement_support_email import (
+    SendResult,
     build_improvement_support_email_body,
     send_improvement_support_ticket,
 )
@@ -43,7 +44,6 @@ VALID_PAYLOAD = {
         },
     ],
     "project_uuid": None,
-    "user_email": "agent@example.com",
 }
 
 
@@ -61,7 +61,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         self.view = OpenSupportTicketView.as_view()
         self.url = f"/api/{self.project_uuid}/improvements/open-support-ticket/"
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_project_permission_sends_ticket(self, mock_send_ticket):
         request = self.factory.post(self.url, _payload_for_project(self.project_uuid), format="json")
         force_authenticate(request, user=self.authorized_user)
@@ -72,11 +72,11 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         mock_send_ticket.assert_called_once()
         call_kwargs = mock_send_ticket.call_args.kwargs
         self.assertEqual(call_kwargs["project_uuid"], self.project_uuid)
-        self.assertEqual(call_kwargs["user_email"], "agent@example.com")
+        self.assertEqual(call_kwargs["user_email"], self.authorized_user.email)
         self.assertEqual(call_kwargs["improvement_item"]["text"], "Cancellation denied")
         self.assertEqual(len(call_kwargs["affected_conversations"]), 2)
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_internal_permission_sends_ticket(self, mock_send_ticket):
         request = self.factory.post(self.url, _payload_for_project(self.project_uuid), format="json")
         force_authenticate(request, user=self.internal_user)
@@ -92,9 +92,39 @@ class TestOpenSupportTicketView(_PermissionTestBase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    @mock.patch(_SEND_TICKET, return_value=1)
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_project_uuid_mismatch_returns_400(self, mock_send_ticket):
         payload = _payload_for_project("017cd5df-cfc8-4d5c-b659-347fe7a4bee9")
+        request = self.factory.post(self.url, payload, format="json")
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_send_ticket.assert_not_called()
+
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
+    def test_oversized_description_returns_400(self, mock_send_ticket):
+        payload = _payload_for_project(self.project_uuid)
+        payload["improvement_item"]["description"] = "x" * 5_001
+        request = self.factory.post(self.url, payload, format="json")
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_send_ticket.assert_not_called()
+
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
+    def test_too_many_affected_conversations_returns_400(self, mock_send_ticket):
+        payload = _payload_for_project(self.project_uuid)
+        payload["affected_conversations"] = [
+            {
+                "uuid": f"f9e8d7c6-b5a4-3210-fedc-ba9876543{index:03d}",
+                "contact_urn": "whatsapp:+5511999999999",
+                "contact_name": "Maria",
+                "started_at": "2026-02-05T12:00:00Z",
+            }
+            for index in range(51)
+        ]
         request = self.factory.post(self.url, payload, format="json")
         force_authenticate(request, user=self.authorized_user)
         response = self.view(request, project_uuid=self.project_uuid)
@@ -105,15 +135,26 @@ class TestOpenSupportTicketView(_PermissionTestBase):
     @override_settings(SEND_EMAILS=False)
     @mock.patch("nexus.projects.services.improvement_support_email.EmailMessage")
     def test_send_emails_false_skips_email(self, mock_email_message):
-        sent = send_improvement_support_ticket(
+        result = send_improvement_support_ticket(
             project_uuid=self.project_uuid,
             improvement_item=_payload_for_project(self.project_uuid)["improvement_item"],
             affected_conversations=_payload_for_project(self.project_uuid)["affected_conversations"],
             user_email="agent@example.com",
         )
 
-        self.assertEqual(sent, 0)
+        self.assertEqual(result, SendResult.SKIPPED)
         mock_email_message.assert_not_called()
+
+    @mock.patch(_SEND_TICKET, return_value=SendResult.SKIPPED)
+    def test_send_emails_disabled_returns_skipped(self, mock_send_ticket):
+        request = self.factory.post(self.url, _payload_for_project(self.project_uuid), format="json")
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "skipped")
+        self.assertEqual(response.data["reason"], "email_sending_disabled")
+        mock_send_ticket.assert_called_once()
 
     @override_settings(SEND_EMAILS=True, VTEX_SUPPORT_EMAIL="")
     def test_missing_support_email_returns_503(self):
@@ -136,13 +177,14 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         mock_email_message.return_value = mock_instance
 
         payload = _payload_for_project(self.project_uuid)
-        send_improvement_support_ticket(
+        result = send_improvement_support_ticket(
             project_uuid=self.project_uuid,
             improvement_item=payload["improvement_item"],
             affected_conversations=payload["affected_conversations"],
             user_email="agent@example.com",
         )
 
+        self.assertEqual(result, SendResult.SENT)
         mock_email_message.assert_called_once_with(
             subject=f"Improvement Item - {self.project_uuid}",
             body=build_improvement_support_email_body(
@@ -168,16 +210,15 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         mock_get_connection.return_value = mock.Mock()
 
         payload = _payload_for_project(self.project_uuid)
-        send_improvement_support_ticket(
+        result = send_improvement_support_ticket(
             project_uuid=self.project_uuid,
             improvement_item=payload["improvement_item"],
             affected_conversations=payload["affected_conversations"],
             user_email="agent@example.com",
         )
 
-        mock_get_connection.assert_called_once_with(
-            backend="django.core.mail.backends.console.EmailBackend"
-        )
+        self.assertEqual(result, SendResult.SENT)
+        mock_get_connection.assert_called_once_with(backend="django.core.mail.backends.console.EmailBackend")
         self.assertEqual(mock_email_message.call_args.kwargs["connection"], mock_get_connection.return_value)
         mock_instance.send.assert_called_once_with()
 
@@ -191,10 +232,11 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         )
 
         self.assertIn(f"Project UUID: {self.project_uuid}", body)
-        self.assertIn("Submitted by: agent@example.com", body)
+        self.assertIn("This is an automated email from Nexus.", body)
+        self.assertIn("It was requested by: agent@example.com", body)
+        self.assertEqual(body.count("This is an automated email from Nexus."), 1)
         self.assertIn("Cancellation denied", body)
         self.assertIn("wrong_behavior_due_to_instructions", body)
         self.assertIn("instruction_id=15684", body)
         self.assertIn("Maria (whatsapp:+5511999999999)", body)
         self.assertIn("João (whatsapp:+5511888888888)", body)
-        self.assertTrue(body.strip().endswith("Submitted by: agent@example.com"))
