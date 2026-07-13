@@ -181,10 +181,17 @@ class BedrockFileDatabase(FileDataBase):
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
         from io import BytesIO
 
+        from nexus.task_managers.file_database.knowledge_base_filters import KB_VERSION_DRAFT
+
         logger.info("[Bedrock] Adding metadata.json file")
 
         data = {
-            "metadataAttributes": {"contentBaseUuid": content_base_uuid, "filename": filename, "fileUuid": file_uuid}
+            "metadataAttributes": {
+                "contentBaseUuid": content_base_uuid,
+                "filename": filename,
+                "fileUuid": file_uuid,
+                "version": KB_VERSION_DRAFT,
+            }
         }
 
         filename_metadata_json = f"{filename}.metadata.json"
@@ -862,13 +869,27 @@ class BedrockFileDatabase(FileDataBase):
         time.sleep(5)
         return
 
-    def search_data(self, content_base_uuid: str, text: str, number_of_results: int = 5) -> Dict[str, Any]:
-        combined_filter = {
-            "andAll": [
-                {"equals": {"key": "contentBaseUuid", "value": content_base_uuid}},
-                {"equals": {"key": "x-amz-bedrock-kb-data-source-id", "value": self.data_source_id}},
-            ]
-        }
+    def search_data(
+        self,
+        content_base_uuid: str,
+        text: str,
+        number_of_results: int = 5,
+        knowledge_base_version: str | None = None,
+        include_draft: bool = False,
+    ) -> Dict[str, Any]:
+        from nexus.task_managers.file_database.knowledge_base_filters import (
+            DEFAULT_KNOWLEDGE_BASE_VERSION,
+            build_knowledge_base_filter,
+        )
+
+        version = knowledge_base_version or DEFAULT_KNOWLEDGE_BASE_VERSION
+        combined_filter = build_knowledge_base_filter(
+            content_base_uuid=content_base_uuid,
+            project_uuid=None,
+            knowledge_base_version=version,
+            include_draft=include_draft,
+            data_source_id=self.data_source_id,
+        )
 
         retrieval_config = {
             "vectorSearchConfiguration": {"filter": combined_filter, "numberOfResults": number_of_results}

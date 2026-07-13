@@ -88,7 +88,9 @@ def check_ingestion_job_status(
             if not content_base_uuid:
                 return True
 
-            file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
+            file_database.search_data(
+                content_base_uuid=content_base_uuid, text="test", number_of_results=1, include_draft=True
+            )
             logger.info(
                 f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid "
                 f"{content_base_uuid}, marking as success"
@@ -124,7 +126,7 @@ def _mark_direct_ingest_success(
     file_database: BedrockFileDatabase,
     content_base_uuid: str,
 ) -> bool:
-    file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
+    file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1, include_draft=True)
     logger.info(
         f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid " f"{content_base_uuid}, marking as success"
     )

@@ -406,6 +406,8 @@ class OpenAIBackend(InlineAgentsBackend):
         instructions_cached = kwargs.pop("instructions", None)
         agent_data_cached = kwargs.pop("agent_data", None)
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
+        knowledge_base_version = kwargs.pop("knowledge_base_version", "1")
+        include_draft_knowledge = kwargs.pop("include_draft_knowledge", False)
 
         if supervisor_agent_uuid:
             external_team = self.team_adapter.to_external_enhanced(
@@ -439,6 +441,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 turn_off_rationale=turn_off_rationale,
                 skip_conversation_sqs=skip_conversation_sqs,
                 manager_pipeline_version=manager_pipeline_version,
+                knowledge_base_version=knowledge_base_version,
+                include_draft_knowledge=include_draft_knowledge,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -475,6 +479,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 auth_token=auth_token,
                 use_components=use_components_cached,
                 skip_conversation_sqs=skip_conversation_sqs,
+                knowledge_base_version=knowledge_base_version,
+                include_draft_knowledge=include_draft_knowledge,
             )
 
         client = self._get_client()

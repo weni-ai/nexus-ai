@@ -35,6 +35,7 @@ class PreGenerationService:
             "formatter_tools_descriptions": project.formatter_tools_descriptions,
             "manager_pipeline_version": manager_pipeline_version_from_project(project),
             "supervisor_agent_uuid": project.manager_agent.uuid if project.manager_agent else None,
+            "knowledge_base_version": project.knowledge_base_version,
         }
 
     def _content_base_to_dict(self, content_base) -> Dict:

@@ -210,3 +210,35 @@ class TestCachedProjectDataEdgeCases(TestCase):
         self.assertFalse(kwargs.get("rationale_switch", True))
         self.assertEqual(kwargs.get("conversation_turns_to_include"), 10)
         self.assertTrue(kwargs.get("exclude_previous_thinking_steps", False))
+
+    def test_get_invoke_kwargs_includes_knowledge_base_version(self):
+        cached_data = CachedProjectData(
+            project_dict={"knowledge_base_version": "3"},
+            content_base_dict={"uuid": "cb-uuid"},
+            team=[],
+            guardrails_config={},
+            inline_agent_config_dict=None,
+            instructions=[],
+            agent_data=None,
+            formatter_agent_configurations={},
+        )
+
+        kwargs = cached_data.get_invoke_kwargs(team=[])
+
+        self.assertEqual(kwargs["knowledge_base_version"], "3")
+
+    def test_get_invoke_kwargs_defaults_knowledge_base_version(self):
+        cached_data = CachedProjectData(
+            project_dict={},
+            content_base_dict={"uuid": "cb-uuid"},
+            team=[],
+            guardrails_config={},
+            inline_agent_config_dict=None,
+            instructions=[],
+            agent_data=None,
+            formatter_agent_configurations={},
+        )
+
+        kwargs = cached_data.get_invoke_kwargs(team=[])
+
+        self.assertEqual(kwargs["knowledge_base_version"], "1")
