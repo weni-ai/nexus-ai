@@ -816,7 +816,7 @@ class OpenSupportTicketView(APIView):
                 project_uuid=str(project_uuid),
                 improvement_item=validated["improvement_item"],
                 affected_conversations=validated["affected_conversations"],
-                user_email=validated["user_email"],
+                user_email=request.user.email,
             )
         except ValueError as e:
             logger.error("Improvement support ticket email misconfigured: %s", str(e))

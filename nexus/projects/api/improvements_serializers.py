@@ -42,15 +42,12 @@ class OpenSupportTicketRequestSerializer(serializers.Serializer):
         max_length=MAX_AFFECTED_CONVERSATIONS,
     )
     project_uuid = serializers.UUIDField()
-    user_email = serializers.EmailField(max_length=MAX_SHORT_TEXT_LENGTH)
 
     def validate(self, attrs):
         url_project_uuid = self.context.get("project_uuid")
         body_project_uuid = attrs.get("project_uuid")
 
         if url_project_uuid and str(body_project_uuid) != str(url_project_uuid):
-            raise serializers.ValidationError(
-                {"project_uuid": "Must match the project_uuid in the URL."}
-            )
+            raise serializers.ValidationError({"project_uuid": "Must match the project_uuid in the URL."})
 
         return attrs

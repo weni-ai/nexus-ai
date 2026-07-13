@@ -44,7 +44,6 @@ VALID_PAYLOAD = {
         },
     ],
     "project_uuid": None,
-    "user_email": "agent@example.com",
 }
 
 
@@ -73,7 +72,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         mock_send_ticket.assert_called_once()
         call_kwargs = mock_send_ticket.call_args.kwargs
         self.assertEqual(call_kwargs["project_uuid"], self.project_uuid)
-        self.assertEqual(call_kwargs["user_email"], "agent@example.com")
+        self.assertEqual(call_kwargs["user_email"], self.authorized_user.email)
         self.assertEqual(call_kwargs["improvement_item"]["text"], "Cancellation denied")
         self.assertEqual(len(call_kwargs["affected_conversations"]), 2)
 
