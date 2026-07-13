@@ -94,9 +94,11 @@ class TestOpenSupportTicketView(_PermissionTestBase):
 
     @mock.patch(_SEND_TICKET, return_value=SendResult.SENT)
     def test_project_uuid_mismatch_returns_400(self, mock_send_ticket):
+        # Use internal_user so ProjectPermission does not short-circuit with 403 when
+        # request.data.project_uuid differs from the URL project_uuid.
         payload = _payload_for_project("017cd5df-cfc8-4d5c-b659-347fe7a4bee9")
         request = self.factory.post(self.url, payload, format="json")
-        force_authenticate(request, user=self.authorized_user)
+        force_authenticate(request, user=self.internal_user)
         response = self.view(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
