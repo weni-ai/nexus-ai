@@ -61,8 +61,8 @@ class ProjectInstructionsUseCase:
         for instruction in uncategorized:
             writer.writerow([uncategorized_label, instruction.instruction])
 
-        for instruction_text in default_instructions or []:
-            instruction_text = (instruction_text or "").strip()
+        for raw_text in default_instructions or []:
+            instruction_text = (raw_text or "").strip()
             if instruction_text:
                 writer.writerow([default_label, instruction_text])
 
