@@ -1,4 +1,8 @@
-"""Celery signals for start_inline_agents latency headers (Phase 0)."""
+"""Celery signals for start_inline_agents latency headers (Phase 0).
+
+Lives under nexus/ (not router.tasks) so nexus.celery can import it before
+Django apps are ready — router.tasks.__init__ pulls in ORM-dependent modules.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ from uuid import UUID
 
 from celery.signals import before_task_publish, task_prerun, task_received
 
-from router.tasks.latency_headers import (
+from nexus.inline_agent_latency_headers import (
     HEADER_ENQUEUED_AT,
     HEADER_PROJECT_UUID,
     HEADER_RECEIVED_AT,
@@ -48,8 +52,8 @@ def stamp_inline_agent_publish_headers(sender=None, body=None, headers=None, **k
 
     try:
         args = body[0] if body else ()
-        kwargs = body[1] if body and len(body) > 1 else {}
-        message = args[0] if args else kwargs.get("message", {})
+        task_kwargs = body[1] if body and len(body) > 1 else {}
+        message = args[0] if args else task_kwargs.get("message", {})
         project_uuid = _parse_project_uuid_from_message(message)
         if project_uuid:
             headers[HEADER_PROJECT_UUID] = project_uuid
