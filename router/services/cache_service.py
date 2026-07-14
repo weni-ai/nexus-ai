@@ -56,11 +56,24 @@ class CacheService:
         """Generic get_or_create pattern for caching."""
         cached = self.cache_repository.get(cache_key)
         if cached:
+            self._record_cache_metric(cache_key, hit=True)
             return cached
 
         data = fetch_func(*fetch_args)
         self.cache_repository.set(cache_key, data, ttl)
+        self._record_cache_metric(cache_key, hit=False)
         return data
+
+    def _record_cache_metric(self, cache_key: str, *, hit: bool) -> None:
+        try:
+            from router.tasks.latency_context import cache_type_from_key, project_uuid_from_cache_key, record_cache_access
+
+            project_uuid = project_uuid_from_cache_key(cache_key)
+            cache_type = cache_type_from_key(cache_key)
+            if project_uuid and cache_type:
+                record_cache_access(project_uuid, cache_type, hit)
+        except Exception:
+            pass
 
     def get_all_project_data(
         self,
@@ -139,11 +152,13 @@ class CacheService:
         cache_key = self._get_cache_key(project_uuid, "inline_agent_config")
         cached = self.cache_repository.get(cache_key)
         if cached:
+            self._record_cache_metric(cache_key, hit=True)
             return cached
 
         data = fetch_func(project_uuid)
         if data:
             self.cache_repository.set(cache_key, data, self.INLINE_AGENT_CONFIG_TTL)
+        self._record_cache_metric(cache_key, hit=False)
         return data
 
     def get_instructions_data(self, project_uuid: str, fetch_func: Callable[[str], List[str]]) -> List[str]:
@@ -156,11 +171,13 @@ class CacheService:
         cache_key = self._get_cache_key(project_uuid, "agent")
         cached = self.cache_repository.get(cache_key)
         if cached:
+            self._record_cache_metric(cache_key, hit=True)
             return cached
 
         data = fetch_func(project_uuid)
         if data:
             self.cache_repository.set(cache_key, data, self.AGENT_DATA_TTL)
+        self._record_cache_metric(cache_key, hit=False)
         return data
 
     def cache_workflow_data(self, workflow_id: str, data_type: str, data: Any, ttl: Optional[int] = None) -> None:

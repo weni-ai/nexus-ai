@@ -1,0 +1,137 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(inline_agent_broker_queue_wait_seconds_bucket{project_uuid=~\"$project_uuid\"}[5m])) by (le, project_uuid))",
+          "legendFormat": "broker P95 {{project_uuid}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Celery broker queue wait P95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(inline_agent_turn_duration_seconds_bucket{project_uuid=~\"$project_uuid\"}[5m])) by (le, status, project_uuid))",
+          "legendFormat": "{{status}} P95",
+          "refId": "A"
+        }
+      ],
+      "title": "Turn duration P95 by status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(inline_agent_phase_duration_seconds_bucket{project_uuid=~\"$project_uuid\"}[5m])) by (le, phase, project_uuid))",
+          "legendFormat": "{{phase}} P95",
+          "refId": "A"
+        }
+      ],
+      "title": "In-task phase duration P95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16},
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum(rate(inline_agent_cache_access_total{project_uuid=~\"$project_uuid\", hit=\"true\"}[5m])) / sum(rate(inline_agent_cache_access_total{project_uuid=~\"$project_uuid\"}[5m]))",
+          "legendFormat": "cache hit ratio",
+          "refId": "A"
+        }
+      ],
+      "title": "Pre-generation cache hit ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16},
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum(rate(inline_agent_turn_missing_project_uuid_total[5m]))",
+          "legendFormat": "missing project_uuid",
+          "refId": "A"
+        }
+      ],
+      "title": "Turns missing project_uuid (should be 0)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["inline-agents", "latency", "phase-0"],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "datasource": "Prometheus",
+        "definition": "label_values(inline_agent_turn_duration_seconds_count, project_uuid)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "project_uuid",
+        "multi": false,
+        "name": "project_uuid",
+        "query": "label_values(inline_agent_turn_duration_seconds_count, project_uuid)",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "Inline Agents — Turn Latency (Phase 0)",
+  "uid": "inline-agent-turn-latency",
+  "version": 1
+}
