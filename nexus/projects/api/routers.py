@@ -9,6 +9,7 @@ from .views import (
     ConversationsProxyView,
     EnableHumanSupportView,
     FlowsDbCohortReconcileProxyView,
+    OpenSupportTicketView,
     ProjectPromptCreationConfigurationsViewset,
     ProjectUpdateViewset,
 )
@@ -22,6 +23,11 @@ urlpatterns = [
     ),
     path("<project_uuid>/agents-backend", AgentsBackendView.as_view(), name="agents-backend"),
     path("<project_uuid>/human-support", EnableHumanSupportView.as_view(), name="enable-human-support"),
+    path(
+        "<project_uuid>/improvements/open-support-ticket/",
+        OpenSupportTicketView.as_view(),
+        name="improvements-open-support-ticket",
+    ),
     path("<project_uuid>/ab-project-details", AgentBuilderProjectDetailsView.as_view(), name="ab-project-details"),
     path("v2/projects/resolution-rate", ProjectsResolutionRateView.as_view(), name="projects-resolution-rate-v2"),
     path("v2/<project_uuid>/conversations", ConversationsProxyView.as_view(), name="conversations-proxy-v2"),
