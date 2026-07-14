@@ -9,6 +9,7 @@ from nexus.projects.api.resolution_criteria_views import (
     AIResolutionCriteriaListCreateView,
     AIResolutionCriteriaValidateView,
 )
+from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.models import Project, ProjectAIResolutionCriterion, ProjectAuthorizationRole
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
@@ -39,8 +40,13 @@ class TestAIResolutionCriteriaViews(TestCase):
         self._mock_ext_permission = self._permission_patcher.start()
 
         def _local_permission(request, project_uuid, method):
-            project = Project.objects.get(uuid=project_uuid)
-            return has_project_permission(request.user, project, method)
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+                return has_project_permission(request.user, project, method)
+            except Project.DoesNotExist:
+                return False
+            except ProjectAuthorizationDenied:
+                return False
 
         self._mock_ext_permission.side_effect = _local_permission
 
@@ -252,13 +258,13 @@ class TestAIResolutionCriteriaViews(TestCase):
         self.assertEqual(created_at, updated_at)
 
     def test_list_project_not_found(self):
+        # ProjectPermission runs before the view; missing project is denied (403), not 404.
         missing_uuid = "00000000-0000-0000-0000-000000000001"
         request = self.factory.get(f"/api/{missing_uuid}/ai-resolution-criteria/")
         force_authenticate(request, user=self.user)
         response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=missing_uuid)
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], "Project not found")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_validate_update_mode_checks_criterion_exists(self):
         criterion = ProjectAIResolutionCriterion.objects.create(
