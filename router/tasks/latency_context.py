@@ -20,7 +20,7 @@ from router.tasks.inline_agent_metrics import (
     INLINE_AGENT_TURN_MISSING_PROJECT_UUID_TOTAL,
     INLINE_AGENT_WORKER_SCHEDULING_DELAY_SECONDS,
 )
-from router.tasks.latency_headers import (
+from nexus.inline_agent_latency_headers import (
     HEADER_ENQUEUED_AT,
     HEADER_PROJECT_UUID,
     HEADER_RECEIVED_AT,
