@@ -11,6 +11,7 @@ from nexus.inline_agents.api.views import (
     MultiAgentView,
     OfficialAgentDetailV1,
     OfficialAgentsV1,
+    ProjectActiveAgentsConfigView,
     ProjectEngineSourceView,
     ProjectModelProvidersView,
 )
@@ -68,6 +69,11 @@ urlpatterns = [
     path("project/<project_uuid>/rationale", RationaleView.as_view(), name="project-rationale"),
     path("project/<project_uuid>/components", InlineProjectComponentsView.as_view(), name="project-components"),
     path("project/<project_uuid>/multi-agents", MultiAgentView.as_view(), name="multi-agents"),
+    path(
+        "project/<project_uuid>/active-agents/config",
+        ProjectActiveAgentsConfigView.as_view(),
+        name="active-agents-config",
+    ),
     path("project/<project_uuid>/end-session", AgentEndSessionView.as_view(), name="end-session"),
     path("project/<project_uuid>/multi-agents-audio", AgentBuilderAudio.as_view(), name="multi-agents-audio"),
     path("agents/log-group", LogGroupView.as_view(), name="agents-log-group"),

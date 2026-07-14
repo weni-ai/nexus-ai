@@ -1,4 +1,5 @@
 import logging
+import smtplib
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from uuid import UUID
 
@@ -18,12 +19,14 @@ from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.api.serializers import ConversationSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
+from nexus.projects.services.improvement_support_email import SendResult, send_improvement_support_ticket
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.projects.retrieve import get_project
 from nexus.usecases.projects.update import ProjectUpdateUseCase
 
+from .improvements_serializers import OpenSupportTicketRequestSerializer
 from .serializers import ProjectSerializer
 
 logger = logging.getLogger(__name__)
@@ -795,3 +798,43 @@ class ProjectApiErrorMessageView(APIView):
                 "error_message": _get_effective_api_error_message(project_uuid),
             }
         )
+
+
+class OpenSupportTicketView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def post(self, request, project_uuid):
+        serializer = OpenSupportTicketRequestSerializer(
+            data=request.data,
+            context={"project_uuid": project_uuid},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        validated = serializer.validated_data
+        try:
+            result = send_improvement_support_ticket(
+                project_uuid=str(project_uuid),
+                improvement_item=validated["improvement_item"],
+                affected_conversations=validated["affected_conversations"],
+                user_email=request.user.email,
+            )
+        except ValueError as e:
+            logger.error("Improvement support ticket email misconfigured: %s", str(e))
+            return Response(
+                {"error": "Support email is not configured"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except smtplib.SMTPException as e:
+            logger.error("Failed to send improvement support ticket email: %s", str(e), exc_info=True)
+            return Response(
+                {"error": "Failed to send support ticket email"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if result is SendResult.SKIPPED:
+            return Response(
+                {"status": "skipped", "reason": "email_sending_disabled"},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response({"status": "sent"}, status=status.HTTP_200_OK)
