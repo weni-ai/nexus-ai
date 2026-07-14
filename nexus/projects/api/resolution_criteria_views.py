@@ -30,6 +30,17 @@ from nexus.usecases.projects.ai_resolution_criteria import AIResolutionCriteriaU
 logger = logging.getLogger(__name__)
 
 
+def _serializer_validation_response(serializer) -> Response:
+    """Return a 400 for serializer failures.
+
+    Keep the API contract message when ``text`` is invalid; otherwise expose
+    field errors (e.g. invalid ``criterion_id`` on validate).
+    """
+    if "text" in serializer.errors:
+        return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class AIResolutionCriteriaListCreateView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
@@ -89,7 +100,7 @@ class AIResolutionCriteriaListCreateView(APIView):
     def post(self, request, project_uuid):
         serializer = AIResolutionCriteriaCreateRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return _serializer_validation_response(serializer)
 
         try:
             data = self.get_use_case().create_criterion(
@@ -137,7 +148,7 @@ class AIResolutionCriteriaValidateView(APIView):
     def post(self, request, project_uuid):
         serializer = AIResolutionCriteriaValidateRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return _serializer_validation_response(serializer)
 
         criterion_id = serializer.validated_data.get("criterion_id")
         try:
@@ -227,7 +238,7 @@ class AIResolutionCriteriaDetailView(APIView):
     def patch(self, request, project_uuid, criterion_id):
         serializer = AIResolutionCriteriaUpdateRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return _serializer_validation_response(serializer)
 
         try:
             data = self.get_use_case().update_criterion(
