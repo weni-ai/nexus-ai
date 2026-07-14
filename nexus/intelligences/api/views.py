@@ -1840,8 +1840,8 @@ class CommerceHasAgentBuilder(views.APIView):
 
 class TopicsViewSet(ModelViewSet):
     serializer_class = TopicsSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-    authentication_classes = []  # Disable default authentication
     lookup_field = "uuid"
 
     def get_queryset(self, *args, **kwargs):
@@ -1926,8 +1926,8 @@ class TopicsViewSet(ModelViewSet):
 
 class SubTopicsViewSet(ModelViewSet):
     serializer_class = SubTopicsSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-    authentication_classes = []  # Disable default authentication
     lookup_field = "uuid"
 
     def get_queryset(self, *args, **kwargs):
