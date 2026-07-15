@@ -252,6 +252,34 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertEqual(content["categories"][0]["name"], "PERSONALIDADE")
         self.assertNotIn("uncategorized_instructions", content)
 
+    def test_patch_moves_categorized_instruction_to_uncategorized(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        existing = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=category,
+            instruction="teste",
+            suggested_category="greeting",
+        )
+
+        response = self._patch(
+            {
+                "uncategorized_instructions": [
+                    {"id": existing.id, "instruction": "teste"},
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        existing.refresh_from_db()
+        self.assertIsNone(existing.category_id)
+        self.assertEqual(existing.suggested_category, "")
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(len(content["uncategorized_instructions"]), 1)
+        self.assertEqual(content["uncategorized_instructions"][0]["id"], existing.id)
+        self.assertEqual(content["categories"][0]["instructions"], [])
+
     def test_patch_uses_existing_category_by_name(self):
         category = InstructionCategory.objects.create(content_base=self.content_base, name="policy")
         existing = ContentBaseInstruction.objects.create(
