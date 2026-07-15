@@ -26,6 +26,7 @@ from weni.feature_flags.shortcuts import is_feature_active_for_attributes
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
+from nexus.feature_flags.permissions import build_feature_flag_attributes
 from nexus.intelligences.api.filters import ConversationFilter
 from nexus.intelligences.constants import INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
 from nexus.intelligences.models import (
@@ -2139,7 +2140,7 @@ class InstructionsClassificationAPIView(APIView):
 
             use_enhanced_classification = is_feature_active_for_attributes(
                 INSTRUCTION_CATEGORIZATION_FEATURE_FLAG,
-                {"weni_project": str(project_uuid)},
+                build_feature_flag_attributes(request, project),
             )
 
             if use_enhanced_classification:

@@ -62,8 +62,8 @@ class ProjectInstructionsUseCase:
         for instruction in uncategorized:
             writer.writerow([uncategorized_label, instruction.instruction])
 
-        for instruction_text in default_instructions or []:
-            instruction_text = (instruction_text or "").strip()
+        for raw_text in default_instructions or []:
+            instruction_text = (raw_text or "").strip()
             if instruction_text:
                 writer.writerow([default_label, instruction_text])
 
@@ -82,19 +82,12 @@ class ProjectInstructionsUseCase:
             raise ValueError("Instruction text is required")
 
         category = self._resolve_category_for_create(content_base, category_data)
-
-        if category:
-            created_instruction = ContentBaseInstruction.objects.create(
-                content_base=content_base,
-                instruction=instruction_text,
-                category=category,
-                suggested_category=category.name,
-            )
-        else:
-            created_instruction = ContentBaseInstruction.objects.create(
-                content_base=content_base,
-                instruction=instruction_text,
-            )
+        extra = {"category": category, "suggested_category": category.name} if category else {}
+        created_instruction = ContentBaseInstruction.objects.create(
+            content_base=content_base,
+            instruction=instruction_text,
+            **extra,
+        )
 
         event_manager.notify(
             event="contentbase_instruction_activity",

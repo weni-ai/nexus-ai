@@ -43,8 +43,6 @@ class ProjectInstructionsViewSet(ModelViewSet):
     delete_use_case = DeleteContentBaseUseCase()
 
     def get_queryset(self, *args, **kwargs):
-        if getattr(self, "swagger_fake_view", False):
-            return ContentBase.objects.none()  # pragma: no cover
         return ContentBase.objects.none()
 
     def _get_content_base(self, project_uuid):
@@ -177,7 +175,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
             return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as error:
             logger.error("Error creating project instruction: %s", str(error), exc_info=True)
-            return Response({"error": str(error)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(data=data, status=status.HTTP_201_CREATED)
 
@@ -234,7 +232,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
             return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as error:
             logger.error("Error patching project instructions: %s", str(error), exc_info=True)
-            return Response({"error": str(error)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(data=data, status=status.HTTP_200_OK)
 
