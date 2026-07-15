@@ -77,18 +77,16 @@ def log_progressive_feedback_orchestration_decision(
     channel_type: str = "",
     preview: bool = False,
     preview_websocket: bool = False,
-    insertion_point: str | None = None,
     instruction_preview: str | None = None,
 ) -> None:
     channel_from_urn = channel_hint_from_contact_urn(contact_urn) if contact_urn else None
     if injected:
         logger.info(
             "[ProgressiveFeedback] Orchestration instruction injected project_id=%s channel_from_urn=%s "
-            "contact_urn=%s insertion_point=%s instruction_preview=%r",
+            "contact_urn=%s instruction_preview=%r",
             project_id,
             channel_from_urn,
             contact_urn or None,
-            insertion_point,
             instruction_preview,
         )
         return

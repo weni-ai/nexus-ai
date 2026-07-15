@@ -1163,7 +1163,6 @@ class OpenAITeamAdapter(TeamAdapter):
         rendered_content = template.render(context_object)
 
         from inline_agents.backends.openai.prompts_progressive_feedback import (
-            find_core_identity_marker,
             get_progressive_feedback_orchestration_instruction,
             inject_progressive_feedback_instruction,
             log_progressive_feedback_orchestration_decision,
@@ -1180,7 +1179,6 @@ class OpenAITeamAdapter(TeamAdapter):
         ):
             progressive_feedback_instruction = get_progressive_feedback_orchestration_instruction()
             if progressive_feedback_instruction:
-                insertion_point = find_core_identity_marker(rendered_content) or "prepend"
                 rendered_content = inject_progressive_feedback_instruction(
                     rendered_content,
                     progressive_feedback_instruction,
@@ -1194,7 +1192,6 @@ class OpenAITeamAdapter(TeamAdapter):
                     rationale_switch=rationale_switch,
                     turn_off_rationale=turn_off_rationale,
                     injected=True,
-                    insertion_point=insertion_point,
                     instruction_preview=progressive_feedback_instruction[:120],
                 )
             else:
