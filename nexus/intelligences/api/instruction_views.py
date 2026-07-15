@@ -185,6 +185,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
         description=(
             "Updates existing instructions (id required). Categories accept id or name; "
             "name without id reuses an existing category or creates a new one. "
+            "Listing an instruction under uncategorized_instructions moves it out of its "
+            "category (if any) and updates its text. "
             "Renaming or creating a category with a duplicate name returns 409. "
             "Use POST to create instructions and DELETE endpoints to remove. "
             "Omitted categories and instructions are left unchanged."

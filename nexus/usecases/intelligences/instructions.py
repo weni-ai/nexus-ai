@@ -246,12 +246,13 @@ class ProjectInstructionsUseCase:
             if not instruction_text:
                 continue
 
-            instruction = content_base.instructions.get(id=instruction_data["id"], category__isnull=True)
+            instruction = content_base.instructions.get(id=instruction_data["id"])
             old_instruction_data = model_to_dict(instruction)
 
             instruction.instruction = instruction_text
+            instruction.category = None
             instruction.suggested_category = ""
-            instruction.save(update_fields=["instruction", "suggested_category"])
+            instruction.save(update_fields=["instruction", "category", "suggested_category"])
             instruction.refresh_from_db()
 
             event_manager.notify(

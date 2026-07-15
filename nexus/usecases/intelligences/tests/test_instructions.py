@@ -217,6 +217,30 @@ class TestProjectInstructionsUseCase(TestCase):
         existing.refresh_from_db()
         self.assertEqual(existing.category.name, "policy")
 
+    def test_patch_moves_categorized_instruction_to_uncategorized(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        existing = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=category,
+            instruction="teste",
+            suggested_category="greeting",
+        )
+
+        payload = self.use_case.patch_grouped_instructions(
+            content_base=self.content_base,
+            categories_data=None,
+            uncategorized_data=[{"id": existing.id, "instruction": "teste"}],
+            user=self.user,
+            project_uuid=str(self.project.uuid),
+        )
+
+        existing.refresh_from_db()
+        self.assertIsNone(existing.category_id)
+        self.assertEqual(existing.suggested_category, "")
+        self.assertEqual(existing.instruction, "teste")
+        self.assertEqual(len(payload["uncategorized_instructions"]), 1)
+        self.assertEqual(payload["uncategorized_instructions"][0]["id"], existing.id)
+
     def test_delete_category_moves_instructions_to_uncategorized(self):
         category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
         instruction = ContentBaseInstruction.objects.create(
