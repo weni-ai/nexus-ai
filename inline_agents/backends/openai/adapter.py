@@ -221,6 +221,7 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale: bool,
         skip_conversation_sqs: bool = False,
         manager_pipeline_version: Optional[str] = None,
+        channel_type: str = "",
         knowledge_base_version: str = "1",
         include_draft_knowledge: bool = False,
     ):
@@ -255,6 +256,11 @@ class OpenAITeamAdapter(TeamAdapter):
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
             include_streaming_merge_prompts=bool(use_components and not is_legacy_manager_pipeline),
+            rationale_switch=rationale_switch,
+            turn_off_rationale=turn_off_rationale,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -367,6 +373,7 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale: bool = False,
         use_components: bool = False,
         skip_conversation_sqs: bool = False,
+        channel_type: str = "",
         # Cached data parameters (optional, used to avoid database queries)
         content_base_uuid: str = None,
         business_rules: str = None,
@@ -421,6 +428,11 @@ class OpenAITeamAdapter(TeamAdapter):
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
             include_streaming_merge_prompts=False,
+            rationale_switch=rationale_switch,
+            turn_off_rationale=turn_off_rationale,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
         )
 
         for agent in agents:
@@ -1102,6 +1114,11 @@ class OpenAITeamAdapter(TeamAdapter):
         components_instructions_up,
         human_support_instructions,
         include_streaming_merge_prompts: bool = False,
+        rationale_switch: bool = False,
+        turn_off_rationale: bool = False,
+        channel_type: str = "",
+        preview: bool = False,
+        preview_websocket: bool = False,
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1158,6 +1175,61 @@ class OpenAITeamAdapter(TeamAdapter):
         context_object = TemplateContext(context_data)
 
         rendered_content = template.render(context_object)
+
+        from inline_agents.backends.openai.prompts_progressive_feedback import (
+            get_progressive_feedback_orchestration_instruction,
+            inject_progressive_feedback_instruction,
+            log_progressive_feedback_orchestration_decision,
+            should_inject_progressive_feedback_instruction,
+        )
+
+        if should_inject_progressive_feedback_instruction(
+            rationale_switch,
+            turn_off_rationale,
+            contact_urn=contact_id,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+        ):
+            progressive_feedback_instruction = get_progressive_feedback_orchestration_instruction()
+            if progressive_feedback_instruction:
+                rendered_content = inject_progressive_feedback_instruction(
+                    rendered_content,
+                    progressive_feedback_instruction,
+                )
+                log_progressive_feedback_orchestration_decision(
+                    project_id=project_id,
+                    contact_urn=contact_id,
+                    channel_type=channel_type,
+                    preview=preview,
+                    preview_websocket=preview_websocket,
+                    rationale_switch=rationale_switch,
+                    turn_off_rationale=turn_off_rationale,
+                    injected=True,
+                    instruction_preview=progressive_feedback_instruction[:120],
+                )
+            else:
+                log_progressive_feedback_orchestration_decision(
+                    project_id=project_id,
+                    contact_urn=contact_id,
+                    channel_type=channel_type,
+                    preview=preview,
+                    preview_websocket=preview_websocket,
+                    rationale_switch=rationale_switch,
+                    turn_off_rationale=turn_off_rationale,
+                    injected=False,
+                )
+        else:
+            log_progressive_feedback_orchestration_decision(
+                project_id=project_id,
+                contact_urn=contact_id,
+                channel_type=channel_type,
+                preview=preview,
+                preview_websocket=preview_websocket,
+                rationale_switch=rationale_switch,
+                turn_off_rationale=turn_off_rationale,
+                injected=False,
+            )
 
         return rendered_content
 
