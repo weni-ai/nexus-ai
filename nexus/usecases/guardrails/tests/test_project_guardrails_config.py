@@ -119,9 +119,10 @@ class GuardrailsConfigAdminPermissionTestCase(TestCase):
 
     def _build_request(self, method: str, user=None):
         django_request = self.factory.generic(method, "/")
-        if user is not None:
-            django_request.user = user
         request = Request(django_request)
+        if user is not None:
+            request.user = user
+            request._request.user = user
         self.view.kwargs = {"project_uuid": str(self.project.uuid)}
         return request
 
