@@ -69,6 +69,6 @@ class GuardrailsConfigUpdateSerializer(serializers.Serializer):
     confirm_disable = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
-        if "category_states" not in attrs and "blocking_message" not in self.initial_data:
+        if "category_states" not in attrs and "blocking_message" not in attrs:
             raise serializers.ValidationError("At least one of category_states or blocking_message is required.")
         return attrs
