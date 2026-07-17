@@ -1,10 +1,35 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from nexus.projects.models import Project, ProjectGuardrailsConfig
+
+
+class GuardrailsConfirmationRequired(Exception):
+    def __init__(self, confirmation_type: str, detail: str | None = None):
+        self.confirmation_type = confirmation_type
+        self.detail = detail or "Confirmation required before unblocking guardrail categories."
+        super().__init__(self.detail)
+
+
+@dataclass(frozen=True)
+class GuardrailsConfigPayload:
+    categories: list[dict]
+    blocking_message: str
+    blocking_message_is_custom: bool
+    writable: bool
+
+    def as_dict(self) -> dict:
+        return {
+            "categories": self.categories,
+            "blocking_message": self.blocking_message,
+            "blocking_message_is_custom": self.blocking_message_is_custom,
+            "writable": self.writable,
+        }
 
 
 class ProjectGuardrailsConfigUseCase:
@@ -129,3 +154,91 @@ class ProjectGuardrailsConfigUseCase:
                 raise ValidationError({"category_states": f"Blocked state for '{slug}' must be a boolean."})
 
         return cls.sanitize_category_states(category_states)
+
+    @classmethod
+    def build_categories_response(cls, category_states: dict[str, bool]) -> list[dict]:
+        return [
+            {
+                "slug": entry["slug"],
+                "name": entry["name"],
+                "description": entry["description"],
+                "blocked": bool(category_states.get(entry["slug"], False)),
+            }
+            for entry in cls.catalog()
+        ]
+
+    @classmethod
+    def to_payload(cls, config: ProjectGuardrailsConfig, *, writable: bool) -> GuardrailsConfigPayload:
+        message, is_custom = cls.effective_blocking_message(config)
+        return GuardrailsConfigPayload(
+            categories=cls.build_categories_response(config.category_states),
+            blocking_message=message,
+            blocking_message_is_custom=is_custom,
+            writable=writable,
+        )
+
+    @classmethod
+    def _unblocked_transitions(
+        cls,
+        previous_states: dict[str, bool],
+        next_states: dict[str, bool],
+    ) -> list[str]:
+        return [
+            slug
+            for slug in cls.catalog_slugs()
+            if previous_states.get(slug, False) and not next_states.get(slug, False)
+        ]
+
+    @classmethod
+    def update_config(
+        cls,
+        project: Project,
+        *,
+        category_states: dict | None = None,
+        blocking_message: str | None = None,
+        blocking_message_provided: bool = False,
+        confirm_disable: bool = False,
+    ) -> ProjectGuardrailsConfig:
+        config = cls.get_or_initialize(project)
+        previous_states = dict(config.category_states)
+        next_states = dict(previous_states)
+
+        if category_states is not None:
+            validated_partial = cls.validate_category_states(category_states)
+            next_states.update(validated_partial)
+            next_states = cls.merge_category_states(
+                next_states,
+                default_blocked=config.initialized_as_new_project,
+            )
+
+        next_blocking_message = config.blocking_message
+        if blocking_message_provided:
+            if blocking_message is None:
+                next_blocking_message = None
+            elif isinstance(blocking_message, str):
+                stripped = blocking_message.strip()
+                next_blocking_message = stripped if stripped else None
+            else:
+                raise ValidationError({"blocking_message": "Blocking message must be a string or null."})
+
+        unblocked = cls._unblocked_transitions(previous_states, next_states)
+        if unblocked and not confirm_disable:
+            confirmation_type = "disable_all" if not cls.has_blocked_category(next_states) else "disable_category"
+            raise GuardrailsConfirmationRequired(confirmation_type=confirmation_type)
+
+        cls.validate_blocking_message_for_states(next_blocking_message, next_states)
+
+        category_states_changed = next_states != config.category_states
+        blocking_message_changed = blocking_message_provided and next_blocking_message != config.blocking_message
+
+        if category_states_changed or blocking_message_changed:
+            update_fields = ["modified_on"]
+            if category_states_changed:
+                config.category_states = next_states
+                update_fields.append("category_states")
+            if blocking_message_changed:
+                config.blocking_message = next_blocking_message
+                update_fields.append("blocking_message")
+            config.save(update_fields=update_fields)
+
+        return config
