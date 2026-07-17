@@ -1,3 +1,4 @@
+import requests
 from django.conf import settings
 from rest_framework import permissions
 from rest_framework.exceptions import ValidationError
@@ -5,6 +6,7 @@ from rest_framework.permissions import SAFE_METHODS
 
 from nexus.projects.models import Project, ProjectAuth
 from nexus.projects.permissions import (
+    _is_authorized_response,
     get_user_auth,
     has_external_general_project_permission,
     is_admin,
@@ -93,10 +95,6 @@ class GuardrailsConfigAdminPermission(permissions.BasePermission):
 
 
 def _has_external_moderator_permission(request, project_uuid: str) -> bool:
-    import requests
-
-    from nexus.projects.permissions import _is_authorized_response
-
     token = request.headers.get("Authorization")
     if not token:
         return False
