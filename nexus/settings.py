@@ -639,6 +639,13 @@ SKILL_FILE_SIZE_LIMIT = env.int("SKILL_FILE_SIZE_LIMIT", 50)
 
 RATIONALE_IMPROVEMENT_INSTRUCTIONS = env.str("RATIONALE_IMPROVEMENT_INSTRUCTIONS", "")
 SUBSEQUENT_RATIONALE_INSTRUCTIONS = env.str("SUBSEQUENT_RATIONALE_INSTRUCTIONS", "")
+PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION = env.str(
+    "PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION",
+    default=(
+        "Before executing ANY tool or calling an agent, send the user a short feedback message "
+        "explaining what you're about to do, so they know the request is being processed."
+    ),
+)
 
 START_INLINE_AGENTS_ACK_LATE = env.bool("START_INLINE_AGENTS_ACK_LATE", False)
 ENABLE_LOGFIRE_OPENAI_AGENTS = env.bool("ENABLE_LOGFIRE_OPENAI_AGENTS", False)
