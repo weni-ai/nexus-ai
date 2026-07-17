@@ -21,6 +21,7 @@ from nexus.projects.api.resolution_criteria_serializers import (
 from nexus.projects.exceptions import (
     LambdaValidationFailedError,
     ProjectDoesNotExist,
+    ResolutionCriterionLimitReached,
     ResolutionCriterionNotFound,
     ResolutionCriterionValidationError,
     UnauthorizedBaseCriterionChange,
@@ -109,6 +110,11 @@ class AIResolutionCriteriaListCreateView(APIView):
                 user=request.user,
             )
             return Response(data, status=status.HTTP_201_CREATED)
+        except ResolutionCriterionLimitReached as exc:
+            return Response(
+                {"error": {"code": exc.code, "message": exc.message}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except ProjectDoesNotExist:
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as exc:

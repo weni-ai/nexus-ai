@@ -87,7 +87,13 @@ class TestAIResolutionCriteriaViews(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["validation"]["status"])
-        self._mock_validate.assert_called_once()
+        self._mock_validate.assert_called_once_with(
+            user_rules=[
+                BASE_CRITERIA[0]["text"],
+                BASE_CRITERIA[1]["text"],
+                "Mark as resolved when the customer confirms order delivery",
+            ]
+        )
 
     def test_validate_returns_invalid_error(self):
         self._mock_validate.return_value = {
@@ -143,6 +149,26 @@ class TestAIResolutionCriteriaViews(TestCase):
         self.assertEqual(response.data["type"], "custom")
         self.assertTrue(response.data["editable"])
         self._mock_validate.assert_not_called()
+
+    def test_create_rejects_when_custom_limit_reached(self):
+        for index in range(10):
+            ProjectAIResolutionCriterion.objects.create(
+                project=self.project,
+                text=f"Custom criterion {index}",
+                created_by=self.user,
+            )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-resolution-criteria/",
+            {"text": "Eleventh criterion"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "CRITERION_LIMIT_REACHED")
+        self.assertEqual(ProjectAIResolutionCriterion.objects.filter(project=self.project, is_active=True).count(), 10)
 
     def test_create_requires_text(self):
         request = self.factory.post(
@@ -285,7 +311,46 @@ class TestAIResolutionCriteriaViews(TestCase):
         response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self._mock_validate.assert_called_once_with(user_rules=["Updated criterion text"])
+        self._mock_validate.assert_called_once_with(
+            user_rules=[
+                BASE_CRITERIA[0]["text"],
+                BASE_CRITERIA[1]["text"],
+                "Updated criterion text",
+            ]
+        )
+
+    def test_validate_includes_other_customs_and_excludes_self_on_update(self):
+        kept = ProjectAIResolutionCriterion.objects.create(
+            project=self.project,
+            text="Keep this custom criterion",
+            created_by=self.user,
+        )
+        editing = ProjectAIResolutionCriterion.objects.create(
+            project=self.project,
+            text="Old text being replaced",
+            created_by=self.user,
+        )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-validation-criteria/",
+            {
+                "text": "New candidate text",
+                "criterion_id": str(editing.uuid),
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self._mock_validate.assert_called_once_with(
+            user_rules=[
+                BASE_CRITERIA[0]["text"],
+                BASE_CRITERIA[1]["text"],
+                kept.text,
+                "New candidate text",
+            ]
+        )
 
     def test_validate_returns_invalid_error_from_lambda(self):
         self._mock_validate.return_value = {
