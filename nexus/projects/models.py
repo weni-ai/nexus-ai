@@ -227,3 +227,36 @@ class ProjectAIResolutionCriterion(BaseModel, SoftDeleteModel):
 
     def __str__(self):
         return f"{self.project.uuid} - {self.uuid}"
+
+
+class ProjectGuardrailsConfig(models.Model):
+    BLOCKING_MESSAGE_MAX_LENGTH = 240
+
+    project = models.OneToOneField(Project, on_delete=models.CASCADE, related_name="guardrails_config")
+    category_states = models.JSONField(default=dict)
+    blocking_message = models.TextField(null=True, blank=True)
+    initialized_as_new_project = models.BooleanField(default=False)
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"Guardrails config for {self.project}"
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.blocking_message is not None and len(self.blocking_message) > self.BLOCKING_MESSAGE_MAX_LENGTH:
+            raise ValidationError(
+                {"blocking_message": f"Blocking message must be at most {self.BLOCKING_MESSAGE_MAX_LENGTH} characters."}
+            )
+
+        if not isinstance(self.category_states, dict):
+            raise ValidationError({"category_states": "Must be a mapping of slug to boolean."})
+
+        for slug, blocked in self.category_states.items():
+            if not isinstance(slug, str) or not isinstance(blocked, bool):
+                raise ValidationError({"category_states": "Each entry must be a slug string mapped to a boolean."})
