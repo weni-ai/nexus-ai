@@ -228,15 +228,17 @@ class ProjectGuardrailsConfigUseCase:
 
         cls.validate_blocking_message_for_states(next_blocking_message, next_states)
 
-        update_fields: list[str] = ["modified_on"]
-        if next_states != config.category_states:
-            config.category_states = next_states
-            update_fields.append("category_states")
-        if blocking_message_provided and next_blocking_message != config.blocking_message:
-            config.blocking_message = next_blocking_message
-            update_fields.append("blocking_message")
+        category_states_changed = next_states != config.category_states
+        blocking_message_changed = blocking_message_provided and next_blocking_message != config.blocking_message
 
-        if len(update_fields) > 1:
+        if category_states_changed or blocking_message_changed:
+            update_fields = ["modified_on"]
+            if category_states_changed:
+                config.category_states = next_states
+                update_fields.append("category_states")
+            if blocking_message_changed:
+                config.blocking_message = next_blocking_message
+                update_fields.append("blocking_message")
             config.save(update_fields=update_fields)
 
         return config
