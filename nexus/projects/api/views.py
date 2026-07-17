@@ -809,9 +809,8 @@ class ProjectGuardrailsConfigView(APIView):
     permission_classes = [IsAuthenticated, GuardrailsConfigAdminPermission]
 
     def get(self, request, project_uuid):
-        try:
-            project = Project.objects.get(uuid=project_uuid)
-        except Project.DoesNotExist:
+        project = self._get_project(project_uuid)
+        if project is None:
             return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
         config = ProjectGuardrailsConfigUseCase.get_or_initialize(project)
@@ -822,9 +821,8 @@ class ProjectGuardrailsConfigView(APIView):
         return Response(payload.as_dict(), status=status.HTTP_200_OK)
 
     def patch(self, request, project_uuid):
-        try:
-            project = Project.objects.get(uuid=project_uuid)
-        except Project.DoesNotExist:
+        project = self._get_project(project_uuid)
+        if project is None:
             return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = GuardrailsConfigUpdateSerializer(data=request.data)
@@ -853,6 +851,13 @@ class ProjectGuardrailsConfigView(APIView):
 
         payload = ProjectGuardrailsConfigUseCase.to_payload(config, writable=True)
         return Response(payload.as_dict(), status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _get_project(project_uuid):
+        try:
+            return Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return None
 
     @staticmethod
     def _is_writable(user, project: Project) -> bool:
