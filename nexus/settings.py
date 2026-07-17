@@ -732,7 +732,11 @@ GUARDRAILS_DEFAULT_BLOCKING_MESSAGE = env.str(
     default="This message can't be processed because it may contain sensitive content.",
 )
 
-GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT = datetime(2026, 7, 1, tzinfo=timezone.utc)
+_guardrails_deploy_at_raw = env.str("GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT", default="2026-07-01")
+_guardrails_deploy_at = datetime.fromisoformat(_guardrails_deploy_at_raw)
+if _guardrails_deploy_at.tzinfo is None:
+    _guardrails_deploy_at = _guardrails_deploy_at.replace(tzinfo=timezone.utc)
+GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT = _guardrails_deploy_at
 
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")
