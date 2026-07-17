@@ -59,22 +59,23 @@ class ProjectGuardrailsConfigUseCase:
 
     @classmethod
     def get_or_initialize(cls, project: Project) -> ProjectGuardrailsConfig:
-        try:
-            config = project.guardrails_config
-        except ProjectGuardrailsConfig.DoesNotExist:
-            default_blocked = cls.default_blocked_for_project(project)
-            config = ProjectGuardrailsConfig.objects.create(
-                project=project,
-                category_states=cls.build_default_category_states(blocked=default_blocked),
-                blocking_message=None,
-                initialized_as_new_project=default_blocked,
-            )
-        else:
-            default_blocked = config.initialized_as_new_project
-            merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
-            if merged_states != config.category_states:
-                config.category_states = merged_states
-                config.save(update_fields=["category_states", "modified_on"])
+        default_blocked = cls.default_blocked_for_project(project)
+        config, created = ProjectGuardrailsConfig.objects.get_or_create(
+            project=project,
+            defaults={
+                "category_states": cls.build_default_category_states(blocked=default_blocked),
+                "blocking_message": None,
+                "initialized_as_new_project": default_blocked,
+            },
+        )
+        if created:
+            return config
+
+        default_blocked = config.initialized_as_new_project
+        merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
+        if merged_states != config.category_states:
+            config.category_states = merged_states
+            config.save(update_fields=["category_states", "modified_on"])
 
         return config
 
