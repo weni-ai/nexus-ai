@@ -10,6 +10,7 @@ from .views import (
     EnableHumanSupportView,
     FlowsDbCohortReconcileProxyView,
     OpenSupportTicketView,
+    ProjectGuardrailsConfigView,
     ProjectPromptCreationConfigurationsViewset,
     ProjectUpdateViewset,
 )
@@ -23,6 +24,11 @@ urlpatterns = [
     ),
     path("<project_uuid>/agents-backend", AgentsBackendView.as_view(), name="agents-backend"),
     path("<project_uuid>/human-support", EnableHumanSupportView.as_view(), name="enable-human-support"),
+    path(
+        "<project_uuid>/guardrails-config/",
+        ProjectGuardrailsConfigView.as_view(),
+        name="project-guardrails-config",
+    ),
     path(
         "<project_uuid>/improvements/open-support-ticket/",
         OpenSupportTicketView.as_view(),
