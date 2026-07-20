@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Project Guardrails Configuration API
-  version: 1.2.0
+  version: 1.3.0
   description: Nexus backend — guardrail category block states and blocking message
 
 paths:
@@ -50,16 +50,11 @@ components:
   schemas:
     GuardrailCategory:
       type: object
-      required: [slug, name, description, blocked]
+      required: [slug, blocked]
       properties:
         slug:
           type: string
-        name:
-          type: string
-          description: English catalog label from settings
-        description:
-          type: string
-          description: English scope description from settings
+          description: Stable catalog key; display name/description come from frontend i18n
         blocked:
           type: boolean
 
