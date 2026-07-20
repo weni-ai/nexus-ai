@@ -21,10 +21,7 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project, ProjectAuth
 from nexus.projects.permissions import get_user_auth, is_admin
 from nexus.projects.services.improvement_support_email import SendResult, send_improvement_support_ticket
-from nexus.usecases.guardrails.project_guardrails_config import (
-    GuardrailsConfirmationRequired,
-    ProjectGuardrailsConfigUseCase,
-)
+from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -835,16 +832,6 @@ class ProjectGuardrailsConfigView(APIView):
                 category_states=data.get("category_states"),
                 blocking_message=data.get("blocking_message"),
                 blocking_message_provided="blocking_message" in request.data,
-                confirm_disable=bool(data.get("confirm_disable", False)),
-            )
-        except GuardrailsConfirmationRequired as exc:
-            return Response(
-                {
-                    "requires_confirmation": True,
-                    "confirmation_type": exc.confirmation_type,
-                    "detail": exc.detail,
-                },
-                status=status.HTTP_409_CONFLICT,
             )
         except DjangoValidationError as exc:
             return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)

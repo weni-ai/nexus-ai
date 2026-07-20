@@ -8,10 +8,7 @@ from rest_framework.request import Request
 
 from nexus.projects.api.permissions import GuardrailsConfigAdminPermission
 from nexus.projects.models import ProjectAuthorizationRole, ProjectGuardrailsConfig
-from nexus.usecases.guardrails.project_guardrails_config import (
-    GuardrailsConfirmationRequired,
-    ProjectGuardrailsConfigUseCase,
-)
+from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -112,22 +109,7 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertTrue(is_custom)
         self.assertEqual(message, "Custom refusal")
 
-    def test_update_requires_confirmation_when_unblocking(self):
-        project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
-        self.use_case.get_or_initialize(project)
-
-        with self.assertRaises(GuardrailsConfirmationRequired) as ctx:
-            self.use_case.update_config(
-                project,
-                category_states={"politics": False},
-                confirm_disable=False,
-            )
-
-        self.assertEqual(ctx.exception.confirmation_type, "disable_category")
-
-    def test_update_with_confirm_disable_persists_unblock(self):
+    def test_update_unblocks_without_confirmation(self):
         project = ProjectFactory()
         project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
         project.save(update_fields=["created_at"])
@@ -136,12 +118,11 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         config = self.use_case.update_config(
             project,
             category_states={"politics": False},
-            confirm_disable=True,
         )
 
         self.assertFalse(config.category_states["politics"])
 
-    def test_update_message_only_does_not_require_confirmation(self):
+    def test_update_message_only_leaves_category_states(self):
         project = ProjectFactory()
         config = self.use_case.get_or_initialize(project)
 
