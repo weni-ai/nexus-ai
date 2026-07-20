@@ -29,9 +29,9 @@
 
 ---
 
-## R3 — Admin writes, lazy init, confirmation
+## R3 — Admin writes, lazy init, unblock
 
-**Decision**: Moderator/org-admin PATCH only; `GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT` + lazy init on first GET; `confirm_disable` contract (`disable_category` | `disable_all`); cache invalidation on PATCH.
+**Decision**: Moderator/org-admin PATCH only; `GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT` + lazy init on first GET; unblock persists immediately (confirmation UX is frontend-only); cache invalidation on PATCH.
 
 Unchanged from 2026-07-06 product/API clarifications.
 
