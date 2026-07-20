@@ -49,6 +49,7 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         self.assertTrue(response.data["blocking_message"])
         self.assertEqual(len(response.data["categories"]), len(ProjectGuardrailsConfigUseCase.catalog_slugs()))
         self.assertTrue(all(category["blocked"] for category in response.data["categories"]))
+        self.assertTrue(all(set(category.keys()) == {"slug", "blocked"} for category in response.data["categories"]))
         self.assertTrue(ProjectGuardrailsConfig.objects.filter(project=self.project).exists())
 
     def test_get_lazy_init_existing_project_unblocks_all(self):
