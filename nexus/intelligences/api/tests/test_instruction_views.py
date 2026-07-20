@@ -37,14 +37,7 @@ class TestProjectInstructionsViewSet(TestCase):
 
         self._mock_ext_permission.side_effect = _local_permission
 
-        self._feature_flag_patcher = mock.patch(
-            "nexus.feature_flags.permissions.is_feature_active_for_attributes",
-            return_value=True,
-        )
-        self._feature_flag_patcher.start()
-
     def tearDown(self):
-        self._feature_flag_patcher.stop()
         self._patcher.stop()
 
     def _post(self, data):
@@ -438,23 +431,6 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
         self.assertEqual(rows, [["Categoria", "Instrução"]])
-
-    @mock.patch("nexus.feature_flags.permissions.is_feature_active_for_attributes", return_value=False)
-    def test_export_returns_403_when_feature_flag_is_inactive(self, _mock_feature_flag):
-        response = self._export()
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    @mock.patch("nexus.feature_flags.permissions.is_feature_active_for_attributes", return_value=False)
-    def test_list_returns_403_when_feature_flag_is_inactive(self, _mock_feature_flag):
-        request = self.factory.get(f"{self.url}")
-        force_authenticate(request, user=self.user)
-        response = ProjectInstructionsViewSet.as_view({"get": "list"})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_destroy_deletes_instruction_and_returns_grouped_payload(self):
         category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")

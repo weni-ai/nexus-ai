@@ -9,14 +9,13 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.feature_flags.permissions import FeatureFlagPermission
 from nexus.intelligences.api.instruction_serializers import (
     ProjectInstructionsCreateSerializer,
     ProjectInstructionsExportSerializer,
     ProjectInstructionsPatchSerializer,
     ProjectInstructionsResponseSerializer,
 )
-from nexus.intelligences.constants import DUPLICATE_CATEGORY_NAME_ERROR, INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
+from nexus.intelligences.constants import DUPLICATE_CATEGORY_NAME_ERROR
 from nexus.intelligences.models import ContentBase, ContentBaseInstruction, InstructionCategory
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.usecases.intelligences import get_default_content_base_by_project
@@ -37,8 +36,7 @@ class InstructionsCSVRenderer(BaseRenderer):
 
 class ProjectInstructionsViewSet(ModelViewSet):
     authentication_classes = AUTHENTICATION_CLASSES
-    permission_classes = [IsAuthenticated, ProjectPermission, FeatureFlagPermission]
-    feature_flag_key = INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
+    permission_classes = [IsAuthenticated, ProjectPermission]
     use_case = ProjectInstructionsUseCase()
     delete_use_case = DeleteContentBaseUseCase()
 

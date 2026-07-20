@@ -67,25 +67,13 @@ class TestInstructionsClassificationAPIView(TestCase):
         self._lambda_patcher = mock.patch("nexus.usecases.intelligences.lambda_usecase.LambdaUseCase")
         self._mock_lambda_class = self._lambda_patcher.start()
         self._mock_instruction_classify = self._mock_lambda_class.return_value.instruction_classify
-        self._mock_instruction_classify_legacy = self._mock_lambda_class.return_value.instruction_classify_legacy
         self._mock_instruction_classify.return_value = (
             [{"name": "policy", "reason": "Matches policy rules"}],
             "Improve clarity",
             "policy",
         )
-        self._mock_instruction_classify_legacy.return_value = (
-            [{"name": "duplicate", "reason": "Duplicate instruction"}],
-            "Legacy suggestion",
-        )
-
-        self._feature_flag_patcher = mock.patch(
-            "nexus.intelligences.api.views.is_feature_active_for_attributes",
-            return_value=True,
-        )
-        self._feature_flag_patcher.start()
 
     def tearDown(self):
-        self._feature_flag_patcher.stop()
         self._lambda_patcher.stop()
         self._patcher.stop()
 
@@ -145,7 +133,7 @@ class TestInstructionsClassificationAPIView(TestCase):
         )
         self.assertEqual(content["suggestion"], "Clarify the instruction scope")
 
-    def test_post_passes_project_description_and_categories_to_lambda_when_flag_active(self):
+    def test_post_passes_project_description_and_categories_to_lambda(self):
         request = self.factory.post(
             self.url,
             {
@@ -178,7 +166,6 @@ class TestInstructionsClassificationAPIView(TestCase):
             language="en",
             project_description=content_base.intelligence.description,
         )
-        self._mock_instruction_classify_legacy.assert_not_called()
 
     def test_post_returns_empty_suggested_category_when_lambda_returns_empty_string(self):
         self._mock_instruction_classify.return_value = ([], None, "")
@@ -201,43 +188,7 @@ class TestInstructionsClassificationAPIView(TestCase):
         content = json.loads(response.content)
         self.assertEqual(content["suggested_category"], "")
 
-    @mock.patch("nexus.intelligences.api.views.is_feature_active_for_attributes", return_value=False)
-    def test_post_uses_legacy_path_when_feature_flag_is_inactive(self, _mock_is_feature_active):
-        request = self.factory.post(
-            self.url,
-            {
-                "instruction": "Always greet the customer",
-                "instructions_categories": ["policy"],
-                "language": "en",
-            },
-            format="json",
-        )
-        force_authenticate(request, user=self.user)
-
-        response = InstructionsClassificationAPIView.as_view()(request, project_uuid=str(self.project.uuid))
-
-        self.assertEqual(response.status_code, 200, response.data)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(
-            content["classification"],
-            [{"name": "duplicate", "reason": "Duplicate instruction"}],
-        )
-        self.assertEqual(content["suggestion"], "Legacy suggestion")
-        self.assertNotIn("suggested_category", content)
-
-        self._mock_instruction_classify_legacy.assert_called_once_with(
-            name=mock.ANY,
-            occupation=mock.ANY,
-            goal=mock.ANY,
-            adjective=mock.ANY,
-            instructions=mock.ANY,
-            instruction_to_classify="Always greet the customer",
-            language="en",
-        )
-        self._mock_instruction_classify.assert_not_called()
-
-    def test_post_accepts_request_without_instructions_categories_when_flag_active(self):
+    def test_post_accepts_request_without_instructions_categories(self):
         request = self.factory.post(
             self.url,
             {

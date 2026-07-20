@@ -21,14 +21,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
-from weni.feature_flags.shortcuts import is_feature_active_for_attributes
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
-from nexus.feature_flags.permissions import build_feature_flag_attributes
 from nexus.intelligences.api.filters import ConversationFilter
-from nexus.intelligences.constants import INSTRUCTION_CATEGORIZATION_FEATURE_FLAG
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseFile,
@@ -2115,7 +2112,7 @@ class InstructionsClassificationAPIView(APIView):
 
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
-            project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            _project, content_base, _ = get_project_and_content_base_data(project_uuid)
             agent = content_base.agent
 
             name = agent.name if agent and agent.name else "Agent"
@@ -2137,49 +2134,27 @@ class InstructionsClassificationAPIView(APIView):
             from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 
             lambda_usecase = LambdaUseCase()
+            instructions_categories = serializer.validated_data.get("instructions_categories", [])
+            project_description = content_base.intelligence.description or ""
 
-            use_enhanced_classification = is_feature_active_for_attributes(
-                INSTRUCTION_CATEGORIZATION_FEATURE_FLAG,
-                build_feature_flag_attributes(request, project),
-            )
-
-            if use_enhanced_classification:
-                instructions_categories = serializer.validated_data.get("instructions_categories", [])
-                project_description = content_base.intelligence.description or ""
-
-                classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
-                    name=name,
-                    occupation=occupation,
-                    goal=goal,
-                    adjective=adjective,
-                    instructions=instructions,
-                    instruction_to_classify=instruction,
-                    instructions_categories=instructions_categories,
-                    language=language,
-                    project_description=project_description,
-                )
-
-                return Response(
-                    {
-                        "classification": classification,
-                        "suggested_category": suggested_category,
-                        "suggestion": suggestion,
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
-            classification, suggestion = lambda_usecase.instruction_classify_legacy(
+            classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
                 name=name,
                 occupation=occupation,
                 goal=goal,
                 adjective=adjective,
                 instructions=instructions,
                 instruction_to_classify=instruction,
+                instructions_categories=instructions_categories,
                 language=language,
+                project_description=project_description,
             )
 
             return Response(
-                {"classification": classification, "suggestion": suggestion},
+                {
+                    "classification": classification,
+                    "suggested_category": suggested_category,
+                    "suggestion": suggestion,
+                },
                 status=status.HTTP_200_OK,
             )
 
