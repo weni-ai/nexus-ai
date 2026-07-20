@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 from enum import Enum
+from uuid import uuid4
 
 from django.db import models
 from django.db.models import Q
@@ -213,6 +214,7 @@ class ProjectApiToken(models.Model):
 
 
 class ProjectAIResolutionCriterion(BaseModel, SoftDeleteModel):
+    uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,

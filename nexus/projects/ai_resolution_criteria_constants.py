@@ -5,6 +5,7 @@ from django.utils import timezone
 
 CRITERION_TYPE_BASE = "base"
 CRITERION_TYPE_CUSTOM = "custom"
+MAX_CUSTOM_CRITERIA = 10
 
 
 def get_base_criteria_config() -> list[dict]:

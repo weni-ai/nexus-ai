@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     "uuid",
-                    models.UUIDField(default=uuid.uuid4, editable=True, primary_key=True, serialize=False),
+                    models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("modified_at", models.DateTimeField(blank=True, null=True)),

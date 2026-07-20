@@ -21,6 +21,7 @@ from nexus.projects.api.resolution_criteria_serializers import (
 from nexus.projects.exceptions import (
     LambdaValidationFailedError,
     ProjectDoesNotExist,
+    ResolutionCriterionLimitReached,
     ResolutionCriterionNotFound,
     ResolutionCriterionValidationError,
     UnauthorizedBaseCriterionChange,
@@ -30,10 +31,23 @@ from nexus.usecases.projects.ai_resolution_criteria import AIResolutionCriteriaU
 logger = logging.getLogger(__name__)
 
 
+def _serializer_validation_response(serializer) -> Response:
+    """Return a 400 for serializer failures.
+
+    Keep the API contract message when ``text`` is invalid; otherwise expose
+    field errors (e.g. invalid ``criterion_id`` on validate).
+    """
+    if "text" in serializer.errors:
+        return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class AIResolutionCriteriaListCreateView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
-    use_case = AIResolutionCriteriaUseCase()
+
+    def get_use_case(self) -> AIResolutionCriteriaUseCase:
+        return AIResolutionCriteriaUseCase()
 
     @extend_schema(
         operation_id="list_ai_resolution_criteria",
@@ -55,7 +69,7 @@ class AIResolutionCriteriaListCreateView(APIView):
     )
     def get(self, request, project_uuid):
         try:
-            data = self.use_case.list_criteria(project_uuid)
+            data = self.get_use_case().list_criteria(project_uuid)
             return Response(data, status=status.HTTP_200_OK)
         except ProjectDoesNotExist:
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -87,17 +101,20 @@ class AIResolutionCriteriaListCreateView(APIView):
     def post(self, request, project_uuid):
         serializer = AIResolutionCriteriaCreateRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return _serializer_validation_response(serializer)
 
         try:
-            data = self.use_case.create_criterion(
+            data = self.get_use_case().create_criterion(
                 project_uuid=project_uuid,
                 text=serializer.validated_data["text"],
                 user=request.user,
             )
             return Response(data, status=status.HTTP_201_CREATED)
-        except ValueError:
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+        except ResolutionCriterionLimitReached as exc:
+            return Response(
+                {"error": {"code": exc.code, "message": exc.message}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except ProjectDoesNotExist:
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as exc:
@@ -109,7 +126,9 @@ class AIResolutionCriteriaListCreateView(APIView):
 class AIResolutionCriteriaValidateView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
-    use_case = AIResolutionCriteriaUseCase()
+
+    def get_use_case(self) -> AIResolutionCriteriaUseCase:
+        return AIResolutionCriteriaUseCase()
 
     @extend_schema(
         operation_id="validate_ai_resolution_criterion",
@@ -135,18 +154,16 @@ class AIResolutionCriteriaValidateView(APIView):
     def post(self, request, project_uuid):
         serializer = AIResolutionCriteriaValidateRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return _serializer_validation_response(serializer)
 
         criterion_id = serializer.validated_data.get("criterion_id")
         try:
-            data = self.use_case.validate_criterion(
+            data = self.get_use_case().validate_criterion(
                 project_uuid=project_uuid,
                 text=serializer.validated_data["text"],
                 criterion_id=str(criterion_id) if criterion_id else None,
             )
             return Response(data, status=status.HTTP_200_OK)
-        except ValueError:
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
         except ResolutionCriterionValidationError as exc:
             error_payload = {"code": exc.code, "message": exc.message}
             if exc.rules:
@@ -194,7 +211,9 @@ class AIResolutionCriteriaValidateView(APIView):
 class AIResolutionCriteriaDetailView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
-    use_case = AIResolutionCriteriaUseCase()
+
+    def get_use_case(self) -> AIResolutionCriteriaUseCase:
+        return AIResolutionCriteriaUseCase()
 
     @extend_schema(
         operation_id="update_ai_resolution_criterion",
@@ -225,18 +244,16 @@ class AIResolutionCriteriaDetailView(APIView):
     def patch(self, request, project_uuid, criterion_id):
         serializer = AIResolutionCriteriaUpdateRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return _serializer_validation_response(serializer)
 
         try:
-            data = self.use_case.update_criterion(
+            data = self.get_use_case().update_criterion(
                 project_uuid=project_uuid,
                 criterion_id=criterion_id,
                 text=serializer.validated_data["text"],
                 user=request.user,
             )
             return Response(data, status=status.HTTP_200_OK)
-        except ValueError:
-            return Response({"error": "Text is required"}, status=status.HTTP_400_BAD_REQUEST)
         except UnauthorizedBaseCriterionChange:
             return Response(
                 {
@@ -285,7 +302,7 @@ class AIResolutionCriteriaDetailView(APIView):
     )
     def delete(self, request, project_uuid, criterion_id):
         try:
-            self.use_case.delete_criterion(project_uuid=project_uuid, criterion_id=criterion_id)
+            self.get_use_case().delete_criterion(project_uuid=project_uuid, criterion_id=criterion_id)
             return Response({"success": True}, status=status.HTTP_200_OK)
         except UnauthorizedBaseCriterionChange:
             return Response(

@@ -271,7 +271,7 @@ def generate_env():
         "AI_RESOLUTION_CRITERIA_VALIDATION_NAME": (
             "arn:aws:lambda:us-east-1:005047304657:function:lambda-validator-resolution-metric-custom"
         ),
-        "AI_RESOLUTION_BASE_CRITERIA": "",
+        "AI_RESOLUTION_BASE_CRITERIA": "[]",
         "WA_PHONE_NUMBER": "",
         "WA_ACCESS_TOKEN": "",
         "GATEWAY_VERIFICATION_TOKEN": "",

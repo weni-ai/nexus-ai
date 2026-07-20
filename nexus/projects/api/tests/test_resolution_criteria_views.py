@@ -9,6 +9,7 @@ from nexus.projects.api.resolution_criteria_views import (
     AIResolutionCriteriaListCreateView,
     AIResolutionCriteriaValidateView,
 )
+from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.models import Project, ProjectAIResolutionCriterion, ProjectAuthorizationRole
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
@@ -39,8 +40,13 @@ class TestAIResolutionCriteriaViews(TestCase):
         self._mock_ext_permission = self._permission_patcher.start()
 
         def _local_permission(request, project_uuid, method):
-            project = Project.objects.get(uuid=project_uuid)
-            return has_project_permission(request.user, project, method)
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+                return has_project_permission(request.user, project, method)
+            except Project.DoesNotExist:
+                return False
+            except ProjectAuthorizationDenied:
+                return False
 
         self._mock_ext_permission.side_effect = _local_permission
 
@@ -81,7 +87,13 @@ class TestAIResolutionCriteriaViews(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["validation"]["status"])
-        self._mock_validate.assert_called_once()
+        self._mock_validate.assert_called_once_with(
+            user_rules=[
+                BASE_CRITERIA[0]["text"],
+                BASE_CRITERIA[1]["text"],
+                "Mark as resolved when the customer confirms order delivery",
+            ]
+        )
 
     def test_validate_returns_invalid_error(self):
         self._mock_validate.return_value = {
@@ -137,6 +149,26 @@ class TestAIResolutionCriteriaViews(TestCase):
         self.assertEqual(response.data["type"], "custom")
         self.assertTrue(response.data["editable"])
         self._mock_validate.assert_not_called()
+
+    def test_create_rejects_when_custom_limit_reached(self):
+        for index in range(10):
+            ProjectAIResolutionCriterion.objects.create(
+                project=self.project,
+                text=f"Custom criterion {index}",
+                created_by=self.user,
+            )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-resolution-criteria/",
+            {"text": "Eleventh criterion"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "CRITERION_LIMIT_REACHED")
+        self.assertEqual(ProjectAIResolutionCriterion.objects.filter(project=self.project, is_active=True).count(), 10)
 
     def test_create_requires_text(self):
         request = self.factory.post(
@@ -252,13 +284,13 @@ class TestAIResolutionCriteriaViews(TestCase):
         self.assertEqual(created_at, updated_at)
 
     def test_list_project_not_found(self):
+        # ProjectPermission runs before the view; missing project is denied (403), not 404.
         missing_uuid = "00000000-0000-0000-0000-000000000001"
         request = self.factory.get(f"/api/{missing_uuid}/ai-resolution-criteria/")
         force_authenticate(request, user=self.user)
         response = AIResolutionCriteriaListCreateView.as_view()(request, project_uuid=missing_uuid)
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], "Project not found")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_validate_update_mode_checks_criterion_exists(self):
         criterion = ProjectAIResolutionCriterion.objects.create(
@@ -279,7 +311,46 @@ class TestAIResolutionCriteriaViews(TestCase):
         response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self._mock_validate.assert_called_once_with(user_rules=["Updated criterion text"])
+        self._mock_validate.assert_called_once_with(
+            user_rules=[
+                BASE_CRITERIA[0]["text"],
+                BASE_CRITERIA[1]["text"],
+                "Updated criterion text",
+            ]
+        )
+
+    def test_validate_includes_other_customs_and_excludes_self_on_update(self):
+        kept = ProjectAIResolutionCriterion.objects.create(
+            project=self.project,
+            text="Keep this custom criterion",
+            created_by=self.user,
+        )
+        editing = ProjectAIResolutionCriterion.objects.create(
+            project=self.project,
+            text="Old text being replaced",
+            created_by=self.user,
+        )
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-validation-criteria/",
+            {
+                "text": "New candidate text",
+                "criterion_id": str(editing.uuid),
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self._mock_validate.assert_called_once_with(
+            user_rules=[
+                BASE_CRITERIA[0]["text"],
+                BASE_CRITERIA[1]["text"],
+                kept.text,
+                "New candidate text",
+            ]
+        )
 
     def test_validate_returns_invalid_error_from_lambda(self):
         self._mock_validate.return_value = {
