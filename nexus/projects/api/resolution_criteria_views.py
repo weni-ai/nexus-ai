@@ -159,6 +159,7 @@ class AIResolutionCriteriaValidateView(APIView):
             400: OpenApiResponse(description="Validation rejected"),
             403: OpenApiResponse(description="Forbidden"),
             404: OpenApiResponse(description="Project or criterion not found"),
+            500: OpenApiResponse(description="Internal server error"),
             502: OpenApiResponse(description="Lambda validation failed"),
         },
         tags=["AI Resolution Criteria"],
@@ -212,11 +213,11 @@ class AIResolutionCriteriaValidateView(APIView):
             return Response(
                 {
                     "error": {
-                        "code": "LAMBDA_VALIDATION_FAILED",
-                        "message": "The criterion could not be validated due to a technical issue",
+                        "code": "INTERNAL_ERROR",
+                        "message": "An unexpected error occurred",
                     }
                 },
-                status=status.HTTP_502_BAD_GATEWAY,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
