@@ -66,7 +66,6 @@ class GuardrailsConfigUpdateSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=ProjectGuardrailsConfig.BLOCKING_MESSAGE_MAX_LENGTH,
     )
-    confirm_disable = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         if "category_states" not in attrs and "blocking_message" not in attrs:

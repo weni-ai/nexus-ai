@@ -18,7 +18,7 @@
 - [ ] T006 [US1] Serializers in `nexus/projects/api/serializers.py` (`categories` in response, `category_states` in PATCH)
 - [ ] T007 [US1] `ProjectGuardrailsConfigView` GET/PATCH in `nexus/projects/api/views.py`
 - [ ] T008 [US1] Route in `nexus/projects/api/routers.py`
-- [ ] T009 [US1] Confirmation logic (`409`, `disable_category`, `disable_all`) in use case
+- [x] T009 [US1] Unblock persists immediately (no backend confirmation handshake)
 - [ ] T010 [P] [US1] Tests in `nexus/projects/api/tests/test_guardrails_config.py`
 
 ## Phase 4: User Story 2 — Blocking message (P2)
