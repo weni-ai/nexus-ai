@@ -153,8 +153,6 @@ class ProjectGuardrailsConfigUseCase:
         return [
             {
                 "slug": entry["slug"],
-                "name": entry["name"],
-                "description": entry["description"],
                 "blocked": bool(category_states.get(entry["slug"], False)),
             }
             for entry in cls.catalog()
