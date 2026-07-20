@@ -26,10 +26,7 @@ from nexus.task_managers.file_database.opensearch_knowledge_base import (
     OpenSearchKnowledgeBaseError,
     list_chunks,
 )
-from nexus.usecases.guardrails.project_guardrails_config import (
-    GuardrailsConfirmationRequired,
-    ProjectGuardrailsConfigUseCase,
-)
+from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.intelligences.exceptions import ContentBaseDoesNotExist
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.projects.conversations import ConversationsUsecase
@@ -894,16 +891,6 @@ class ProjectGuardrailsConfigView(APIView):
                 category_states=data.get("category_states"),
                 blocking_message=data.get("blocking_message"),
                 blocking_message_provided="blocking_message" in request.data,
-                confirm_disable=bool(data.get("confirm_disable", False)),
-            )
-        except GuardrailsConfirmationRequired as exc:
-            return Response(
-                {
-                    "requires_confirmation": True,
-                    "confirmation_type": exc.confirmation_type,
-                    "detail": exc.detail,
-                },
-                status=status.HTTP_409_CONFLICT,
             )
         except DjangoValidationError as exc:
             return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)

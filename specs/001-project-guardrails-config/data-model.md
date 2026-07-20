@@ -49,7 +49,7 @@ Fixed catalog in `settings.GUARDRAIL_CATEGORY_CATALOG` — defined directly in c
 ## State Transitions
 
 ```
-blocked --PATCH + confirm_disable--> unblocked --> Bedrock sync (omit category)
+blocked --PATCH--> unblocked --> Bedrock sync (omit category)
 unblocked --PATCH--> blocked --> Bedrock sync (include category)
 
 (no row) --first GET--> lazy init --> row [--> create/sync Bedrock when any blocked]
