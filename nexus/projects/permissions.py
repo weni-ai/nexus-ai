@@ -69,7 +69,10 @@ def has_external_general_project_permission(request, project_uuid, method: str) 
         # Only fall back to internal check if there was a request error or no external auth
         try:
             project = Project.objects.get(uuid=project_uuid)
-            return has_project_permission(request.user, project, method)
+            user = getattr(request, "user", None)
+            if user is not None and getattr(user, "is_authenticated", False):
+                return has_project_permission(user, project, method)
+            return False
         except Project.DoesNotExist:
             return False
 
