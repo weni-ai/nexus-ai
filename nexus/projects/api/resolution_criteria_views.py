@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.api.resolution_criteria_serializers import (
@@ -45,6 +46,17 @@ def _serializer_validation_response(serializer) -> Response:
 class AIResolutionCriteriaListCreateView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get_permissions(self):
+        """GET is readable by internal service accounts (daily close / NexusClient).
+
+        Same pattern as customization: conversations authenticates via Keycloak
+        client credentials with ``can_communicate_internally``. Writes stay
+        ProjectPermission-only so the service account cannot create criteria.
+        """
+        if self.request.method == "GET":
+            return [IsAuthenticated(), ProjectPermission() | InternalCommunicationPermission()]
+        return [IsAuthenticated(), ProjectPermission()]
 
     def get_use_case(self) -> AIResolutionCriteriaUseCase:
         return AIResolutionCriteriaUseCase()
