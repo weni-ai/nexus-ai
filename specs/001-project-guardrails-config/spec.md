@@ -25,7 +25,7 @@
 ### Session 2026-07-06
 
 - Q: Rename away from *topic*? → A: **guardrail category** / `category_states` / `GUARDRAIL_CATEGORY_CATALOG`. Rejects *instruction* (conflicts with existing Instructions domain) and *topic* (conflicts with conversation Topics).
-- Q: Backend i18n for catalog labels? → A: **Out of scope.** API returns English `name`/`description` from code constant. No `Accept-Language`, no locale module. Default blocking message is a single settings string.
+- Q: Backend i18n for catalog labels? → A: **Out of scope.** API returns only `slug` + `blocked`; frontend owns `name`/`description` via translation files keyed by slug. No `Accept-Language`, no locale module. Default blocking message is a single settings string.
 
 ### Session 2026-07-16
 
@@ -45,7 +45,7 @@ As an authenticated admin API consumer, I need to read and update per-category b
 
 **Acceptance Scenarios**:
 
-1. **Given** valid project UUID and auth, **When** `GET /guardrails-config/`, **Then** response lists all fixed catalog categories with `slug`, `name`, `description`, and `blocked`.
+1. **Given** valid project UUID and auth, **When** `GET /guardrails-config/`, **Then** response lists all fixed catalog categories with `slug` and `blocked` (no `name`/`description`).
 2. **Given** category blocked, **When** PATCH unblocks it, **Then** persists immediately, syncs Bedrock guardrail without that category, and runtime no longer blocks it.
 3. **Given** category unblocked, **When** PATCH blocks it, **Then** persists immediately and syncs Bedrock including that category.
 4. **Given** PATCH unblocks all categories, **Then** all categories unblocked and Bedrock sync reflects no denied categories (runtime skips `ApplyGuardrail` or never intervenes).
@@ -97,7 +97,7 @@ As the platform, guardrails config MUST apply uniformly to all agents in the pro
 
 ### Functional Requirements
 
-- **FR-001**: API MUST expose GET/PATCH with full fixed **guardrail category** catalog (`slug`, `name`, `description`, `blocked`).
+- **FR-001**: API MUST expose GET/PATCH with full fixed **guardrail category** catalog (`slug`, `blocked`). Display labels are frontend-owned.
 - **FR-002**: `blocked: true` = category refused; `blocked: false` = allowed.
 - **FR-003**: PATCH persists `category_states` at project level for admin only.
 - **FR-004**: PATCH returns `403` for non-admin.
@@ -125,7 +125,7 @@ As the platform, guardrails config MUST apply uniformly to all agents in the pro
 
 ### Key Entities
 
-- **Guardrail category (catalog entry)**: Platform slug + English label/description (+ Bedrock denied-topic definition/examples as needed); not mutable via API.
+- **Guardrail category (catalog entry)**: Platform slug (+ Bedrock denied-topic definition/examples as needed); display name/description are frontend i18n; not mutable via API.
 - **Project guardrails configuration**: One-to-one with project; `category_states` + optional custom blocking message + Bedrock guardrail identifier/version.
 
 ## Success Criteria *(mandatory)*
@@ -141,7 +141,7 @@ As the platform, guardrails config MUST apply uniformly to all agents in the pro
 ## Assumptions
 
 - Conversation **Topics** (`Topics` model, lambda classifier) are a separate domain — no shared tables or APIs.
-- Catalog labels in API are **English strings** from `GUARDRAIL_CATEGORY_CATALOG` (display localization is out of backend scope).
+- Catalog display labels are frontend-owned (i18n by `slug`); API returns only `slug` + `blocked`.
 - Bedrock Denied Topics are the enforcement mechanism; Nexus owns sync + `ApplyGuardrail` + customer-facing message resolution.
 - Fail-open vs fail-closed on Bedrock API errors during preprocess is an implementation decision to document in research/plan and cover with tests.
 
