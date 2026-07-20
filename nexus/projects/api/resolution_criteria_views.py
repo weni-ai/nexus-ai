@@ -55,7 +55,7 @@ class AIResolutionCriteriaListCreateView(APIView):
         ProjectPermission-only so the service account cannot create criteria.
         """
         if self.request.method == "GET":
-            return [IsAuthenticated(), ProjectPermission() | InternalCommunicationPermission()]
+            return [IsAuthenticated(), (ProjectPermission | InternalCommunicationPermission)()]
         return [IsAuthenticated(), ProjectPermission()]
 
     def get_use_case(self) -> AIResolutionCriteriaUseCase:
