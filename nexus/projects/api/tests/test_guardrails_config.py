@@ -63,7 +63,7 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(any(category["blocked"] for category in response.data["categories"]))
 
-    def test_patch_block_category_without_confirmation(self):
+    def test_patch_block_category(self):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         ProjectGuardrailsConfig.objects.filter(project=self.project).update(
             category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
@@ -79,7 +79,7 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         politics = next(item for item in response.data["categories"] if item["slug"] == "politics")
         self.assertTrue(politics["blocked"])
 
-    def test_patch_unblock_without_confirm_returns_409(self):
+    def test_patch_unblock_persists_immediately(self):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
 
         response = self.client.patch(
@@ -88,24 +88,11 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertTrue(response.data["requires_confirmation"])
-        self.assertEqual(response.data["confirmation_type"], "disable_category")
-
-    def test_patch_unblock_with_confirm_persists(self):
-        ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
-
-        response = self.client.patch(
-            self.url,
-            {"category_states": {"politics": False}, "confirm_disable": True},
-            format="json",
-        )
-
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         politics = next(item for item in response.data["categories"] if item["slug"] == "politics")
         self.assertFalse(politics["blocked"])
 
-    def test_patch_unblock_all_requires_disable_all_confirmation(self):
+    def test_patch_unblock_all_persists_immediately(self):
         config = ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         all_unblocked = ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False)
 
@@ -115,15 +102,7 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertEqual(response.data["confirmation_type"], "disable_all")
-
-        confirmed = self.client.patch(
-            self.url,
-            {"category_states": all_unblocked, "confirm_disable": True},
-            format="json",
-        )
-        self.assertEqual(confirmed.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         config.refresh_from_db()
         self.assertFalse(any(config.category_states.values()))
 

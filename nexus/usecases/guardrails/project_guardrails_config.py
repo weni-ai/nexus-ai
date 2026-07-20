@@ -9,13 +9,6 @@ from django.utils import timezone
 from nexus.projects.models import Project, ProjectGuardrailsConfig
 
 
-class GuardrailsConfirmationRequired(Exception):
-    def __init__(self, confirmation_type: str, detail: str | None = None):
-        self.confirmation_type = confirmation_type
-        self.detail = detail or "Confirmation required before unblocking guardrail categories."
-        super().__init__(self.detail)
-
-
 @dataclass(frozen=True)
 class GuardrailsConfigPayload:
     categories: list[dict]
@@ -178,18 +171,6 @@ class ProjectGuardrailsConfigUseCase:
         )
 
     @classmethod
-    def _unblocked_transitions(
-        cls,
-        previous_states: dict[str, bool],
-        next_states: dict[str, bool],
-    ) -> list[str]:
-        return [
-            slug
-            for slug in cls.catalog_slugs()
-            if previous_states.get(slug, False) and not next_states.get(slug, False)
-        ]
-
-    @classmethod
     def update_config(
         cls,
         project: Project,
@@ -197,7 +178,6 @@ class ProjectGuardrailsConfigUseCase:
         category_states: dict | None = None,
         blocking_message: str | None = None,
         blocking_message_provided: bool = False,
-        confirm_disable: bool = False,
     ) -> ProjectGuardrailsConfig:
         config = cls.get_or_initialize(project)
         previous_states = dict(config.category_states)
@@ -220,11 +200,6 @@ class ProjectGuardrailsConfigUseCase:
                 next_blocking_message = stripped if stripped else None
             else:
                 raise ValidationError({"blocking_message": "Blocking message must be a string or null."})
-
-        unblocked = cls._unblocked_transitions(previous_states, next_states)
-        if unblocked and not confirm_disable:
-            confirmation_type = "disable_all" if not cls.has_blocked_category(next_states) else "disable_category"
-            raise GuardrailsConfirmationRequired(confirmation_type=confirmation_type)
 
         cls.validate_blocking_message_for_states(next_blocking_message, next_states)
 

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Project Guardrails Configuration API
-  version: 1.1.0
+  version: 1.2.0
   description: Nexus backend — guardrail category block states and blocking message
 
 paths:
@@ -45,11 +45,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GuardrailsConfigResponse"
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConfirmationRequired"
 
 components:
   schemas:
@@ -64,7 +59,7 @@ components:
           description: English catalog label from settings
         description:
           type: string
-          description: English catalog description from settings
+          description: English scope description from settings
         blocked:
           type: boolean
 
@@ -98,17 +93,3 @@ components:
           type: string
           maxLength: 240
           nullable: true
-        confirm_disable:
-          type: boolean
-          default: false
-
-    ConfirmationRequired:
-      type: object
-      properties:
-        requires_confirmation:
-          type: boolean
-        confirmation_type:
-          type: string
-          enum: [disable_category, disable_all]
-        detail:
-          type: string
