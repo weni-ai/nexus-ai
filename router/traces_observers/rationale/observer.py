@@ -34,12 +34,6 @@ logger = logging.getLogger(__name__)
 
 
 @observer("inline_trace_observers", factory=create_rationale_observer)
-@observer(
-    "inline_trace_observers_async",
-    manager="async",
-    factory=create_rationale_observer,
-    isolate_errors=True,
-)
 class RationaleObserver(EventObserver):
     CACHE_TIMEOUT = 300  # 5 minutes in seconds
 
@@ -126,10 +120,6 @@ class RationaleObserver(EventObserver):
         if not rationale_switch or turn_off_rationale:
             return
 
-        # OpenAI TraceHandler notifies with msg_external_id; accept both names.
-        if not message_external_id:
-            message_external_id = kwargs.get("msg_external_id") or ""
-
         channel_type = kwargs.get("channel_type", "")
         if not supports_progressive_feedback(
             contact_urn,
@@ -158,9 +148,7 @@ class RationaleObserver(EventObserver):
                 channel_uuid=channel_uuid,
                 send_message_callback=send_message_callback,
                 preview=preview,
-                preview_websocket=preview_websocket,
                 message_external_id=message_external_id,
-                msg_external_id=kwargs.get("msg_external_id", ""),
                 user_email=user_email,
             )
 
@@ -190,19 +178,21 @@ class RationaleObserver(EventObserver):
     def _process_rationale(self, trace_data: TraceData, context: RationaleContext, session_data: Dict) -> None:
         """Process rationale text based on session state."""
         rationale_text = trace_data.get_rationale_text()
-        if rationale_text:
-            # Send initial typing indicator
-            self._message_sender.send_typing_if_needed(
-                context.message_external_id, context.contact_urn, context.project_uuid, context.preview
-            )
+        if not rationale_text:
+            return
 
-            # Handle rationale based on session state
-            if not session_data.get("is_first_rationale", True):
-                self._handle_subsequent_rationale(rationale_text, context, session_data)
-            else:
-                self._store_first_rationale(rationale_text, context, session_data)
+        # Send initial typing indicator
+        self._message_sender.send_typing_if_needed(
+            context.message_external_id, context.contact_urn, context.project_uuid, context.preview
+        )
 
-        # Agent-call traces often have no rationale text; still flush stored first rationale.
+        # Handle rationale based on session state
+        if not session_data.get("is_first_rationale", True):
+            self._handle_subsequent_rationale(rationale_text, context, session_data)
+        else:
+            self._store_first_rationale(rationale_text, context, session_data)
+
+        # Handle first rationale with agent if conditions are met
         if self._should_handle_first_rationale_with_agent(trace_data, session_data):
             self._handle_first_rationale_with_agent(context, session_data)
 
