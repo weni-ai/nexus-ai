@@ -434,7 +434,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
             self.trace_handler.hooks_state.current_langfuse_generation = None
             self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
 
-    async def on_llm_end(self, context, agent, response, **kwargs):
+    async def on_llm_end(self, context, agent, response, **kwargs):  # noqa: C901
         context_data = context.context
         # Update our Langfuse generation (created in on_llm_start) with usage including cache
         # so cache_read_input_tokens appears in "Responses API with ...", not on the parent span.
@@ -575,8 +575,11 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         self.conversation = conversation
         self.skip_conversation_sqs = skip_conversation_sqs
 
-    async def on_llm_end(self, context, agent, response, **kwargs):
-        """Accumulate collaborator LLM usage into shared cumulative_usage so manager span shows sum of all generations."""
+    async def on_llm_end(self, context, agent, response, **kwargs):  # noqa: C901
+        """Accumulate collaborator LLM usage into shared cumulative_usage.
+
+        Updates the manager span with the sum of all generations.
+        """
         try:
             usage_dict = None
             usage = getattr(context, "usage", None)
