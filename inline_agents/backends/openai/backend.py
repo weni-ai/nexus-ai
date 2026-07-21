@@ -360,7 +360,6 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
         hooks_state = HooksState(agents=team)
-        hooks_state.use_components = bool(use_components_cached)
 
         message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
         skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)

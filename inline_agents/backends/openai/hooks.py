@@ -124,41 +124,6 @@ def _get_model_name_from_agent(agent) -> str:
     return "llm"
 
 
-def inspect_llm_response_output_for_reasoning(response) -> Dict[str, Any]:
-    """Summarize OpenAI response.output item types for progressive-feedback diagnostics."""
-    output = getattr(response, "output", None)
-    if output is None and isinstance(response, dict):
-        output = response.get("output")
-    if not output:
-        return {
-            "output_types": [],
-            "reasoning_items": 0,
-            "reasoning_with_summary": 0,
-        }
-
-    output_types: List[str] = []
-    reasoning_items = 0
-    reasoning_with_summary = 0
-    for item in output:
-        if isinstance(item, dict):
-            item_type = item.get("type") or "unknown"
-            summary = item.get("summary")
-        else:
-            item_type = getattr(item, "type", None) or "unknown"
-            summary = getattr(item, "summary", None) if hasattr(item, "summary") else None
-        output_types.append(str(item_type))
-        if item_type == "reasoning":
-            reasoning_items += 1
-            if summary:
-                reasoning_with_summary += 1
-
-    return {
-        "output_types": output_types,
-        "reasoning_items": reasoning_items,
-        "reasoning_with_summary": reasoning_with_summary,
-    }
-
-
 def _get_agent_slug(agent, hooks_state=None) -> str:
     """
     Get the agent slug from the agent object.
@@ -547,27 +512,6 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
 
-        project_uuid = ""
-        try:
-            project_uuid = (context_data.project or {}).get("uuid") or ""
-        except Exception:
-            project_uuid = ""
-        agent_slug = _get_agent_slug(agent, self.trace_handler.hooks_state)
-        use_components = bool(getattr(self.trace_handler.hooks_state, "use_components", False))
-        inspection = inspect_llm_response_output_for_reasoning(response)
-        if self.rationale_switch and not self.turn_off_rationale:
-            logger.info(
-                "[ProgressiveFeedback] LLM output inspection project_uuid=%s agent=%s use_components=%s "
-                "rationale_switch=%s output_types=%s reasoning_items=%s reasoning_with_summary=%s",
-                project_uuid,
-                agent_slug,
-                use_components,
-                self.rationale_switch,
-                inspection["output_types"],
-                inspection["reasoning_items"],
-                inspection["reasoning_with_summary"],
-            )
-
         for reasoning_item in response.output:
             if (
                 getattr(reasoning_item, "type", None) == "reasoning"
@@ -585,9 +529,13 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                             }
                         },
                     }
-                    await self.trace_handler.send_trace(context_data, agent_slug, "thinking", trace_data)
+                    await self.trace_handler.send_trace(
+                        context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "thinking", trace_data
+                    )
         logger.info("[HOOK] Resposta do modelo recebida.")
-        await self.trace_handler.send_trace(context_data, agent_slug, "model_response_received")
+        await self.trace_handler.send_trace(
+            context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "model_response_received"
+        )
 
 
 class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
