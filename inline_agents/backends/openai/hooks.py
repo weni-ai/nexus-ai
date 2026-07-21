@@ -124,47 +124,6 @@ def _get_model_name_from_agent(agent) -> str:
     return "llm"
 
 
-def _classify_reasoning_summary(summary: Any) -> str:
-    """Classify reasoning.summary for diagnostics without logging raw text."""
-    if summary is None:
-        return "none"
-    if isinstance(summary, (list, tuple)):
-        if len(summary) == 0:
-            return "empty_list"
-        text_chars = 0
-        for part in summary:
-            if isinstance(part, dict):
-                text = part.get("text") or ""
-            else:
-                text = getattr(part, "text", None) or ""
-            text_chars += len(str(text))
-        if text_chars == 0:
-            return f"list_len={len(summary)}_no_text"
-        return f"list_len={len(summary)}_text_chars={text_chars}"
-    return f"unexpected_type={type(summary).__name__}"
-
-
-def _message_item_text_chars(item: Any) -> int:
-    """Count characters of text parts in a message output item (no raw text logged)."""
-    if isinstance(item, dict):
-        content = item.get("content")
-    else:
-        content = getattr(item, "content", None) if hasattr(item, "content") else None
-    if not content:
-        return 0
-    if isinstance(content, str):
-        return len(content)
-
-    total = 0
-    for part in content:
-        if isinstance(part, dict):
-            text = part.get("text") or ""
-        else:
-            text = getattr(part, "text", None) or ""
-        total += len(str(text))
-    return total
-
-
 def inspect_llm_response_output_for_reasoning(response) -> Dict[str, Any]:
     """Summarize OpenAI response.output item types for progressive-feedback diagnostics."""
     output = getattr(response, "output", None)
@@ -175,22 +134,11 @@ def inspect_llm_response_output_for_reasoning(response) -> Dict[str, Any]:
             "output_types": [],
             "reasoning_items": 0,
             "reasoning_with_summary": 0,
-            "reasoning_summary_shapes": [],
-            "message_items": 0,
-            "message_with_text": 0,
-            "message_text_chars": 0,
-            "function_call_items": 0,
         }
 
     output_types: List[str] = []
     reasoning_items = 0
     reasoning_with_summary = 0
-    reasoning_summary_shapes: List[str] = []
-    message_items = 0
-    message_with_text = 0
-    message_text_chars = 0
-    function_call_items = 0
-
     for item in output:
         if isinstance(item, dict):
             item_type = item.get("type") or "unknown"
@@ -201,28 +149,13 @@ def inspect_llm_response_output_for_reasoning(response) -> Dict[str, Any]:
         output_types.append(str(item_type))
         if item_type == "reasoning":
             reasoning_items += 1
-            shape = _classify_reasoning_summary(summary)
-            reasoning_summary_shapes.append(shape)
             if summary:
                 reasoning_with_summary += 1
-        elif item_type == "message":
-            message_items += 1
-            chars = _message_item_text_chars(item)
-            message_text_chars += chars
-            if chars > 0:
-                message_with_text += 1
-        elif item_type == "function_call":
-            function_call_items += 1
 
     return {
         "output_types": output_types,
         "reasoning_items": reasoning_items,
         "reasoning_with_summary": reasoning_with_summary,
-        "reasoning_summary_shapes": reasoning_summary_shapes,
-        "message_items": message_items,
-        "message_with_text": message_with_text,
-        "message_text_chars": message_text_chars,
-        "function_call_items": function_call_items,
     }
 
 
@@ -625,9 +558,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         if self.rationale_switch and not self.turn_off_rationale:
             logger.info(
                 "[ProgressiveFeedback] LLM output inspection project_uuid=%s agent=%s use_components=%s "
-                "rationale_switch=%s output_types=%s reasoning_items=%s reasoning_with_summary=%s "
-                "reasoning_summary_shapes=%s message_items=%s message_with_text=%s message_text_chars=%s "
-                "function_call_items=%s",
+                "rationale_switch=%s output_types=%s reasoning_items=%s reasoning_with_summary=%s",
                 project_uuid,
                 agent_slug,
                 use_components,
@@ -635,11 +566,6 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 inspection["output_types"],
                 inspection["reasoning_items"],
                 inspection["reasoning_with_summary"],
-                inspection["reasoning_summary_shapes"],
-                inspection["message_items"],
-                inspection["message_with_text"],
-                inspection["message_text_chars"],
-                inspection["function_call_items"],
             )
 
         for reasoning_item in response.output:
