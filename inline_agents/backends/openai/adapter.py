@@ -16,6 +16,7 @@ from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
 from inline_agents.backends.openai.agent_entities import Collaborator as CollaboratorEntity
 from inline_agents.backends.openai.agent_entities import Supervisor as SupervisorEntity
+from inline_agents.backends.openai.components_debug import resolve_components_prompt_and_tools
 from inline_agents.backends.openai.components_tools import all_component_tool_names
 from inline_agents.backends.openai.components_tools_stream import streaming_merge_tool_names
 from inline_agents.backends.openai.entities import Context, HooksState
@@ -234,6 +235,7 @@ class OpenAITeamAdapter(TeamAdapter):
         is_legacy_manager_pipeline = is_legacy_pipeline_version(manager_pipeline_version)
         formatter_agent_settings = supervisor.get("formatter_agent_configurations") or {}
         formatter_tools_descriptions = formatter_agent_settings.get("formatter_tools_descriptions")
+        include_components_prompts, include_components_tools = resolve_components_prompt_and_tools(use_components)
 
         supervisor_prompt: str = cls.get_supervisor_instructions(
             instruction=supervisor["instruction"],
@@ -251,11 +253,12 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
             content_base_uuid=content_base_uuid,
             use_components=use_components,
+            include_components_prompts=include_components_prompts,
             use_human_support=supervisor.get("use_human_support", False),
             components_instructions=supervisor.get("components_instructions", ""),
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
-            include_streaming_merge_prompts=bool(use_components and not is_legacy_manager_pipeline),
+            include_streaming_merge_prompts=bool(include_components_prompts and not is_legacy_manager_pipeline),
             rationale_switch=rationale_switch,
             turn_off_rationale=turn_off_rationale,
             channel_type=channel_type,
@@ -283,14 +286,14 @@ class OpenAITeamAdapter(TeamAdapter):
         )
 
         json_tools = cls._get_tools(supervisor["tools"])
-        if not use_components:
+        if not include_components_tools:
             component_tool_names_to_strip = all_component_tool_names(formatter_tools_descriptions)
             json_tools = [t for t in json_tools if getattr(t, "name", None) not in component_tool_names_to_strip]
 
         supervisor_tools: List[Any] = list(json_tools)
         supervisor_tools.extend(agents_as_tools)
 
-        if use_components and not is_legacy_manager_pipeline:
+        if include_components_tools and not is_legacy_manager_pipeline:
             from inline_agents.backends.openai.components_tools_stream import (
                 get_supervisor_component_tools_for_streaming_merge,
             )
@@ -406,6 +409,7 @@ class OpenAITeamAdapter(TeamAdapter):
         agent_role = agent_data.get("role")
         agent_goal = agent_data.get("goal")
         agent_personality = agent_data.get("personality")
+        include_components_prompts, _include_components_tools = resolve_components_prompt_and_tools(use_components)
 
         instruction = cls.get_supervisor_instructions(
             instruction=supervisor["instruction"],
@@ -423,6 +427,7 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
             content_base_uuid=content_base_uuid,
             use_components=use_components,
+            include_components_prompts=include_components_prompts,
             use_human_support=supervisor.get("use_human_support", False),
             components_instructions=supervisor.get("components_instructions", ""),
             components_instructions_up=supervisor.get("components_instructions_up", ""),
@@ -1114,12 +1119,16 @@ class OpenAITeamAdapter(TeamAdapter):
         components_instructions_up,
         human_support_instructions,
         include_streaming_merge_prompts: bool = False,
+        include_components_prompts: Optional[bool] = None,
         rationale_switch: bool = False,
         turn_off_rationale: bool = False,
         channel_type: str = "",
         preview: bool = False,
         preview_websocket: bool = False,
     ) -> str:
+        if include_components_prompts is None:
+            include_components_prompts = use_components
+
         general_context_data = {
             "PROJECT_ID": project_id,
             "CONTACT_ID": contact_id,
@@ -1141,7 +1150,7 @@ class OpenAITeamAdapter(TeamAdapter):
             human_support_context = TemplateContext(general_context_data)
             human_support_instructions = human_support_template.render(human_support_context)
 
-        if use_components:
+        if include_components_prompts:
             components_template = Template(components_instructions)
             components_context = TemplateContext(general_context_data)
             components_instructions = components_template.render(components_context)
@@ -1165,9 +1174,9 @@ class OpenAITeamAdapter(TeamAdapter):
         prompt_control_context_data = {
             "USE_HUMAN_SUPPORT": use_human_support,
             "HUMAN_SUPPORT_INSTRUCTIONS": human_support_instructions,
-            "USE_COMPONENTS": use_components,
-            "COMPONENTS_INSTRUCTIONS": components_instructions,
-            "COMPONENTS_INSTRUCTIONS_UP": components_instructions_up,
+            "USE_COMPONENTS": include_components_prompts,
+            "COMPONENTS_INSTRUCTIONS": components_instructions if include_components_prompts else "",
+            "COMPONENTS_INSTRUCTIONS_UP": components_instructions_up if include_components_prompts else "",
         }
 
         context_data = {**general_context_data, **prompt_control_context_data}

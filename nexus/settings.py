@@ -658,6 +658,10 @@ PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION = env.str(
         "explaining what you're about to do, so they know the request is being processed."
     ),
 )
+# Temporary stg isolation: when use_components=True, optionally disable prompts and/or tools.
+# Defaults preserve current behavior (both enabled). Delivery (broadcast/gRPC) ignores these.
+COMPONENTS_DEBUG_INCLUDE_PROMPTS = env.bool("COMPONENTS_DEBUG_INCLUDE_PROMPTS", default=True)
+COMPONENTS_DEBUG_INCLUDE_TOOLS = env.bool("COMPONENTS_DEBUG_INCLUDE_TOOLS", default=True)
 
 START_INLINE_AGENTS_ACK_LATE = env.bool("START_INLINE_AGENTS_ACK_LATE", False)
 ENABLE_LOGFIRE_OPENAI_AGENTS = env.bool("ENABLE_LOGFIRE_OPENAI_AGENTS", False)
