@@ -12,7 +12,7 @@ As a platform operator, I want nexus-ai to consume project creation events from 
 
 **Acceptance criteria:**
 - A dedicated `edaconsume_amq` process connects to Amazon MQ over SSL (port 5671)
-- Only the `nexus-ai.projects` queue is bound on the AMQ process
+- Only the `nexus-ai.projects.queue` queue is bound on the AMQ process
 - All other queues remain on the legacy `edaconsume` process unchanged
 
 ### US-2: Backward-compatible message handling
@@ -33,7 +33,7 @@ As an operator, I want processing errors reported to Sentry so that I can diagno
 
 ## Message Contract
 
-Queue: `nexus-ai.projects`
+Queue: `nexus-ai.projects.queue` (Amazon MQ). Legacy RabbitMQ continues to use `nexus-ai.projects`.
 
 | Field | Type | Required | Maps to |
 |-------|------|----------|---------|
@@ -65,6 +65,7 @@ Queue: `nexus-ai.projects`
 | `AMQ_BROKER_PORT` | `5671` | SSL port |
 | `AMQ_BROKER_SSL_SERVER_HOSTNAME` | none | SNI hostname for certificate verification |
 | `AMQ_BROKER_HEARTBEAT` | `300` | Heartbeat interval (seconds) |
+| `PROJECT_AMQ_QUEUE_NAME` | `nexus-ai.projects.queue` | Queue name for the project consumer on Amazon MQ |
 
 ## Out of Scope
 
