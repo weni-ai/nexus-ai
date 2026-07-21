@@ -146,23 +146,75 @@ def _classify_reasoning_summary(summary: Any) -> str:
 
 def _message_item_text_chars(item: Any) -> int:
     """Count characters of text parts in a message output item (no raw text logged)."""
+    return len(_extract_message_item_text(item))
+
+
+def _extract_message_item_text(item: Any) -> str:
+    """Extract plain text from a message output item."""
     if isinstance(item, dict):
         content = item.get("content")
     else:
         content = getattr(item, "content", None) if hasattr(item, "content") else None
     if not content:
-        return 0
+        return ""
     if isinstance(content, str):
-        return len(content)
+        return content.strip()
 
-    total = 0
+    parts: List[str] = []
     for part in content:
         if isinstance(part, dict):
             text = part.get("text") or ""
         else:
             text = getattr(part, "text", None) or ""
-        total += len(str(text))
-    return total
+        text = str(text).strip()
+        if text:
+            parts.append(text)
+    return "\n".join(parts).strip()
+
+
+def extract_first_message_text_from_response(response) -> str:
+    """Return the first non-empty message text from response.output, if any."""
+    output = getattr(response, "output", None)
+    if output is None and isinstance(response, dict):
+        output = response.get("output")
+    if not output:
+        return ""
+
+    for item in output:
+        if isinstance(item, dict):
+            item_type = item.get("type")
+        else:
+            item_type = getattr(item, "type", None)
+        if item_type != "message":
+            continue
+        text = _extract_message_item_text(item)
+        if text:
+            return text
+    return ""
+
+
+def should_emit_message_interim_fallback(
+    *,
+    use_components: bool,
+    rationale_switch: bool,
+    turn_off_rationale: bool,
+    inspection: Dict[str, Any],
+    emitted_from_reasoning_summary: bool,
+) -> bool:
+    """
+    With use_components, the model often puts progressive feedback on message
+    while reasoning.summary is empty. Fall back to that message when a tool call
+    is present in the same LLM output.
+    """
+    return (
+        bool(use_components)
+        and bool(rationale_switch)
+        and not turn_off_rationale
+        and not emitted_from_reasoning_summary
+        and inspection.get("reasoning_with_summary", 0) == 0
+        and inspection.get("function_call_items", 0) > 0
+        and inspection.get("message_with_text", 0) > 0
+    )
 
 
 def inspect_llm_response_output_for_reasoning(response) -> Dict[str, Any]:
@@ -642,6 +694,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 inspection["function_call_items"],
             )
 
+        emitted_from_reasoning_summary = False
         for reasoning_item in response.output:
             if (
                 getattr(reasoning_item, "type", None) == "reasoning"
@@ -649,6 +702,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 and reasoning_item.summary
             ):
                 logger.info("[HOOK] Pensando.")
+                emitted_from_reasoning_summary = True
                 for summary in reasoning_item.summary:
                     trace_data = {
                         "collaboratorName": "",
@@ -660,6 +714,35 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                         },
                     }
                     await self.trace_handler.send_trace(context_data, agent_slug, "thinking", trace_data)
+
+        if should_emit_message_interim_fallback(
+            use_components=use_components,
+            rationale_switch=self.rationale_switch,
+            turn_off_rationale=self.turn_off_rationale,
+            inspection=inspection,
+            emitted_from_reasoning_summary=emitted_from_reasoning_summary,
+        ):
+            fallback_text = extract_first_message_text_from_response(response)
+            if fallback_text:
+                logger.info(
+                    "[HOOK] Pensando (message fallback). project_uuid=%s message_text_chars=%s",
+                    project_uuid,
+                    len(fallback_text),
+                )
+                trace_data = {
+                    "collaboratorName": "",
+                    "eventTime": pendulum.now().to_iso8601_string(),
+                    "trace": {
+                        "orchestrationTrace": {
+                            "rationale": {
+                                "text": fallback_text,
+                                "reasoningId": "message_interim_fallback",
+                            }
+                        }
+                    },
+                }
+                await self.trace_handler.send_trace(context_data, agent_slug, "thinking", trace_data)
+
         logger.info("[HOOK] Resposta do modelo recebida.")
         await self.trace_handler.send_trace(context_data, agent_slug, "model_response_received")
 

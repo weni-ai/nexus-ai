@@ -1,6 +1,10 @@
 from django.test import SimpleTestCase
 
-from inline_agents.backends.openai.hooks import inspect_llm_response_output_for_reasoning
+from inline_agents.backends.openai.hooks import (
+    extract_first_message_text_from_response,
+    inspect_llm_response_output_for_reasoning,
+    should_emit_message_interim_fallback,
+)
 
 
 class _Item:
@@ -102,3 +106,84 @@ class TestInspectLlmResponseOutputForReasoning(SimpleTestCase):
         self.assertEqual(result["message_items"], 1)
         self.assertEqual(result["message_with_text"], 1)
         self.assertEqual(result["message_text_chars"], 2)
+
+
+class TestMessageInterimFallback(SimpleTestCase):
+    def test_extracts_first_message_text(self):
+        response = type(
+            "R",
+            (),
+            {
+                "output": [
+                    _Item("reasoning", summary=[]),
+                    _Item("message", content=[_ContentPart("Vou verificar o CEP")]),
+                    _Item("function_call"),
+                ]
+            },
+        )()
+
+        self.assertEqual(extract_first_message_text_from_response(response), "Vou verificar o CEP")
+
+    def test_should_emit_when_components_and_empty_summary_with_message_and_tool(self):
+        inspection = {
+            "reasoning_with_summary": 0,
+            "function_call_items": 1,
+            "message_with_text": 1,
+        }
+        self.assertTrue(
+            should_emit_message_interim_fallback(
+                use_components=True,
+                rationale_switch=True,
+                turn_off_rationale=False,
+                inspection=inspection,
+                emitted_from_reasoning_summary=False,
+            )
+        )
+
+    def test_should_not_emit_without_components(self):
+        inspection = {
+            "reasoning_with_summary": 0,
+            "function_call_items": 1,
+            "message_with_text": 1,
+        }
+        self.assertFalse(
+            should_emit_message_interim_fallback(
+                use_components=False,
+                rationale_switch=True,
+                turn_off_rationale=False,
+                inspection=inspection,
+                emitted_from_reasoning_summary=False,
+            )
+        )
+
+    def test_should_not_emit_when_summary_already_emitted(self):
+        inspection = {
+            "reasoning_with_summary": 0,
+            "function_call_items": 1,
+            "message_with_text": 1,
+        }
+        self.assertFalse(
+            should_emit_message_interim_fallback(
+                use_components=True,
+                rationale_switch=True,
+                turn_off_rationale=False,
+                inspection=inspection,
+                emitted_from_reasoning_summary=True,
+            )
+        )
+
+    def test_should_not_emit_without_function_call(self):
+        inspection = {
+            "reasoning_with_summary": 0,
+            "function_call_items": 0,
+            "message_with_text": 1,
+        }
+        self.assertFalse(
+            should_emit_message_interim_fallback(
+                use_components=True,
+                rationale_switch=True,
+                turn_off_rationale=False,
+                inspection=inspection,
+                emitted_from_reasoning_summary=False,
+            )
+        )
