@@ -10,7 +10,7 @@ Only consumers that have been migrated to the new broker should be registered
 here.
 """
 
-from amqp.channel import Channel
+from weni.eda.channels import Channel
 
 from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer
 
