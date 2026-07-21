@@ -51,6 +51,7 @@ def find_core_identity_marker(prompt: str) -> str | None:
 
 
 def inject_progressive_feedback_instruction(rendered_prompt: str, instruction: str) -> str:
+    """Insert PF instruction before core identity (used when use_components is False)."""
     instruction = instruction.strip()
     if not instruction:
         return rendered_prompt
@@ -67,6 +68,30 @@ def inject_progressive_feedback_instruction(rendered_prompt: str, instruction: s
     return f"{instruction}\n\n{rendered_prompt}"
 
 
+def append_progressive_feedback_instruction_at_end(rendered_prompt: str, instruction: str) -> str:
+    """Append PF instruction at the end of the system prompt (used when use_components is True)."""
+    instruction = instruction.strip()
+    if not instruction:
+        return rendered_prompt
+
+    base = (rendered_prompt or "").rstrip()
+    if not base:
+        return instruction
+    return f"{base}\n\n## Progressive feedback\n{instruction}"
+
+
+def apply_progressive_feedback_instruction(
+    rendered_prompt: str,
+    instruction: str,
+    *,
+    use_components: bool,
+) -> str:
+    """Place PF instruction: end of prompt when components are on, else before core identity."""
+    if use_components:
+        return append_progressive_feedback_instruction_at_end(rendered_prompt, instruction)
+    return inject_progressive_feedback_instruction(rendered_prompt, instruction)
+
+
 def log_progressive_feedback_orchestration_decision(
     *,
     project_id: str,
@@ -78,15 +103,17 @@ def log_progressive_feedback_orchestration_decision(
     preview: bool = False,
     preview_websocket: bool = False,
     instruction_preview: str | None = None,
+    placement: str | None = None,
 ) -> None:
     channel_from_urn = channel_hint_from_contact_urn(contact_urn) if contact_urn else None
     if injected:
         logger.info(
             "[ProgressiveFeedback] Orchestration instruction injected project_id=%s channel_from_urn=%s "
-            "contact_urn=%s instruction_preview=%r",
+            "contact_urn=%s placement=%s instruction_preview=%r",
             project_id,
             channel_from_urn,
             contact_urn or None,
+            placement or "core_identity",
             instruction_preview,
         )
         return
