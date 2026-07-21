@@ -1,6 +1,7 @@
 from unittest import mock
 
 from django.test import SimpleTestCase
+from weni.eda.messages import Message as WeniMessage
 
 from nexus.projects.consumers.project_consumer import OldProjectConsumer, WeniEDAProjectConsumer
 
@@ -17,16 +18,16 @@ class DummyChannel:
         self.rejected.append((tag, requeue))
 
 
-class DummyMessage:
-    def __init__(self, body):
+class DummyAmqpMessage:
+    def __init__(self, body, channel=None):
         self.body = body
-        self.channel = DummyChannel()
+        self.channel = channel or DummyChannel()
         self.delivery_tag = 1
 
 
 class OldProjectConsumerTests(SimpleTestCase):
     def setUp(self):
-        self.message = DummyMessage(body=b"{}")
+        self.message = DummyAmqpMessage(body=b"{}")
         self.consumer = OldProjectConsumer()
 
     @mock.patch(
@@ -64,7 +65,13 @@ class OldProjectConsumerTests(SimpleTestCase):
 
 class WeniEDAProjectConsumerTests(SimpleTestCase):
     def setUp(self):
-        self.message = DummyMessage(body=b"{}")
+        self.channel = DummyChannel()
+        self.amqp_message = DummyAmqpMessage(body=b"{}", channel=self.channel)
+        self.weni_message = WeniMessage(
+            body=self.amqp_message.body,
+            delivery_tag=self.amqp_message.delivery_tag,
+            channel=self.channel,
+        )
         self.consumer = WeniEDAProjectConsumer()
 
     @mock.patch(
@@ -80,11 +87,11 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
     def test_weni_eda_project_consumer_triggers_creation_and_acks(
         self, mock_usecase_cls, _
     ):
-        self.consumer._message = self.message
-        self.consumer.consume(self.message)
+        self.consumer._message = self.weni_message
+        self.consumer.consume(self.weni_message)
 
         mock_usecase_cls.return_value.create_project.assert_called_once()
-        self.assertEqual(self.message.channel.acked, [1])
+        self.assertEqual(self.channel.acked, [1])
 
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
@@ -97,7 +104,7 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
     ):
         mock_usecase_cls.return_value.create_project.side_effect = RuntimeError("boom")
 
-        self.consumer.handle(self.message)
+        self.consumer.handle(self.amqp_message)
 
         mock_capture.assert_called_once()
-        self.assertEqual(self.message.channel.rejected, [(1, False)])
+        self.assertEqual(self.channel.rejected, [(1, False)])

@@ -3,6 +3,7 @@ import logging
 import amqp
 from sentry_sdk import capture_exception
 from weni.eda.django.consumers import EDAConsumer as WeniEDAConsumer
+from weni.eda.messages import Message as WeniMessage
 
 from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.event_driven.parsers import JSONParser
@@ -52,10 +53,10 @@ class OldProjectConsumer(EDAConsumer):
 class WeniEDAProjectConsumer(WeniEDAConsumer):
     """Consumer responsible for handling project creation events from Amazon MQ."""
 
-    def consume(self, message: amqp.Message):
+    def consume(self, message: WeniMessage):
         logger.debug(
             "[WeniEDAProjectConsumer] Consuming a message",
-            extra={"body_len": len(message.body) if hasattr(message, "body") else None},
+            extra={"body_len": len(message.body) if message.body else None},
         )
         try:
             body = JSONParser.parse(message.body)
