@@ -1,5 +1,6 @@
 import copy
 
+from nexus.event_domain.recent_activity.recent_activity_amq import publish_brain_status_to_amq
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
 from nexus.events import event_manager, notify_async
 from nexus.projects.models import IntegratedFeature, Project
@@ -27,6 +28,11 @@ def update_message(UpdateProjectDTO: UpdateProjectDTO):  # pragma: no cover
     }
 
     publisher.send_message(body=message, exchange="recent-activities.topic", routing_key="brain_status")
+    publish_brain_status_to_amq(
+        user=user,
+        project_uuid=project_uuid,
+        brain_on=UpdateProjectDTO.brain_on,
+    )
 
 
 class ProjectUpdateUseCase:
