@@ -831,12 +831,15 @@ class ProjectGuardrailsConfigView(APIView):
                 project,
                 category_states=data.get("category_states"),
                 blocking_message=data.get("blocking_message"),
-                blocking_message_provided="blocking_message" in request.data,
+                blocking_message_provided="blocking_message" in serializer.validated_data,
             )
         except DjangoValidationError as exc:
             return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
 
-        payload = ProjectGuardrailsConfigUseCase.to_payload(config, writable=True)
+        payload = ProjectGuardrailsConfigUseCase.to_payload(
+            config,
+            writable=self._is_writable(request.user, project),
+        )
         return Response(payload.as_dict(), status=status.HTTP_200_OK)
 
     @staticmethod
