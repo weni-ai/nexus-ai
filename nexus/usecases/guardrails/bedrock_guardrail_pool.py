@@ -129,7 +129,6 @@ class BedrockGuardrailPoolService:
         Resolve pool for the blocked subset.
 
         Returns None when no categories are blocked (no Bedrock resource needed).
-        Does not assign the pool to a project — that is the PATCH wire task.
         """
         blocked_slugs = cls.blocked_slugs_from_states(category_states)
         if not blocked_slugs:
@@ -142,14 +141,13 @@ class BedrockGuardrailPoolService:
 
         bedrock = client or cls.get_bedrock_client()
         payload = cls.build_create_guardrail_payload(combination_key=key, blocked_slugs=blocked_slugs)
+        identifier, version = cls.create_bedrock_guardrail(bedrock, payload)
 
         with transaction.atomic():
-            # Re-check under lock to avoid duplicate creates under concurrency.
             existing = BedrockGuardrailPool.objects.select_for_update().filter(combination_key=key).first()
             if existing:
                 return ResolvedGuardrailPool(pool=existing, created=False)
 
-            identifier, version = cls.create_bedrock_guardrail(bedrock, payload)
             pool = BedrockGuardrailPool.objects.create(
                 combination_key=key,
                 category_slugs=blocked_slugs,
