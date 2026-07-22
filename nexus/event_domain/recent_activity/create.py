@@ -1,6 +1,7 @@
 from nexus.logs.models import RecentActivities
 
 from .recent_activities_dto import CreateRecentActivityDTO
+from .recent_activity_amq import publish_recent_activity_to_amq
 
 
 def create_recent_activity(
@@ -15,4 +16,5 @@ def create_recent_activity(
         intelligence=dto.intelligence,
         action_details=dto.action_details,
     )
+    publish_recent_activity_to_amq(recent_activity=recent_activity)
     return recent_activity
