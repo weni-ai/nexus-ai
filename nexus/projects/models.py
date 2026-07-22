@@ -211,12 +211,39 @@ class ProjectApiToken(models.Model):
         return token, salt, token_hash
 
 
+class BedrockGuardrailPool(models.Model):
+    """Shared Bedrock Guardrail resource for one blocked-category combination."""
+
+    combination_key = models.CharField(max_length=512, unique=True, db_index=True)
+    category_slugs = models.JSONField(default=list)
+    bedrock_guardrail_identifier = models.CharField(max_length=255)
+    bedrock_guardrail_version = models.CharField(max_length=64)
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bedrock Guardrail pool"
+        verbose_name_plural = "Bedrock Guardrail pools"
+
+    def __str__(self) -> str:
+        return f"Pool {self.combination_key} ({self.bedrock_guardrail_identifier})"
+
+
 class ProjectGuardrailsConfig(models.Model):
     BLOCKING_MESSAGE_MAX_LENGTH = 240
 
     project = models.OneToOneField(Project, on_delete=models.CASCADE, related_name="guardrails_config")
     category_states = models.JSONField(default=dict)
     blocking_message = models.TextField(null=True, blank=True)
+    bedrock_guardrail_pool = models.ForeignKey(
+        BedrockGuardrailPool,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="project_configs",
+    )
+    bedrock_guardrail_identifier = models.CharField(max_length=255, null=True, blank=True)
+    bedrock_guardrail_version = models.CharField(max_length=64, null=True, blank=True)
     initialized_as_new_project = models.BooleanField(default=False)
     created_on = models.DateTimeField(auto_now_add=True)
     modified_on = models.DateTimeField(auto_now=True)

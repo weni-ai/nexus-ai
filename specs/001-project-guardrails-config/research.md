@@ -47,26 +47,30 @@ Unchanged from 2026-07-06 product/API clarifications.
 
 ---
 
-## R5 — One Bedrock Guardrail per project; omit unblocked categories
+## R5 — Hybrid Bedrock Guardrail pool (supersedes 1:1 per project)
 
-**Decision**: Each project owns one Bedrock Guardrail (`identifier` + `version` persisted). On category PATCH, sync Denied Topics to include **only** `blocked=true` catalog entries. Unblocked categories are omitted from the policy.
+**Decision (2026-07-22)**: Maintain a **pool registry** keyed by the combination of `blocked=true` catalog slugs (no language). On category PATCH, resolve the pool: **reuse** if the combination exists; otherwise **lazy `CreateGuardrail`** with Denied Topics for that subset (+ platform baseline content filters/PII when Models defines them). Persist assigned `identifier`/`version` on the project. Projects with the same subset share one AWS Guardrail.
 
-**Rationale**: Bedrock evaluates configured denied topics as a set; toggles are expressed by presence/absence in the guardrail definition, not by a separate runtime map.
+**Rationale**: Operators cannot create custom topics (FDD) — combination space is finite. Models guidance: 1:1 per project does not scale operationally; temporary per-request Guardrails are impossible; custom messaging must stay outside Bedrock so pools can be shared (Option A).
 
 **When all unblocked**: skip `ApplyGuardrail` at preprocess (no-op).
+
+**Rejected**: One Bedrock Guardrail resource owned exclusively per project with UpdateGuardrail on every toggle (previous R5, 2026-07-16).
+
+**Deferred**: Soft layer — inject denied topics into manager system prompt; OUTPUT `ApplyGuardrail`.
 
 ---
 
 ## R6 — Blocking message Option A
 
-**Decision**: On `GUARDRAIL_INTERVENED`, Nexus ignores Bedrock canned output and returns the project effective message (custom or `GUARDRAILS_DEFAULT_BLOCKING_MESSAGE`). Message-only PATCH does not UpdateGuardrail / bump version.
+**Decision**: On `GUARDRAIL_INTERVENED`, Nexus ignores Bedrock canned output and returns the project effective message (custom or `GUARDRAILS_DEFAULT_BLOCKING_MESSAGE`). Message-only PATCH does not Create/Update Guardrail or change pool assignment.
 
-**Rationale**: Message changes are more frequent than topic toggles; avoids unnecessary Bedrock version churn. Customer-facing copy stays owned by Nexus/project config.
+**Rationale**: Message changes are more frequent than topic toggles; pooling requires message outside the shared Guardrail. Customer-facing copy stays owned by Nexus/project config.
 
-**Rejected**: Option B — store project message in `blockedInputMessaging` and return Bedrock text as-is.
+**Rejected**: Option B — store project message in `blockedInputMessaging` and return Bedrock text as-is (blocks pool sharing).
 
 ---
 
 ## R7 — Fail behavior on Bedrock errors (open)
 
-**Decision pending implementation**: Document and test whether preprocess **fail-open** (allow message) or **fail-closed** (block/safe reply) when `ApplyGuardrail` or sync APIs error. Prefer explicit choice in plan/tasks before release.
+**Decision pending implementation**: Document and test whether preprocess **fail-open** (allow message) or **fail-closed** (block/safe reply) when `ApplyGuardrail` or pool create/resolve APIs error. Prefer explicit choice in plan/tasks before release.
