@@ -19,13 +19,13 @@
 - Q: Who may write guardrails configuration via API? → A: Project **moderator** or **organization admin** only.
 - Q: New vs existing project defaults? → A: `GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT` + lazy init on first GET.
 - Q: Default blocking message? → A: `settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE` until custom message is saved; custom stored verbatim, no auto-translation.
-- Q: PATCH confirmation? → A: `confirm_disable: true` required when unblocking categories; `disable_all` when all unblocked.
+- Q: PATCH confirmation? → A: **Frontend-only** (FDD modal). Backend persists unblock immediately; no `confirm_disable` / `409` handshake.
 - Q: New catalog entries? → A: Merge on GET; missing slugs inherit project-type default.
 
 ### Session 2026-07-06
 
 - Q: Rename away from *topic*? → A: **guardrail category** / `category_states` / `GUARDRAIL_CATEGORY_CATALOG`. Rejects *instruction* (conflicts with existing Instructions domain) and *topic* (conflicts with conversation Topics).
-- Q: Backend i18n for catalog labels? → A: **Out of scope.** API returns English `name`/`description` from code constant. No `Accept-Language`, no locale module. Default blocking message is a single settings string.
+- Q: Backend i18n for catalog labels? → A: **Out of scope.** API returns only `slug` + `blocked`; frontend owns `name`/`description` via translation files keyed by slug. No `Accept-Language`, no locale module. Default blocking message is a single settings string.
 
 ### Session 2026-07-16
 
@@ -41,16 +41,15 @@
 
 As an authenticated admin API consumer, I need to read and update per-category blocked states for a project so guardrail behavior can be controlled without engineering intervention.
 
-**Independent Test**: `GET` config, `PATCH` one category from blocked to unblocked with confirmation, verify Bedrock sync omits the unblocked category and the next input no longer blocks that category.
+**Independent Test**: `GET` config, `PATCH` one category from blocked to unblocked, verify Bedrock sync omits the unblocked category and the next input no longer blocks that category.
 
 **Acceptance Scenarios**:
 
-1. **Given** valid project UUID and auth, **When** `GET /guardrails-config/`, **Then** response lists all fixed catalog categories with `slug`, `name`, `description`, and `blocked`.
-2. **Given** category blocked, **When** PATCH unblocks without `confirm_disable`, **Then** `409` with `confirmation_type: disable_category`.
-3. **Given** PATCH unblock with `confirm_disable: true`, **Then** persists, syncs Bedrock guardrail without that category, and runtime no longer blocks it.
-4. **Given** category unblocked, **When** PATCH blocks without confirmation, **Then** persists immediately and syncs Bedrock including that category.
-5. **Given** PATCH unblocks all categories without `confirm_disable`, **Then** `409` with `confirmation_type: disable_all`.
-6. **Given** PATCH unblocks all with `confirm_disable: true`, **Then** all categories unblocked and Bedrock sync reflects no denied categories (runtime skips `ApplyGuardrail` or never intervenes).
+1. **Given** valid project UUID and auth, **When** `GET /guardrails-config/`, **Then** response lists all fixed catalog categories with `slug` and `blocked` (no `name`/`description`).
+2. **Given** category blocked, **When** PATCH unblocks it, **Then** persists immediately, syncs Bedrock guardrail without that category, and runtime no longer blocks it.
+3. **Given** category unblocked, **When** PATCH blocks it, **Then** persists immediately and syncs Bedrock including that category.
+4. **Given** PATCH unblocks all categories, **Then** all categories unblocked and Bedrock sync reflects no denied categories (runtime skips `ApplyGuardrail` or never intervenes).
+5. **Given** operator wants UX confirmation before unblocking, **When** Agent Builder shows a modal, **Then** FE calls PATCH once after confirm (backend does not enforce a two-step handshake).
 
 ---
 
@@ -98,7 +97,7 @@ As the platform, guardrails config MUST apply uniformly to all agents in the pro
 
 ### Functional Requirements
 
-- **FR-001**: API MUST expose GET/PATCH with full fixed **guardrail category** catalog (`slug`, `name`, `description`, `blocked`).
+- **FR-001**: API MUST expose GET/PATCH with full fixed **guardrail category** catalog (`slug`, `blocked`). Display labels are frontend-owned.
 - **FR-002**: `blocked: true` = category refused; `blocked: false` = allowed.
 - **FR-003**: PATCH persists `category_states` at project level for admin only.
 - **FR-004**: PATCH returns `403` for non-admin.
@@ -106,9 +105,9 @@ As the platform, guardrails config MUST apply uniformly to all agents in the pro
 - **FR-006**: Reject blocking messages >240 characters.
 - **FR-007**: Reject empty/whitespace blocking message when any category blocked.
 - **FR-008**: Lazy init defaults all categories blocked (new) or unblocked (existing).
-- **FR-009**: PATCH unblocking categories requires `confirm_disable: true` or returns `409`.
-- **FR-010**: PATCH unblocking all categories returns `409` with `disable_all` unless confirmed.
-- **FR-011**: PATCH blocking categories does NOT require confirmation.
+- **FR-009**: PATCH unblocking categories persists immediately (confirmation UX is frontend-only).
+- **FR-010**: PATCH may unblock all categories in one request.
+- **FR-011**: PATCH blocking and unblocking categories use the same request shape (`category_states`).
 - **FR-012**: Runtime MUST evaluate each user input with Bedrock `ApplyGuardrail` (`source=INPUT`) using the project's guardrail identifier/version **before** agent processing, reusing the existing preprocess/`invoke` path (no dedicated OpenAI-only pipeline; no `GUARDRAILS_LAYER_LAMBDA` for this flow).
 - **FR-013**: Changes apply only to messages after successful PATCH (and successful Bedrock sync when categories change).
 - **FR-014**: GET merges new catalog slugs with project-type defaults.
@@ -126,7 +125,7 @@ As the platform, guardrails config MUST apply uniformly to all agents in the pro
 
 ### Key Entities
 
-- **Guardrail category (catalog entry)**: Platform slug + English label/description (+ Bedrock denied-topic definition/examples as needed); not mutable via API.
+- **Guardrail category (catalog entry)**: Platform slug (+ Bedrock denied-topic definition/examples as needed); display name/description are frontend i18n; not mutable via API.
 - **Project guardrails configuration**: One-to-one with project; `category_states` + optional custom blocking message + Bedrock guardrail identifier/version.
 
 ## Success Criteria *(mandatory)*
@@ -136,13 +135,13 @@ As the platform, guardrails config MUST apply uniformly to all agents in the pro
 - **SC-003**: After category PATCH + Bedrock sync, the next user input is evaluated with the updated denied-topic set; on intervene, customer receives the project effective message (Option A).
 - **SC-004**: 100% of non-admin PATCH return `403`.
 - **SC-005**: First GET: new projects all blocked; existing all unblocked.
-- **SC-006**: 100% of unconfirmed disable PATCH return `409` with typed metadata.
+- **SC-006**: Unblock PATCH persists immediately without a backend confirmation handshake.
 - **SC-007**: Preprocess guardrail path does not invoke `GUARDRAILS_LAYER_LAMBDA` for this feature.
 
 ## Assumptions
 
 - Conversation **Topics** (`Topics` model, lambda classifier) are a separate domain — no shared tables or APIs.
-- Catalog labels in API are **English strings** from `GUARDRAIL_CATEGORY_CATALOG` (display localization is out of backend scope).
+- Catalog display labels are frontend-owned (i18n by `slug`); API returns only `slug` + `blocked`.
 - Bedrock Denied Topics are the enforcement mechanism; Nexus owns sync + `ApplyGuardrail` + customer-facing message resolution.
 - Fail-open vs fail-closed on Bedrock API errors during preprocess is an implementation decision to document in research/plan and cover with tests.
 

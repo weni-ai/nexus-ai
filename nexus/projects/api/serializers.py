@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from nexus.projects.channel_ops import get_default_channel_uuid
-from nexus.projects.models import Project
+from nexus.projects.models import Project, ProjectGuardrailsConfig
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -39,3 +39,34 @@ class ConversationSerializer(serializers.Serializer):
     nps = serializers.IntegerField(required=False, allow_null=True)
     created_at = serializers.DateTimeField(required=False, allow_null=True)
     topic = serializers.CharField(required=False, allow_null=True)
+
+
+class GuardrailCategorySerializer(serializers.Serializer):
+    # API contract: slug + blocked only; name/description live in frontend i18n.
+    slug = serializers.CharField()
+    blocked = serializers.BooleanField()
+
+
+class GuardrailsConfigResponseSerializer(serializers.Serializer):
+    categories = GuardrailCategorySerializer(many=True)
+    blocking_message = serializers.CharField()
+    blocking_message_is_custom = serializers.BooleanField()
+    writable = serializers.BooleanField()
+
+
+class GuardrailsConfigUpdateSerializer(serializers.Serializer):
+    category_states = serializers.DictField(
+        child=serializers.BooleanField(),
+        required=False,
+    )
+    blocking_message = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        max_length=ProjectGuardrailsConfig.BLOCKING_MESSAGE_MAX_LENGTH,
+    )
+
+    def validate(self, attrs):
+        if "category_states" not in attrs and "blocking_message" not in attrs:
+            raise serializers.ValidationError("At least one of category_states or blocking_message is required.")
+        return attrs

@@ -109,6 +109,32 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertTrue(is_custom)
         self.assertEqual(message, "Custom refusal")
 
+    def test_update_unblocks_without_confirmation(self):
+        project = ProjectFactory()
+        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
+        project.save(update_fields=["created_at"])
+        self.use_case.get_or_initialize(project)
+
+        config = self.use_case.update_config(
+            project,
+            category_states={"politics": False},
+        )
+
+        self.assertFalse(config.category_states["politics"])
+
+    def test_update_message_only_leaves_category_states(self):
+        project = ProjectFactory()
+        config = self.use_case.get_or_initialize(project)
+
+        updated = self.use_case.update_config(
+            project,
+            blocking_message="Brand refusal",
+            blocking_message_provided=True,
+        )
+
+        self.assertEqual(updated.blocking_message, "Brand refusal")
+        self.assertEqual(updated.category_states, config.category_states)
+
 
 class GuardrailsConfigAdminPermissionTestCase(TestCase):
     def setUp(self) -> None:

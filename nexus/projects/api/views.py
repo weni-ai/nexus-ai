@@ -15,11 +15,13 @@ from rest_framework.views import APIView
 from inline_agents.backends.openai.backend import OpenAIBackend
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.events import notify_async
-from nexus.projects.api.permissions import ProjectPermission
-from nexus.projects.api.serializers import ConversationSerializer
+from nexus.projects.api.permissions import GuardrailsConfigAdminPermission, ProjectPermission
+from nexus.projects.api.serializers import ConversationSerializer, GuardrailsConfigUpdateSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
-from nexus.projects.models import Project
+from nexus.projects.models import Project, ProjectAuth
+from nexus.projects.permissions import get_user_auth, is_admin
 from nexus.projects.services.improvement_support_email import SendResult, send_improvement_support_ticket
+from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -798,6 +800,70 @@ class ProjectApiErrorMessageView(APIView):
                 "error_message": _get_effective_api_error_message(project_uuid),
             }
         )
+
+
+class ProjectGuardrailsConfigView(APIView):
+    permission_classes = [IsAuthenticated, GuardrailsConfigAdminPermission]
+
+    def get(self, request, project_uuid):
+        project = self._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        config = ProjectGuardrailsConfigUseCase.get_or_initialize(project)
+        payload = ProjectGuardrailsConfigUseCase.to_payload(
+            config,
+            writable=self._is_writable(request.user, project),
+        )
+        return Response(payload.as_dict(), status=status.HTTP_200_OK)
+
+    def patch(self, request, project_uuid):
+        project = self._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = GuardrailsConfigUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            config = ProjectGuardrailsConfigUseCase.update_config(
+                project,
+                category_states=data.get("category_states"),
+                blocking_message=data.get("blocking_message"),
+                blocking_message_provided="blocking_message" in serializer.validated_data,
+            )
+        except DjangoValidationError as exc:
+            return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+
+        payload = ProjectGuardrailsConfigUseCase.to_payload(
+            config,
+            writable=self._is_writable(request.user, project),
+        )
+        return Response(payload.as_dict(), status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _get_project(project_uuid):
+        try:
+            return Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return None
+
+    @staticmethod
+    def _is_writable(user, project: Project) -> bool:
+        try:
+            auth = get_user_auth(user, project)
+            return is_admin(auth)
+        except ProjectAuth.DoesNotExist:
+            return False
+
+    @staticmethod
+    def _format_validation_error(exc: DjangoValidationError) -> dict:
+        if hasattr(exc, "message_dict"):
+            return exc.message_dict
+        if hasattr(exc, "messages"):
+            return {"detail": list(exc.messages)}
+        return {"detail": [str(exc)]}
 
 
 class OpenSupportTicketView(APIView):

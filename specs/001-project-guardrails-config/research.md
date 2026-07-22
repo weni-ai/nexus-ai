@@ -18,20 +18,20 @@
 
 **Decision**: **No i18n layer in Nexus for this feature.**
 
-- Catalog `name`/`description`: English strings in settings constant.
+- Catalog `name`/`description`: English strings may remain in settings for Bedrock sync/docs; **API does not return them** — frontend i18n keys by `slug`.
 - Default blocking message: `settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE` (single string).
 - Custom blocking message: stored as submitted.
 - Remove `Accept-Language` from admin API contract.
 
-**Rationale**: Label localization is a presentation concern for API consumers outside this backend scope.
+**Rationale**: Label localization is a presentation concern owned by the frontend.
 
 **Rejected**: locale module task — frontend/i18n pipeline pattern, not Nexus backend responsibility.
 
 ---
 
-## R3 — Admin writes, lazy init, confirmation
+## R3 — Admin writes, lazy init, unblock
 
-**Decision**: Moderator/org-admin PATCH only; `GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT` + lazy init on first GET; `confirm_disable` contract (`disable_category` | `disable_all`); cache invalidation on PATCH.
+**Decision**: Moderator/org-admin PATCH only; `GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT` + lazy init on first GET; unblock persists immediately (confirmation UX is frontend-only); cache invalidation on PATCH.
 
 Unchanged from 2026-07-06 product/API clarifications.
 
