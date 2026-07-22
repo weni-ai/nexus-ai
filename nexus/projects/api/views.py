@@ -21,6 +21,7 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project, ProjectAuth
 from nexus.projects.permissions import get_user_auth, is_admin
 from nexus.projects.services.improvement_support_email import SendResult, send_improvement_support_ticket
+from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolError
 from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
@@ -835,6 +836,11 @@ class ProjectGuardrailsConfigView(APIView):
             )
         except DjangoValidationError as exc:
             return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+        except BedrockGuardrailPoolError as exc:
+            return Response(
+                {"detail": "Could not resolve Bedrock guardrail pool.", "error": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         payload = ProjectGuardrailsConfigUseCase.to_payload(
             config,

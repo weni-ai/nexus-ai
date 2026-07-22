@@ -7,15 +7,44 @@ from django.utils import timezone as django_timezone
 from rest_framework.request import Request
 
 from nexus.projects.api.permissions import GuardrailsConfigAdminPermission
-from nexus.projects.models import ProjectAuthorizationRole, ProjectGuardrailsConfig
+from nexus.projects.models import BedrockGuardrailPool, ProjectAuthorizationRole, ProjectGuardrailsConfig
+from nexus.usecases.guardrails.bedrock_guardrail_pool import (
+    BedrockGuardrailPoolError,
+    BedrockGuardrailPoolService,
+    ResolvedGuardrailPool,
+)
 from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 
+def _fake_pool_resolve(category_states, client=None):
+    blocked = BedrockGuardrailPoolService.blocked_slugs_from_states(category_states)
+    if not blocked:
+        return None
+    key = BedrockGuardrailPoolService.combination_key(blocked)
+    pool, created = BedrockGuardrailPool.objects.get_or_create(
+        combination_key=key,
+        defaults={
+            "category_slugs": blocked,
+            "bedrock_guardrail_identifier": f"gr-{key[:40]}",
+            "bedrock_guardrail_version": "1",
+        },
+    )
+    return ResolvedGuardrailPool(pool=pool, created=created)
+
+
 class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
     def setUp(self) -> None:
         self.use_case = ProjectGuardrailsConfigUseCase()
+        self._pool_patcher = patch(
+            "nexus.usecases.guardrails.project_guardrails_config.BedrockGuardrailPoolService.get_or_create_pool",
+            side_effect=_fake_pool_resolve,
+        )
+        self._mock_get_or_create_pool = self._pool_patcher.start()
+
+    def tearDown(self) -> None:
+        self._pool_patcher.stop()
 
     @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
     def test_lazy_init_new_project_blocks_all_categories(self):
@@ -134,6 +163,72 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
         self.assertEqual(updated.blocking_message, "Brand refusal")
         self.assertEqual(updated.category_states, config.category_states)
+        self._mock_get_or_create_pool.assert_not_called()
+
+    def test_update_category_assigns_pool_identifier_and_version(self):
+        project = ProjectFactory()
+        self.use_case.get_or_initialize(project)
+        ProjectGuardrailsConfig.objects.filter(project=project).update(
+            category_states=self.use_case.build_default_category_states(blocked=False),
+        )
+
+        config = self.use_case.update_config(project, category_states={"politics": True})
+
+        self.assertTrue(config.category_states["politics"])
+        self.assertIsNotNone(config.bedrock_guardrail_pool_id)
+        self.assertEqual(
+            config.bedrock_guardrail_identifier, config.bedrock_guardrail_pool.bedrock_guardrail_identifier
+        )
+        self.assertEqual(config.bedrock_guardrail_version, "1")
+        self._mock_get_or_create_pool.assert_called_once()
+
+    def test_update_all_unblocked_clears_pool_assignment(self):
+        project = ProjectFactory()
+        self.use_case.get_or_initialize(project)
+        ProjectGuardrailsConfig.objects.filter(project=project).update(
+            category_states=self.use_case.build_default_category_states(blocked=False),
+        )
+        assigned = self.use_case.update_config(project, category_states={"politics": True})
+        self.assertIsNotNone(assigned.bedrock_guardrail_pool_id)
+
+        cleared = self.use_case.update_config(
+            project,
+            category_states=self.use_case.build_default_category_states(blocked=False),
+        )
+
+        self.assertIsNone(cleared.bedrock_guardrail_pool_id)
+        self.assertIsNone(cleared.bedrock_guardrail_identifier)
+        self.assertIsNone(cleared.bedrock_guardrail_version)
+
+    def test_two_projects_with_same_subset_share_pool(self):
+        project_a = ProjectFactory()
+        project_b = ProjectFactory()
+        for project in (project_a, project_b):
+            self.use_case.get_or_initialize(project)
+            ProjectGuardrailsConfig.objects.filter(project=project).update(
+                category_states=self.use_case.build_default_category_states(blocked=False),
+            )
+
+        config_a = self.use_case.update_config(project_a, category_states={"politics": True, "bias": True})
+        config_b = self.use_case.update_config(project_b, category_states={"bias": True, "politics": True})
+
+        self.assertEqual(config_a.bedrock_guardrail_pool_id, config_b.bedrock_guardrail_pool_id)
+        self.assertEqual(config_a.bedrock_guardrail_identifier, config_b.bedrock_guardrail_identifier)
+
+    def test_update_category_propagates_bedrock_failure_without_saving(self):
+        project = ProjectFactory()
+        self.use_case.get_or_initialize(project)
+        ProjectGuardrailsConfig.objects.filter(project=project).update(
+            category_states=self.use_case.build_default_category_states(blocked=False),
+        )
+        self._mock_get_or_create_pool.side_effect = BedrockGuardrailPoolError("AccessDenied")
+
+        with self.assertRaises(BedrockGuardrailPoolError):
+            self.use_case.update_config(project, category_states={"politics": True})
+
+        config = ProjectGuardrailsConfig.objects.get(project=project)
+        self.assertFalse(config.category_states["politics"])
+        self.assertIsNone(config.bedrock_guardrail_pool_id)
 
 
 class GuardrailsConfigAdminPermissionTestCase(TestCase):
