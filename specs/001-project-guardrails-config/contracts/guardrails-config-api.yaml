@@ -1,0 +1,114 @@
+openapi: 3.0.3
+info:
+  title: Project Guardrails Configuration API
+  version: 1.1.0
+  description: Nexus backend — guardrail category block states and blocking message
+
+paths:
+  /api/v1/projects/{project_uuid}/guardrails-config/:
+    get:
+      operationId: getProjectGuardrailsConfig
+      summary: Get project guardrails configuration
+      tags: [Guardrails]
+      parameters:
+        - name: project_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailsConfigResponse"
+    patch:
+      operationId: updateProjectGuardrailsConfig
+      summary: Update guardrails configuration (admin only)
+      tags: [Guardrails]
+      parameters:
+        - name: project_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardrailsConfigUpdateRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailsConfigResponse"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmationRequired"
+
+components:
+  schemas:
+    GuardrailCategory:
+      type: object
+      required: [slug, name, description, blocked]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+          description: English catalog label from settings
+        description:
+          type: string
+          description: English catalog description from settings
+        blocked:
+          type: boolean
+
+    GuardrailsConfigResponse:
+      type: object
+      required: [categories, blocking_message, blocking_message_is_custom, writable]
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/GuardrailCategory"
+        blocking_message:
+          type: string
+          maxLength: 240
+        blocking_message_is_custom:
+          type: boolean
+        writable:
+          type: boolean
+
+    GuardrailsConfigUpdateRequest:
+      type: object
+      properties:
+        category_states:
+          type: object
+          additionalProperties:
+            type: boolean
+          example:
+            politics: true
+            hate: false
+        blocking_message:
+          type: string
+          maxLength: 240
+          nullable: true
+        confirm_disable:
+          type: boolean
+          default: false
+
+    ConfirmationRequired:
+      type: object
+      properties:
+        requires_confirmation:
+          type: boolean
+        confirmation_type:
+          type: string
+          enum: [disable_category, disable_all]
+        detail:
+          type: string
