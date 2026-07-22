@@ -5,30 +5,34 @@
 curl -s -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8000/api/$PROJECT_UUID/guardrails-config/" | jq
 
-# 2. Block a category
+# 2. Block a category (resolves/assigns Bedrock pool for the combination)
 curl -s -X PATCH -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"category_states": {"politics": true}}' \
   "http://localhost:8000/api/$PROJECT_UUID/guardrails-config/" | jq
 
-# 3. Unblock a category (persists immediately; FE may show a modal before this call)
+# 3. Unblock a category (persists immediately; reassigns pool; FE may show a modal before this call)
 curl -s -X PATCH -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"category_states": {"politics": false}}' \
   "http://localhost:8000/api/$PROJECT_UUID/guardrails-config/" | jq
 
-# 4. Message-only PATCH
+# 4. Message-only PATCH (no Bedrock Create/Update; pool unchanged)
 curl -s -X PATCH -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"blocking_message": "I cannot help with that request."}' \
   "http://localhost:8000/api/$PROJECT_UUID/guardrails-config/" | jq
 
-# 5. Inspect persisted config
+# 5. Inspect persisted config + assigned pool id/version
 python manage.py shell -c "
 from nexus.projects.models import ProjectGuardrailsConfig
 c = ProjectGuardrailsConfig.objects.get(project__uuid='$PROJECT_UUID')
 print(c.category_states, c.blocking_message)
+print(c.bedrock_guardrail_identifier, c.bedrock_guardrail_version)
 "
+
+# Real CreateGuardrail / ApplyGuardrail in staging requires Cloud IAM.
+# Local/CI: mock boto3. E2E against AWS after IAM + quota are ready.
 
 pytest nexus/projects/api/tests/test_guardrails_config.py nexus/usecases/guardrails/tests/ -q -k guardrail
 ```
