@@ -7,32 +7,13 @@ from django.utils import timezone as django_timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from nexus.projects.models import BedrockGuardrailPool, Project, ProjectAuthorizationRole, ProjectGuardrailsConfig
+from nexus.projects.models import Project, ProjectAuthorizationRole, ProjectGuardrailsConfig
 from nexus.projects.permissions import has_project_permission
-from nexus.usecases.guardrails.bedrock_guardrail_pool import (
-    BedrockGuardrailPoolError,
-    BedrockGuardrailPoolService,
-    ResolvedGuardrailPool,
-)
+from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolError
 from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
+from nexus.usecases.guardrails.tests.guardrail_test_helpers import fake_pool_resolve as _fake_pool_resolve
 from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
-
-
-def _fake_pool_resolve(category_states, client=None):
-    blocked = BedrockGuardrailPoolService.blocked_slugs_from_states(category_states)
-    if not blocked:
-        return None
-    key = BedrockGuardrailPoolService.combination_key(blocked)
-    pool, created = BedrockGuardrailPool.objects.get_or_create(
-        combination_key=key,
-        defaults={
-            "category_slugs": blocked,
-            "bedrock_guardrail_identifier": f"gr-{key[:40]}",
-            "bedrock_guardrail_version": "1",
-        },
-    )
-    return ResolvedGuardrailPool(pool=pool, created=created)
 
 
 @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
