@@ -3,8 +3,6 @@ from django.test import SimpleTestCase, override_settings
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.prompts_progressive_feedback import (
     DEFAULT_PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION,
-    append_progressive_feedback_instruction_at_end,
-    apply_progressive_feedback_instruction,
     find_core_identity_marker,
     inject_progressive_feedback_instruction,
     should_inject_progressive_feedback_instruction,
@@ -135,42 +133,6 @@ class TestInjectProgressiveFeedbackInstruction(SimpleTestCase):
         )
 
 
-class TestAppendProgressiveFeedbackInstructionAtEnd(SimpleTestCase):
-    def test_appends_section_at_end(self):
-        result = append_progressive_feedback_instruction_at_end(CORE_IDENTITY_XML_PROMPT, TEST_INSTRUCTION)
-
-        self.assertTrue(result.endswith(f"## Progressive feedback\n{TEST_INSTRUCTION}"))
-        self.assertGreater(result.index("## Progressive feedback"), result.index("</core_identity>"))
-
-    def test_returns_unchanged_when_instruction_empty(self):
-        self.assertEqual(
-            append_progressive_feedback_instruction_at_end(CORE_IDENTITY_XML_PROMPT, ""),
-            CORE_IDENTITY_XML_PROMPT,
-        )
-
-
-class TestApplyProgressiveFeedbackInstruction(SimpleTestCase):
-    def test_uses_core_identity_when_components_disabled(self):
-        result = apply_progressive_feedback_instruction(
-            CORE_IDENTITY_XML_PROMPT,
-            TEST_INSTRUCTION,
-            use_components=False,
-        )
-
-        self.assertLess(result.index(TEST_INSTRUCTION), result.index("<core_identity>"))
-        self.assertNotIn("## Progressive feedback", result)
-
-    def test_uses_end_placement_when_components_enabled(self):
-        result = apply_progressive_feedback_instruction(
-            CORE_IDENTITY_XML_PROMPT,
-            TEST_INSTRUCTION,
-            use_components=True,
-        )
-
-        self.assertTrue(result.endswith(f"## Progressive feedback\n{TEST_INSTRUCTION}"))
-        self.assertGreater(result.index(TEST_INSTRUCTION), result.index("</core_identity>"))
-
-
 class TestGetSupervisorInstructionsProgressiveFeedback(SimpleTestCase):
     def _call_get_supervisor_instructions(self, **overrides):
         defaults = {
@@ -261,26 +223,3 @@ class TestGetSupervisorInstructionsProgressiveFeedback(SimpleTestCase):
         )
 
         self.assertTrue(result.startswith(f"{TEST_INSTRUCTION}\n\n# Manager"))
-
-    @override_settings(PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION=TEST_INSTRUCTION)
-    def test_appends_at_end_when_use_components_enabled(self):
-        result = self._call_get_supervisor_instructions(
-            rationale_switch=True,
-            use_components=True,
-            components_instructions="Use quick replies when needed.",
-        )
-
-        self.assertIn(TEST_INSTRUCTION, result)
-        self.assertTrue(result.rstrip().endswith(TEST_INSTRUCTION))
-        self.assertIn("## Progressive feedback", result)
-        self.assertGreater(result.index("## Progressive feedback"), result.index("<core_identity>"))
-
-    @override_settings(PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION=TEST_INSTRUCTION)
-    def test_keeps_core_identity_inject_when_use_components_disabled(self):
-        result = self._call_get_supervisor_instructions(
-            rationale_switch=True,
-            use_components=False,
-        )
-
-        self.assertLess(result.index(TEST_INSTRUCTION), result.index("<core_identity>"))
-        self.assertNotIn("## Progressive feedback", result)

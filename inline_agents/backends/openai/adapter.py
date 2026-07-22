@@ -1177,8 +1177,8 @@ class OpenAITeamAdapter(TeamAdapter):
         rendered_content = template.render(context_object)
 
         from inline_agents.backends.openai.prompts_progressive_feedback import (
-            apply_progressive_feedback_instruction,
             get_progressive_feedback_orchestration_instruction,
+            inject_progressive_feedback_instruction,
             log_progressive_feedback_orchestration_decision,
             should_inject_progressive_feedback_instruction,
         )
@@ -1193,10 +1193,9 @@ class OpenAITeamAdapter(TeamAdapter):
         ):
             progressive_feedback_instruction = get_progressive_feedback_orchestration_instruction()
             if progressive_feedback_instruction:
-                rendered_content = apply_progressive_feedback_instruction(
+                rendered_content = inject_progressive_feedback_instruction(
                     rendered_content,
                     progressive_feedback_instruction,
-                    use_components=use_components,
                 )
                 log_progressive_feedback_orchestration_decision(
                     project_id=project_id,
@@ -1208,7 +1207,6 @@ class OpenAITeamAdapter(TeamAdapter):
                     turn_off_rationale=turn_off_rationale,
                     injected=True,
                     instruction_preview=progressive_feedback_instruction[:120],
-                    placement="end" if use_components else "core_identity",
                 )
             else:
                 log_progressive_feedback_orchestration_decision(
