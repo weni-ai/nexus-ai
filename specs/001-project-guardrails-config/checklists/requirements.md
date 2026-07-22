@@ -30,3 +30,4 @@
 - 2026-07-20: Confirmation moved to frontend-only (FDD modal); backend persists unblock immediately — no `confirm_disable` / `409`.
 - 2026-07-06 clarify (naming): *topic* → **guardrail category**; *topic_states* → **category_states**; backend i18n out of scope (T002 dropped).
 - 2026-07-16: Runtime redesigned — `ApplyGuardrail` in Nexus preprocess (INPUT only), one Bedrock guardrail per project, omit unblocked categories on sync, blocking message Option A (Nexus message, ignore Bedrock canned text). Replaced payload/`categories` map for Models + Lambda path.
+- 2026-07-22: **Superseded 1:1 Guardrail/project** → hybrid **pool** by blocked-category combination (lazy CreateGuardrail, shared across projects, message Option A, no language in pool key). Prompt soft layer + OUTPUT deferred. IAM/quota via Cloud; no console pre-create.
