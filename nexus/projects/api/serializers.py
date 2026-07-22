@@ -42,9 +42,8 @@ class ConversationSerializer(serializers.Serializer):
 
 
 class GuardrailCategorySerializer(serializers.Serializer):
+    # API contract: slug + blocked only; name/description live in frontend i18n.
     slug = serializers.CharField()
-    name = serializers.CharField()
-    description = serializers.CharField()
     blocked = serializers.BooleanField()
 
 
