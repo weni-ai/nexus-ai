@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from nexus.projects.models import Project, ProjectGuardrailsConfig
+from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolService
 
 
 @dataclass(frozen=True)
@@ -204,11 +205,33 @@ class ProjectGuardrailsConfigUseCase:
         category_states_changed = next_states != config.category_states
         blocking_message_changed = blocking_message_provided and next_blocking_message != config.blocking_message
 
+        # Message-only PATCH must not resolve/create Bedrock pools (FR-023).
+        pool_to_assign = None
+        pool_identifier = None
+        pool_version = None
+        if category_states_changed:
+            # Resolve before local save so Bedrock failure leaves config unchanged.
+            resolved = BedrockGuardrailPoolService.get_or_create_pool(next_states)
+            if resolved is not None:
+                pool_to_assign = resolved.pool
+                pool_identifier = resolved.pool.bedrock_guardrail_identifier
+                pool_version = resolved.pool.bedrock_guardrail_version
+
         if category_states_changed or blocking_message_changed:
             update_fields = ["modified_on"]
             if category_states_changed:
                 config.category_states = next_states
-                update_fields.append("category_states")
+                config.bedrock_guardrail_pool = pool_to_assign
+                config.bedrock_guardrail_identifier = pool_identifier
+                config.bedrock_guardrail_version = pool_version
+                update_fields.extend(
+                    [
+                        "category_states",
+                        "bedrock_guardrail_pool",
+                        "bedrock_guardrail_identifier",
+                        "bedrock_guardrail_version",
+                    ]
+                )
             if blocking_message_changed:
                 config.blocking_message = next_blocking_message
                 update_fields.append("blocking_message")
