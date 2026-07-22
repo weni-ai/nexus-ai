@@ -195,6 +195,9 @@ weni-scripts/
 
 celerybeat-schedule.*
 
-.cursor
-.specify
+# Cursor — version Spec Kit skills only
+.cursor/*
+!.cursor/skills/
+!.cursor/skills/speckit-*/
+# Feature specs are added in a follow-up PR
 specs/
