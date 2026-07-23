@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 class LambdaUseCase:
     def __init__(self):
-        self.boto_client = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME)
+        # AI resolution criteria Lambdas are in AWS_BEDROCK_INLINE_TRACES_REGION (e.g. sa-east-1).
+        region_name = settings.AWS_BEDROCK_INLINE_TRACES_REGION or settings.AWS_BEDROCK_REGION_NAME
+        self.boto_client = boto3.client("lambda", region_name=region_name)
         self.adapter = None
         self.task_manager = None
 
