@@ -61,6 +61,10 @@ def notify_change(
     Envelope format agreed for Change History:
     event_id, event_type, producer, timestamp, correlation_id, data.
     """
+    if not project_uuid:
+        logger.warning("Skipping change-history AMQ publish: missing project_uuid")
+        return
+
     event_id = str(uuid4())
     timestamp = _to_utc_z(date)
     body: Dict[str, Any] = {
@@ -110,14 +114,28 @@ def publish_recent_activity_to_amq(*, recent_activity: RecentActivities) -> None
 
 
 def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
-    notify_change(
-        project_uuid="",
-        user_email=dto.user.email,
-        date=pendulum.now("UTC"),
-        action=dto.action,
-        entity=dto.entity,
-        object_name=dto.entity_name,
-    )
+    """
+    Org-level recent activity messages have no single project on the DTO.
+    Publish one change-history event per project in the org (same fan-out as create).
+    """
+    projects = list(dto.org.projects.all())
+    if not projects:
+        logger.warning(
+            "Skipping change-history AMQ publish: org %s has no projects",
+            getattr(dto.org, "uuid", None),
+        )
+        return
+
+    now = pendulum.now("UTC")
+    for project in projects:
+        notify_change(
+            project_uuid=str(project.uuid),
+            user_email=dto.user.email,
+            date=now,
+            action=dto.action,
+            entity=dto.entity,
+            object_name=dto.entity_name,
+        )
 
 
 def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool) -> None:
