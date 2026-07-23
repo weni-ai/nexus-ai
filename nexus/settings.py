@@ -305,6 +305,19 @@ if USE_EDA:
     EDA_BROKER_PASSWORD = env("EDA_BROKER_PASSWORD", default="guest")
     EDA_WAIT_TIME_RETRY = env("EDA_WAIT_TIME_RETRY", default=5)
 
+    AMQ_BROKER_HOST = env.str("AMQ_BROKER_HOST", default="localhost")
+    AMQ_BROKER_USER = env.str("AMQ_BROKER_USER", default="guest")
+    AMQ_BROKER_PASSWORD = env.str("AMQ_BROKER_PASSWORD", default="guest")
+    AMQ_VIRTUAL_HOST = env.str("AMQ_VIRTUAL_HOST", default="/")
+    AMQ_BROKER_PORT = env.int("AMQ_BROKER_PORT", default=5671)
+    AMQ_BROKER_SSL_SERVER_HOSTNAME = env.str("AMQ_BROKER_SSL_SERVER_HOSTNAME", default=None)
+    AMQ_BROKER_HEARTBEAT = env.int("AMQ_BROKER_HEARTBEAT", default=300)
+
+    PROJECT_AMQ_QUEUE_NAME = env.str("PROJECT_AMQ_QUEUE_NAME", default="nexus-ai.projects.queue")
+
+    RECENT_ACTIVITIES_AMQ_EXCHANGE = env.str("RECENT_ACTIVITIES_AMQ_EXCHANGE", default="change-history.topic")
+    RECENT_ACTIVITIES_AMQ_ROUTING_KEY = env.str("RECENT_ACTIVITIES_AMQ_ROUTING_KEY", default="")
+
 RABBITMQ_DEFAULT_USER = env.str("RABBITMQ_DEFAULT_USER")
 RABBITMQ_DEFAULT_PASS = env.str("RABBITMQ_DEFAULT_PASS")
 

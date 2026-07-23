@@ -1,5 +1,6 @@
 import copy
 
+from nexus.event_domain.recent_activity.recent_activity_amq import publish_brain_status_to_amq
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
 from nexus.events import event_manager, notify_async
 from nexus.projects.models import IntegratedFeature, Project
@@ -10,41 +11,46 @@ from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.retrieve import get_integrated_feature
 
 
-def update_message(UpdateProjectDTO: UpdateProjectDTO):  # pragma: no cover
+def update_message(update_project_dto: UpdateProjectDTO):  # pragma: no cover
     publisher = RabbitMQPublisher()
 
     action = "UPDATE"
     entity = "NEXUS"
-    user = UpdateProjectDTO.user_email
-    project_uuid = UpdateProjectDTO.uuid
+    user = update_project_dto.user_email
+    project_uuid = update_project_dto.uuid
 
     message = {
         "action": action,
         "entity": entity,
         "user": user,
         "project_uuid": project_uuid,
-        "brain_on": UpdateProjectDTO.brain_on,
+        "brain_on": update_project_dto.brain_on,
     }
 
     publisher.send_message(body=message, exchange="recent-activities.topic", routing_key="brain_status")
+    publish_brain_status_to_amq(
+        user=user,
+        project_uuid=project_uuid,
+        brain_on=update_project_dto.brain_on,
+    )
 
 
 class ProjectUpdateUseCase:
     def __init__(self, event_manager_notify=event_manager.notify) -> None:
         self.event_manager_notify = event_manager_notify
 
-    def update_project(self, UpdateProjectDTO: UpdateProjectDTO) -> Project:
-        project = get_project_by_uuid(UpdateProjectDTO.uuid)
-        user = users.get_by_email(UpdateProjectDTO.user_email)
+    def update_project(self, update_project_dto: UpdateProjectDTO) -> Project:
+        project = get_project_by_uuid(update_project_dto.uuid)
+        user = users.get_by_email(update_project_dto.user_email)
 
         old_project_data = copy.deepcopy(project)
 
         has_project_permission(user=user, project=project, method="patch")
 
-        for attr, value in UpdateProjectDTO.dict().items():
+        for attr, value in update_project_dto.dict().items():
             setattr(project, attr, value)
             if attr == "brain_on":
-                update_message(UpdateProjectDTO)
+                update_message(update_project_dto)
         project.save()
 
         new_project_data = project
