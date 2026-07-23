@@ -315,7 +315,7 @@ if USE_EDA:
 
     PROJECT_AMQ_QUEUE_NAME = env.str("PROJECT_AMQ_QUEUE_NAME", default="nexus-ai.projects.queue")
 
-    RECENT_ACTIVITIES_AMQ_EXCHANGE = env.str("RECENT_ACTIVITIES_AMQ_EXCHANGE", default="recent-activities.topic")
+    RECENT_ACTIVITIES_AMQ_EXCHANGE = env.str("RECENT_ACTIVITIES_AMQ_EXCHANGE", default="change-history.topic")
     RECENT_ACTIVITIES_AMQ_ROUTING_KEY = env.str("RECENT_ACTIVITIES_AMQ_ROUTING_KEY", default="")
 
 RABBITMQ_DEFAULT_USER = env.str("RABBITMQ_DEFAULT_USER")
