@@ -263,6 +263,10 @@ def generate_env():
         "PROJECTS_WITH_LARGE_DATASOURCE": "",
         "MODELS_WITH_REASONING": "",
         "INSTRUCTION_CLASSIFY_NAME": "",
+        "AI_RESOLUTION_CRITERIA_VALIDATION_NAME": (
+            "arn:aws:lambda:us-east-1:005047304657:function:lambda-validator-resolution-metric-custom"
+        ),
+        "AI_RESOLUTION_BASE_CRITERIA": "[]",
         "WA_PHONE_NUMBER": "",
         "WA_ACCESS_TOKEN": "",
         "GATEWAY_VERIFICATION_TOKEN": "",

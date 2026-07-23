@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -662,6 +663,9 @@ except FileNotFoundError:
 CONVERSATION_TOPIC_CLASSIFIER_NAME = env.str("CONVERSATION_TOPIC_CLASSIFIER_NAME")
 CONVERSATION_RESOLUTION_NAME = env.str("CONVERSATION_RESOLUTION_NAME")
 INSTRUCTION_CLASSIFY_NAME = env.str("INSTRUCTION_CLASSIFY_NAME")
+AI_RESOLUTION_CRITERIA_VALIDATION_NAME = env.str("AI_RESOLUTION_CRITERIA_VALIDATION_NAME", default="")
+_ai_resolution_base_criteria = env.str("AI_RESOLUTION_BASE_CRITERIA", default="").strip()
+AI_RESOLUTION_BASE_CRITERIA = json.loads(_ai_resolution_base_criteria) if _ai_resolution_base_criteria else []
 AGENT_UUID_CSAT = env.str("AGENT_UUID_CSAT")
 AGENT_UUID_NPS = env.str("AGENT_UUID_NPS")
 

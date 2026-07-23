@@ -9,3 +9,36 @@ class ProjectAuthorizationDenied(APIException):
     status_code = 403
     default_detail = "You do not have permission to perform this action."
     default_code = "permission_denied"
+
+
+class ResolutionCriterionNotFound(Exception):
+    pass
+
+
+class UnauthorizedBaseCriterionChange(Exception):
+    pass
+
+
+class ResolutionCriterionValidationError(Exception):
+    def __init__(self, code: str, message: str, rules: list | None = None):
+        self.code = code
+        self.message = message
+        self.rules = rules or []
+        super().__init__(message)
+
+
+class ResolutionCriterionLimitReached(Exception):
+    def __init__(
+        self,
+        code: str = "CRITERION_LIMIT_REACHED",
+        message: str = "A project can have at most 10 custom criteria",
+    ):
+        self.code = code
+        self.message = message
+        super().__init__(message)
+
+
+class LambdaValidationFailedError(Exception):
+    def __init__(self, message: str = "The criterion could not be validated due to a technical issue"):
+        self.message = message
+        super().__init__(message)
