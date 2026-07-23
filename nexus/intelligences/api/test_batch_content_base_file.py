@@ -101,13 +101,18 @@ class BatchContentBaseFileViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, 201)
         content = response.json()
         self.assertEqual(len(content["files"]), 2)
+        mock_bedrock_cls.assert_called_with(
+            project_uuid=str(self.project.uuid),
+            force_direct_ingest=True,
+        )
         mock_batch_submit.assert_called_once()
         submitted_filenames = mock_batch_submit.call_args.args[2]
         self.assertEqual(submitted_filenames, ["file-a.txt", "file-b.txt"])
 
+    @patch("nexus.task_managers.file_manager.celery_file_manager.trigger_bedrock_ingestion.delay")
     @patch("nexus.task_managers.file_manager.celery_file_manager.direct_ingest_batch_submit.delay")
     @patch("nexus.task_managers.file_database.bedrock.BedrockFileDatabase")
-    def test_batch_create_accepts_job_strategy(self, mock_bedrock_cls, mock_batch_submit):
+    def test_batch_create_respects_job_strategy(self, mock_bedrock_cls, mock_batch_submit, mock_trigger_ingestion):
         self.project.bedrock_ingestion_strategy = Project.BEDROCK_INGESTION_JOB
         self.project.save(update_fields=["bedrock_ingestion_strategy"])
 
@@ -125,6 +130,8 @@ class BatchContentBaseFileViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, 201)
         mock_bedrock_cls.assert_called_with(
             project_uuid=str(self.project.uuid),
-            force_direct_ingest=True,
+            force_direct_ingest=False,
         )
-        mock_batch_submit.assert_called_once()
+        mock_batch_submit.assert_not_called()
+        mock_trigger_ingestion.assert_called_once()
+        self.assertEqual(mock_trigger_ingestion.call_args.kwargs["project_uuid"], str(self.project.uuid))
