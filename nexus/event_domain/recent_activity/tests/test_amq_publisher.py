@@ -1,11 +1,12 @@
 from unittest.mock import MagicMock, patch
 
+import pendulum
 from django.test import TestCase, override_settings
 
 from nexus.event_domain.recent_activity.create import create_recent_activity
 from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
 from nexus.event_domain.recent_activity.recent_activity_amq import (
-    _payload_from_recent_activity,
+    notify_change,
     publish_recent_activity_to_amq,
 )
 from nexus.logs.models import RecentActivities
@@ -18,7 +19,46 @@ class RecentActivityAmqTestCase(TestCase):
         self.project = ProjectFactory()
         self.intelligence = IntelligenceFactory(created_by=self.project.created_by, org=self.project.org)
 
-    def test_payload_from_recent_activity(self):
+    @override_settings(
+        RECENT_ACTIVITIES_AMQ_EXCHANGE="change-history.topic",
+        RECENT_ACTIVITIES_AMQ_ROUTING_KEY="",
+    )
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAPublisher")
+    def test_notify_change_sends_change_history_envelope(self, mock_publisher_cls):
+        mock_publisher = MagicMock()
+        mock_publisher_cls.return_value = mock_publisher
+        date = pendulum.datetime(2026, 5, 20, 11, 15, 0, tz="UTC")
+
+        notify_change(
+            project_uuid=str(self.project.uuid),
+            user_email=self.project.created_by.email,
+            date=date,
+            action="UPDATE",
+            entity="Project",
+            object_id=str(self.project.uuid),
+            object_name="brain_on",
+            correlation_id="req-abc-123",
+        )
+
+        mock_publisher.send_message.assert_called_once()
+        kwargs = mock_publisher.send_message.call_args.kwargs
+        self.assertEqual(kwargs["exchange"], "change-history.topic")
+        self.assertEqual(kwargs["routing_key"], "")
+
+        body = kwargs["body"]
+        self.assertEqual(body["event_type"], "nexus.project.updated")
+        self.assertEqual(body["producer"], "nexus-ai")
+        self.assertEqual(body["timestamp"], date.to_iso8601_string())
+        self.assertEqual(body["correlation_id"], "req-abc-123")
+        self.assertIn("event_id", body)
+        self.assertEqual(body["data"]["project_uuid"], str(self.project.uuid))
+        self.assertEqual(body["data"]["user_email"], self.project.created_by.email)
+        self.assertEqual(body["data"]["action"], "UPDATE")
+        self.assertEqual(body["data"]["entity"], "Project")
+        self.assertEqual(body["data"]["module"], "nexus")
+
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.notify_change")
+    def test_publish_recent_activity_maps_to_notify_change(self, mock_notify_change):
         recent_activity = RecentActivities.objects.create(
             action_model="ContentBase",
             action_type="U",
@@ -28,30 +68,15 @@ class RecentActivityAmqTestCase(TestCase):
             action_details={"name": {"old": "a", "new": "b"}},
         )
 
-        payload = _payload_from_recent_activity(recent_activity)
+        publish_recent_activity_to_amq(recent_activity=recent_activity)
 
-        self.assertEqual(payload["uuid"], str(recent_activity.uuid))
-        self.assertEqual(payload["action"], "UPDATE")
-        self.assertEqual(payload["project_uuid"], str(self.project.uuid))
-        self.assertEqual(payload["user"], self.project.created_by.email)
-
-    @override_settings(
-        RECENT_ACTIVITIES_AMQ_EXCHANGE="recent-activities.topic",
-        RECENT_ACTIVITIES_AMQ_ROUTING_KEY="nexus",
-    )
-    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAPublisher")
-    def test_publish_sends_message(self, mock_publisher_cls):
-        mock_publisher = MagicMock()
-        mock_publisher_cls.return_value = mock_publisher
-
-        body = {"action": "CREATE", "entity": "NEXUS"}
-        publish_recent_activity_to_amq(body=body)
-
-        mock_publisher.send_message.assert_called_once_with(
-            body=body,
-            exchange="recent-activities.topic",
-            routing_key="nexus",
-        )
+        mock_notify_change.assert_called_once()
+        kwargs = mock_notify_change.call_args.kwargs
+        self.assertEqual(kwargs["project_uuid"], str(self.project.uuid))
+        self.assertEqual(kwargs["user_email"], self.project.created_by.email)
+        self.assertEqual(kwargs["action"], "UPDATE")
+        self.assertEqual(kwargs["entity"], "ContentBase")
+        self.assertEqual(kwargs["object_id"], str(recent_activity.uuid))
 
     @patch("nexus.event_domain.recent_activity.create.publish_recent_activity_to_amq")
     def test_create_publishes_to_amq(self, mock_publish):
