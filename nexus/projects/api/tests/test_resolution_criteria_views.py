@@ -136,6 +136,20 @@ class TestAIResolutionCriteriaViews(TestCase):
         self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
         self.assertEqual(response.data["error"]["code"], "LAMBDA_VALIDATION_FAILED")
 
+    def test_validate_returns_internal_error_for_unexpected_failures(self):
+        self._mock_validate.side_effect = RuntimeError("db connection failed")
+
+        request = self.factory.post(
+            f"/api/{self.project_uuid}/ai-validation-criteria/",
+            {"text": "Some criterion"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = AIResolutionCriteriaValidateView.as_view()(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertEqual(response.data["error"]["code"], "INTERNAL_ERROR")
+
     def test_create_custom_criterion(self):
         request = self.factory.post(
             f"/api/{self.project_uuid}/ai-resolution-criteria/",

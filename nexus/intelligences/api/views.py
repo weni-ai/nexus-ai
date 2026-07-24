@@ -1539,9 +1539,7 @@ class RouterRetailViewSet(views.APIView):
 
         agent_data = request.data.get("agent")
 
-        instructions_objects = build_initial_retail_instruction_payload(
-            content_base, request.data.get("instructions")
-        )
+        instructions_objects = build_initial_retail_instruction_payload(content_base, request.data.get("instructions"))
 
         agent = {"agent": agent_data, "instructions": instructions_objects}
         request.data["instructions"] = instructions_objects
