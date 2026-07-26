@@ -424,7 +424,7 @@ class TemplateActionViewSetTestCase(TestCase):
             project_uuid=str(self.project.uuid),
         )
         response.render()
-        logger.info("Response content rendered", extra={"length": len(response.content or b"")})
+        logger.info("Response content rendered", f"length: {len(response.content or b'')}")
         self.assertEqual(response.status_code, 200)
 
 

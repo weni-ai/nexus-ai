@@ -61,7 +61,7 @@ class TestBedrockAdapter(TestCase):
         external_team = self.team_adapter.to_external(
             self.supervisor_dict, self.agents_dict, "Hello, how are you?", self.contact_urn, self.project.uuid
         )
-        logger.debug("External team in test", extra={"keys": list(external_team.keys())})
+        logger.debug("External team in test", f"keys: {list(external_team.keys())}")
 
     def test_handle_rationale_in_response(self):
         rationale_text = "This is a rationale text"
