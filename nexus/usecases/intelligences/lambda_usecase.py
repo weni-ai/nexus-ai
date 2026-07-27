@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 class LambdaUseCase:
     def __init__(self, region: str = None):
-        region_name = (
-            region if region else settings.AWS_BEDROCK_INLINE_TRACES_REGION or settings.AWS_BEDROCK_REGION_NAME
-        )
+        region_name = region or settings.AWS_BEDROCK_REGION_NAME
         self.boto_client = boto3.client("lambda", region_name=region_name)
         self.adapter = None
         self.task_manager = None
@@ -583,8 +581,6 @@ class LambdaUseCase:
         language: str,
         project_description: str,
     ):
-        # hotfix, hardcoded region until usecase refactoring
-        lambda_usecase = LambdaUseCase("us-east-1")
         try:
             instructions_payload = {
                 "name": name,
@@ -598,7 +594,7 @@ class LambdaUseCase:
                 "project_description": project_description,
             }
 
-            response = lambda_usecase.invoke_lambda(
+            response = self.invoke_lambda(
                 lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME), payload=instructions_payload
             )
 
