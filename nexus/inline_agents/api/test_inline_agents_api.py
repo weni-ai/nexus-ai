@@ -412,7 +412,7 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.assertIsNone(self.project.api_error_message)
 
     @mock.patch("nexus.projects.permissions._check_project_authorization")
-    def test_patch_returns_401_when_authorization_denied(self, mock_check_auth):
+    def test_patch_returns_403_when_authorization_denied(self, mock_check_auth):
         from nexus.projects.exceptions import ProjectAuthorizationDenied
 
         mock_check_auth.side_effect = ProjectAuthorizationDenied("You do not have permission to perform this action.")
@@ -423,7 +423,7 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(
             response.json(),
             {"detail": "You do not have permission to perform this action."},
