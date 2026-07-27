@@ -51,7 +51,6 @@ class AIResolutionCriteriaUseCase:
             candidate_text=normalized_text,
             exclude_criterion_id=exclude_criterion_id,
         )
-        # Validation Lambda lives in AWS_BEDROCK_INLINE_TRACES_REGION (e.g. sa-east-1).
         validation_region = settings.AWS_BEDROCK_INLINE_TRACES_REGION or settings.AWS_BEDROCK_REGION_NAME
         lambda_result = LambdaUseCase(region=validation_region).validate_resolution_criterion(user_rules=user_rules)
 
