@@ -75,7 +75,7 @@ INSTALLED_APPS = [
     "nexus.agents",
     "nexus.inline_agents",
     "nexus.reports",
-    "nexus.analytics",
+    "nexus.analytics.apps.AnalyticsConfig",
     "weni.feature_flags",
     # Observer registration - MUST be last to ensure all apps are loaded first
     "nexus.observers",
@@ -487,6 +487,16 @@ HC_ZEROSHOT_URL = env.str("HC_ZEROSHOT_URL", "")
 HC_GOLFINHO_URL = env.str("HC_GOLFINHO_URL", "")
 HC_WENI_TOKEN = env.str("HC_WENI_TOKEN", "")
 PROMETHEUS_AUTH_TOKEN = env.str("PROMETHEUS_AUTH_TOKEN", "")
+
+# Inline agent latency persistence (Plan B)
+INLINE_AGENT_LATENCY_ENABLED = env.bool("INLINE_AGENT_LATENCY_ENABLED", True)
+INLINE_AGENT_LATENCY_TARGET_MS_LOW = env.int("INLINE_AGENT_LATENCY_TARGET_MS_LOW", 15000)
+INLINE_AGENT_LATENCY_TARGET_MS_HIGH = env.int("INLINE_AGENT_LATENCY_TARGET_MS_HIGH", 20000)
+INLINE_AGENT_LATENCY_OUTLIER_MS = env.int("INLINE_AGENT_LATENCY_OUTLIER_MS", 30000)
+INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS = env.int("INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS", 2000)
+INLINE_AGENT_LATENCY_SAMPLE_RATE = env.float("INLINE_AGENT_LATENCY_SAMPLE_RATE", 0.001)
+INLINE_AGENT_LATENCY_ELEVATED_MS = env.int("INLINE_AGENT_LATENCY_ELEVATED_MS", 15000)
+INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE = env.float("INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE", 0.01)
 
 
 # Extra models

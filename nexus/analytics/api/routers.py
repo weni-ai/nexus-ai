@@ -6,6 +6,11 @@ from .views import (
     ResolutionRateIndividualView,
     UnresolvedRateView,
 )
+from .latency_views import (
+    InlineAgentLatencyOutliersView,
+    InlineAgentLatencySummaryView,
+    InlineAgentLatencyTimeseriesView,
+)
 
 urlpatterns = [
     # Average resolution rate
@@ -31,5 +36,20 @@ urlpatterns = [
         "analytics/projects/by-motor/",
         ProjectsByMotorView.as_view(),
         name="projects-by-motor",
+    ),
+    path(
+        "analytics/inline-agent-latency/summary/",
+        InlineAgentLatencySummaryView.as_view(),
+        name="inline-agent-latency-summary",
+    ),
+    path(
+        "analytics/inline-agent-latency/timeseries/",
+        InlineAgentLatencyTimeseriesView.as_view(),
+        name="inline-agent-latency-timeseries",
+    ),
+    path(
+        "analytics/inline-agent-latency/outliers/",
+        InlineAgentLatencyOutliersView.as_view(),
+        name="inline-agent-latency-outliers",
     ),
 ]

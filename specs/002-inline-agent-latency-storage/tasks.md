@@ -20,33 +20,32 @@
 
 ## Phase 2 — Data model
 
-- [ ] Add `InlineAgentLatencyHourly` model
-- [ ] Add `InlineAgentTurnOutlier` model
-- [ ] Migration: indexes + unique constraint `(project_uuid, hour_ts, execution_path, phase)`
-- [ ] Migration: outlier indexes `(project_uuid, turn_finished_at DESC)`
+- [x] Add `InlineAgentLatencyHourly` model
+- [x] Add `InlineAgentTurnOutlier` model
+- [x] Migration: indexes + unique constraint `(project_uuid, hour_ts, execution_path, phase)`
+- [x] Migration: outlier indexes `(project_uuid, turn_finished_at DESC)`
 - [ ] SQL views for Grafana (`inline_agent_latency_hourly_v`)
 
 ## Phase 3 — Write path
 
-- [ ] Create `nexus/analytics/latency_phases.py` (registry + buckets)
-- [ ] Create `nexus/analytics/latency_writer.py`
-- [ ] Wire writer into `TurnLatencyRecorder.finish()`
-- [ ] Add settings: outlier threshold, sample rate, kill switch
-- [ ] Unit tests: rollup UPSERT, outlier rules, missing project_uuid skip
+- [x] Create `nexus/analytics/latency_phases.py` (registry + buckets)
+- [x] Create `nexus/analytics/latency_writer.py`
+- [x] Wire writer into `TurnLatencyRecorder.finish()`
+- [x] Add settings: SLO targets (15s/20s/30s), outlier thresholds, sample rates (env-configurable), kill switch
+- [x] Unit tests: rollup UPSERT, outlier rules, missing project_uuid skip
 
 ## Phase 4 — Read path (API)
 
-- [ ] `latency_conversation_lookup.py` helper
-- [ ] Use cases: summary, timeseries, outliers
-- [ ] Serializers
-- [ ] API views + routes under `nexus/analytics/api/`
-- [ ] Auth: `InternalCommunicationPermission`
-- [ ] Query guardrails: max 90 days, limit cap, required `project_uuid`
-- [ ] API tests
+- [x] `latency_conversation_lookup.py` helper
+- [x] Query helpers: summary, timeseries, outliers (`latency_queries.py`)
+- [x] API views + routes under `nexus/analytics/api/`
+- [x] Auth: `InternalCommunicationPermission`
+- [x] Query guardrails: max 90 days, limit cap, required `project_uuid`
+- [x] Query unit tests
 
 ## Phase 5 — Retention
 
-- [ ] Management command `export_inline_agent_latency`
+- [x] Management command `export_inline_agent_latency` (stub — no S3 delete yet)
 - [ ] Celery beat schedule (daily)
 - [ ] Document S3 path / cold storage contract with infra
 

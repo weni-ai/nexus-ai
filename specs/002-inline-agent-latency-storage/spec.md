@@ -14,7 +14,7 @@ As a staff user, I want to see aggregated latency (avg, max, volume) for a proje
 
 **Acceptance criteria:**
 - `GET /api/analytics/inline-agent-latency/summary/` accepts `project_uuid`, `start_date`, `end_date`
-- Response includes turn counts and phase-level aggregates from rollup tables
+- Response includes turn counts, phase-level aggregates, and SLO fields: `p95_ms`, `pct_under_target_high_ms` (% turns ≤ 20s), `pct_over_max_tolerable_ms` (% turns ≥ 30s)
 - Requires `InternalCommunicationPermission` (superuser token or `can_communicate_internally`)
 - Max query range: 90 days
 - Response time target: < 200 ms p95 under normal load
@@ -68,15 +68,41 @@ As a developer adding a new execution path or phase, I can register it without a
 - `phase_ms`, `boundaries_ms`, `context` on outliers are JSONB
 - Phase list driven by code registry, not DB columns per phase
 
+## SLO & Latency Targets
+
+| Concept | Default (ms) | Purpose |
+|---------|--------------|---------|
+| **Target band** | 15 000 – 20 000 | Operational goal — track via rollups (% under 20s, P95 trend) |
+| **Max tolerable** | 30 000 | Hard ceiling — turns at or above this are unacceptable |
+| **Broker wait** | 2 000 | Separate threshold for queue/Redis issues |
+
+Rollup histogram buckets MUST include **`15000`, `20000`, `30000`** so the 15–20s band and 30s breach are visible in Grafana/API **without** storing every turn.
+
 ## Outlier Capture Rules
 
-| Condition | Store outlier |
-|-----------|---------------|
-| `status` is `failed` or `blocked` | Always |
-| `total_ms` > configurable threshold | Yes |
-| `broker_queue_wait_ms` > configurable threshold | Yes |
-| Random sample (default 0.1%) | Yes |
-| Otherwise | Rollup only |
+| Condition | Store outlier | `sample_reason` |
+|-----------|---------------|-----------------|
+| `status` is `failed` or `blocked` | Always | `failed` / `blocked` |
+| `total_ms` ≥ max tolerable (default 30 000 ms) | Always | `threshold` |
+| `broker_queue_wait_ms` > broker threshold | Always | `broker_threshold` |
+| Target band (≥ 15 000 ms and < 30 000 ms) | Configurable sample | `elevated_sample` |
+| Random sample (default 0.1%, **env-configurable**) | Yes | `random_sample` |
+| Otherwise | Rollup only | — |
+
+**Understanding the 15–20s band:** aggregate metrics come from rollups (primary). The **elevated band sample** is optional drill-down for turns between target and max tolerable — rate is tunable if volume is too high.
+
+## Configurable Settings (environment / Django)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `INLINE_AGENT_LATENCY_TARGET_MS_LOW` | `15000` | SLO band lower bound (reporting) |
+| `INLINE_AGENT_LATENCY_TARGET_MS_HIGH` | `20000` | SLO band upper bound (reporting) |
+| `INLINE_AGENT_LATENCY_OUTLIER_MS` | `30000` | Max tolerable — always capture outlier |
+| `INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS` | `2000` | Broker wait outlier threshold |
+| `INLINE_AGENT_LATENCY_SAMPLE_RATE` | `0.001` | Random sample (0.1%) — **change without deploy** if env-driven |
+| `INLINE_AGENT_LATENCY_ELEVATED_MS` | `15000` | Lower bound for elevated-band sampling |
+| `INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE` | `0.01` | Sample rate for 15s–30s band (1%); set `0` to disable |
+| `INLINE_AGENT_LATENCY_ENABLED` | `true` | Kill switch |
 
 ## Correlation Contract (nexus-conversation)
 

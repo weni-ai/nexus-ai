@@ -38,6 +38,8 @@ Staff / Grafana
 
 ### JSONB bucket schema (v1)
 
+Aligned with SLO: target band 15–20s, max tolerable 30s.
+
 ```json
 {
   "500": 0,
@@ -45,10 +47,14 @@ Staff / Grafana
   "2500": 5,
   "5000": 12,
   "10000": 3,
-  "30000": 0,
+  "15000": 8,
+  "20000": 4,
+  "30000": 1,
   "inf": 0
 }
 ```
+
+Bucket keys are upper bounds in milliseconds (same semantics as Prometheus `le` labels).
 
 ## Write Path
 
@@ -59,7 +65,7 @@ class InlineAgentLatencyWriter:
     def record_turn(self, *, project_uuid, execution_path, finished_at, status,
                     total_ms, boundaries_ms, phase_ms, correlation, context) -> None:
         self._upsert_rollups(...)
-        self._maybe_insert_outlier(...)
+        self._maybe_insert_outlier(...)  # rules: failed, >=30s, broker, elevated sample, random sample
 ```
 
 Called from `TurnLatencyRecorder.finish()` when `metrics_enabled`.
@@ -71,14 +77,22 @@ Called from `TurnLatencyRecorder.finish()` when `metrics_enabled`.
 - `BOUNDARY_METRICS` list
 - `bucket_ms(duration_ms) -> str` helper
 
-### Settings (optional)
+### Settings (`nexus/settings.py` + env)
+
+All sampling/threshold settings MUST be overridable via environment variables without code changes.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `INLINE_AGENT_LATENCY_OUTLIER_MS` | `5000` | Total ms threshold |
-| `INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS` | `2000` | Broker wait threshold |
-| `INLINE_AGENT_LATENCY_SAMPLE_RATE` | `0.001` | Random sample rate |
+| `INLINE_AGENT_LATENCY_TARGET_MS_LOW` | `15000` | SLO target band lower bound (reporting) |
+| `INLINE_AGENT_LATENCY_TARGET_MS_HIGH` | `20000` | SLO target band upper bound (reporting) |
+| `INLINE_AGENT_LATENCY_OUTLIER_MS` | `30000` | Max tolerable — always capture outlier |
+| `INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS` | `2000` | Broker wait outlier threshold |
+| `INLINE_AGENT_LATENCY_SAMPLE_RATE` | `0.001` | Global random sample (0.1%) |
+| `INLINE_AGENT_LATENCY_ELEVATED_MS` | `15000` | Elevated band lower bound (≥ this and < outlier ms) |
+| `INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE` | `0.01` | Sample rate for 15s–30s band; `0` disables |
 | `INLINE_AGENT_LATENCY_ENABLED` | `true` | Kill switch |
+
+Add placeholders to `contrib/gen_env.py` when implementing.
 
 ## Read Path
 

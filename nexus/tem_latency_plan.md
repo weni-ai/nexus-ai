@@ -85,7 +85,7 @@ One row per `(project_uuid, hour_ts, execution_path, phase)`.
 | `turn_count` | int | |
 | `sum_ms` | bigint | |
 | `max_ms` | int | |
-| `buckets` | jsonb | Histogram counts, e.g. `{"500":0,"2500":5,"5000":12,"10000":3,"inf":0}` |
+| `buckets` | jsonb | Histogram counts — must include **`15000`, `20000`, `30000`** for SLO bands |
 | `error_count` | int | |
 | `blocked_count` | int | |
 | `schema_version` | smallint | Default `1` |
@@ -112,20 +112,30 @@ One row per slow, failed, or sampled turn.
 | `phase_ms` | jsonb | Extensible phase durations |
 | `context` | jsonb | `backend`, `pipeline_version`, enums only |
 | `router_received_at` | timestamptz | Optional end-to-end later |
-| `sample_reason` | varchar | `threshold`, `failed`, `random_sample`, `adaptive_p95` |
+| `sample_reason` | varchar | `threshold`, `failed`, `blocked`, `broker_threshold`, `elevated_sample`, `random_sample` |
 | `schema_version` | smallint | |
 
 **Indexes:** `(project_uuid, turn_finished_at DESC)`, optional `(project_uuid, total_ms DESC)` on recent partitions.
+
+### SLO targets (product)
+
+| Concept | Default | Meaning |
+|---------|---------|---------|
+| **Target band** | 15 – 20 s | Where we want to operate — tracked in rollups |
+| **Max tolerable** | 30 s | Hard ceiling — not acceptable; always outlier |
 
 ### Outlier capture rules
 
 | Rule | Action |
 |------|--------|
 | `status != success` | Always insert |
-| `total_ms > threshold` (e.g. 5000–30000 ms, tunable) | Insert |
-| `broker_queue_wait_ms > threshold` | Insert |
-| Random sample (e.g. 0.1%) | Insert for baseline |
-| Adaptive: above rolling hourly P95 estimate | Insert (optional phase 1b) |
+| `total_ms >= 30_000` (max tolerable) | Always insert (`threshold`) |
+| `broker_queue_wait_ms > threshold` | Always insert |
+| `15_000 <= total_ms < 30_000` | Insert if elevated sample hits (`elevated_sample`, default 1%, configurable) |
+| Random sample | Insert (`random_sample`, default 0.1%, env-configurable) |
+| Otherwise | Rollup only |
+
+**15–20s understanding:** primarily from rollup buckets and API SLO fields (`p95_ms`, `% under 20s`). Elevated sampling gives optional drill-down in that band without storing every turn.
 
 ### Retention
 
@@ -272,6 +282,19 @@ Example tools: `latency_summary`, `latency_timeseries`, `latency_outliers`, `lat
 5. SQL views for Grafana
 6. Retention management command (export + partition drop)
 7. Tests: writer unit tests, outlier rules, API auth
+
+Add to `nexus/settings.py` (all overridable via env):
+
+| Setting | Default |
+|---------|---------|
+| `INLINE_AGENT_LATENCY_TARGET_MS_LOW` | `15000` |
+| `INLINE_AGENT_LATENCY_TARGET_MS_HIGH` | `20000` |
+| `INLINE_AGENT_LATENCY_OUTLIER_MS` | `30000` |
+| `INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS` | `2000` |
+| `INLINE_AGENT_LATENCY_SAMPLE_RATE` | `0.001` |
+| `INLINE_AGENT_LATENCY_ELEVATED_MS` | `15000` |
+| `INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE` | `0.01` |
+| `INLINE_AGENT_LATENCY_ENABLED` | `true` |
 
 **Write cost:** sync rollup UPSERT (~6–8 rows/turn) + conditional outlier INSERT. Target +2–10 ms; if pressure appears → Redis buffer + batch flush.
 
@@ -433,8 +456,8 @@ Remove workflow dead code; optional remove Prometheus metrics if unused.
 
 ## Open Questions
 
-1. Outlier threshold: fixed ms vs adaptive P95 vs both?
-2. Random sample rate: 0.1% sufficient?
+1. ~~Outlier threshold~~ — **resolved:** 30s max tolerable; 15–20s target band via rollups + elevated sample
+2. ~~Random sample rate~~ — **resolved:** default 0.1%, env-configurable; elevated band 1%, env-configurable
 3. Cold export: S3 Parquet vs Elasticsearch?
 4. Grafana: team-managed Postgres datasource vs Nexus UI only?
 5. After Phase 1 infra: % of total time in `broker_queue_wait` vs `agent_execution`?
