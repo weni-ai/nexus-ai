@@ -549,6 +549,26 @@ class ProjectApiErrorMessageViewTestCase(TestCase):
         self.project.refresh_from_db()
         self.assertIsNone(self.project.api_error_message)
 
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_returns_403_when_authorization_denied(self, mock_check_auth):
+        from nexus.projects.exceptions import ProjectAuthorizationDenied
+
+        mock_check_auth.side_effect = ProjectAuthorizationDenied("You do not have permission to perform this action.")
+
+        response = self.client.patch(
+            self.url,
+            {"error_message": "Should not be saved"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json(),
+            {"detail": "You do not have permission to perform this action."},
+        )
+        self.project.refresh_from_db()
+        self.assertIsNone(self.project.api_error_message)
+
 
 class ProjectActiveAgentsConfigViewTestCase(TestCase):
     def setUp(self):
@@ -567,8 +587,8 @@ class ProjectActiveAgentsConfigViewTestCase(TestCase):
         self.assertEqual(content, [])
 
     def test_get_returns_agent_config_with_tools(self):
-        from nexus.inline_agents.models import IntegratedAgent, Version
         from nexus.inline_agents.models import Agent as InlineAgent
+        from nexus.inline_agents.models import IntegratedAgent, Version
 
         agent = InlineAgent.objects.create(
             name="Agente de Troca e Devolução",
@@ -632,8 +652,8 @@ class ProjectActiveAgentsConfigViewTestCase(TestCase):
         self.assertEqual(param_names, {"order_id", "cpf"})
 
     def test_get_returns_empty_tools_when_agent_has_no_version(self):
-        from nexus.inline_agents.models import IntegratedAgent
         from nexus.inline_agents.models import Agent as InlineAgent
+        from nexus.inline_agents.models import IntegratedAgent
 
         agent = InlineAgent.objects.create(
             name="Agent Without Version",
@@ -654,8 +674,8 @@ class ProjectActiveAgentsConfigViewTestCase(TestCase):
         self.assertEqual(content[0]["tools"], [])
 
     def test_get_excludes_inactive_integrated_agents(self):
-        from nexus.inline_agents.models import IntegratedAgent, Version
         from nexus.inline_agents.models import Agent as InlineAgent
+        from nexus.inline_agents.models import IntegratedAgent, Version
 
         agent = InlineAgent.objects.create(
             name="Inactive Agent",

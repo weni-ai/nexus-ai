@@ -4,6 +4,7 @@ from rest_framework import permissions
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import SAFE_METHODS
 
+from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.models import Project, ProjectAuth
 from nexus.projects.permissions import (
     _is_authorized_response,
@@ -34,6 +35,10 @@ class ProjectPermission(permissions.BasePermission):
             )
         except (ProjectAuth.DoesNotExist, StopIteration):
             return False
+        except ProjectAuthorizationDenied:
+            # Propagate as 403 Forbidden (authenticated, missing permission).
+            # Do not wrap as ValidationError — that incorrectly returns 400.
+            raise
         except Exception as e:
             raise ValidationError({"detail": f"An error occurred: {str(e)}"}) from e
 
