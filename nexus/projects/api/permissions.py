@@ -1,7 +1,8 @@
 from django.conf import settings
 from rest_framework import permissions
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
+from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.models import ProjectAuth
 from nexus.projects.permissions import has_external_general_project_permission
 
@@ -27,6 +28,8 @@ class ProjectPermission(permissions.BasePermission):
             )
         except (ProjectAuth.DoesNotExist, StopIteration):
             return False
+        except ProjectAuthorizationDenied as e:
+            raise AuthenticationFailed(detail=e.detail) from e
         except Exception as e:
             raise ValidationError({"detail": f"An error occurred: {str(e)}"}) from e
 
