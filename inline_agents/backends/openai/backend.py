@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 import openai
 import pendulum
@@ -36,7 +36,6 @@ from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.legacy_formatter_pipeline import use_legacy_formatter_after_manager
 from inline_agents.backends.openai.message_context import (
     emit_context_tool_traces,
-    extract_message_context,
     inject_context_as_tool_result,
 )
 from inline_agents.backends.openai.sessions import (
@@ -226,7 +225,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
     def _ensure_conversation(
         self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str, preview: bool = False
-    ) -> Optional[object]:
+    ) -> object | None:
         """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
         # Don't create conversations in preview mode
         if preview:
@@ -308,6 +307,7 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
         manager_pipeline_version = kwargs.pop("manager_pipeline_version", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
+        injected_context = kwargs.pop("injected_context", None)
         rationale_switch = rationale_switch_cached
         progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
             contact_urn,
@@ -341,9 +341,7 @@ class OpenAIBackend(InlineAgentsBackend):
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
 
-        input_text, injected_context = extract_message_context(input_text)
-
-        supervisor: Dict[str, Any] = self.get_supervisor(
+        supervisor: dict[str, Any] = self.get_supervisor(
             use_components=use_components_cached,
             human_support=human_support_cached,
             default_supervisor_foundation_model=default_supervisor_foundation_model_cached,
@@ -639,7 +637,7 @@ class OpenAIBackend(InlineAgentsBackend):
         use_components: bool,
         stream_support: bool,
         msg_external_id: str | None = None,
-    ) -> tuple[Optional[MessageStreamingClient], Optional[StreamingSession], Optional[str]]:
+    ) -> tuple[MessageStreamingClient | None, StreamingSession | None, str | None]:
         """
         Initialize gRPC client and create a persistent streaming session.
 
@@ -761,7 +759,7 @@ class OpenAIBackend(InlineAgentsBackend):
     def _process_delta_event(
         self,
         event,
-        grpc_session: Optional[StreamingSession],
+        grpc_session: StreamingSession | None,
         delta_counter: int,
     ) -> int:
         """Process a delta event and stream it via the persistent gRPC session."""
@@ -905,11 +903,11 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
-        message_uuid: Optional[str] = None,
-        grpc_session: Optional[StreamingSession] = None,
-        formatter_agent_configurations: Optional[Dict[str, Any]] = None,
-        manager_pipeline_version: Optional[str] = None,
-        injected_context: Optional[str] = None,
+        message_uuid: str | None = None,
+        grpc_session: StreamingSession | None = None,
+        formatter_agent_configurations: dict[str, Any] | None = None,
+        manager_pipeline_version: str | None = None,
+        injected_context: str | None = None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
@@ -1120,7 +1118,7 @@ class OpenAIBackend(InlineAgentsBackend):
             final_response = result.final_output
         return final_response
 
-    def _extract_usage_from_result(self, result) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_result(self, result) -> dict[str, Any] | None:
         """Extract token usage (including cache) from openai-agents run result.
 
         Uses result.context_wrapper.usage when available. Returns a dict suitable for
@@ -1237,7 +1235,7 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.set_tag("error_type", "streaming_error")
         sentry_sdk.capture_exception(exception)
 
-    def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
+    def _set_openai_client(self, user_model_credentials: dict[str, str], model_vendor: str) -> None:
         if user_model_credentials and model_vendor.lower() == "openai":
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
