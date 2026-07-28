@@ -39,3 +39,4 @@ class ConversationSerializer(serializers.Serializer):
     nps = serializers.IntegerField(required=False, allow_null=True)
     created_at = serializers.DateTimeField(required=False, allow_null=True)
     topic = serializers.CharField(required=False, allow_null=True)
+    is_amazing = serializers.BooleanField(required=False, allow_null=True)
