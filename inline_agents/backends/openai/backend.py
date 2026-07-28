@@ -35,7 +35,6 @@ from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.legacy_formatter_pipeline import use_legacy_formatter_after_manager
 from inline_agents.backends.openai.message_context import (
     emit_context_tool_traces,
-    extract_message_context,
     inject_context_as_tool_result,
 )
 from inline_agents.backends.openai.sessions import (
@@ -307,6 +306,7 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
         manager_pipeline_version = kwargs.pop("manager_pipeline_version", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
+        injected_context = kwargs.pop("injected_context", None)
         rationale_switch = rationale_switch_cached
         progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
             contact_urn,
@@ -339,8 +339,6 @@ class OpenAIBackend(InlineAgentsBackend):
         session, session_id = self._get_session(
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
-
-        input_text, injected_context = extract_message_context(input_text)
 
         supervisor: Dict[str, Any] = self.get_supervisor(
             use_components=use_components_cached,
