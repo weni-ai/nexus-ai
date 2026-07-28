@@ -163,11 +163,15 @@ class CeleryFileManager:
         uploaded_files = []
         errors = []
 
+        project = None
+        project_uuid = None
         try:
             project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             project_uuid = str(project.uuid)
         except Exception:
-            project_uuid = None
+            pass
+
+        use_direct_ingest = bool(project and project.bedrock_ingestion_strategy == Project.BEDROCK_INGESTION_DIRECT)
 
         for uploaded_file in files:
             filename = uploaded_file.name
@@ -178,7 +182,7 @@ class CeleryFileManager:
                 extension_file,
                 user_email,
                 project_uuid=project_uuid,
-                force_direct_ingest=True,
+                force_direct_ingest=use_direct_ingest,
             )
 
             if file_database_response.status != 0:
@@ -215,12 +219,19 @@ class CeleryFileManager:
         if not uploaded_files:
             return {"message": "No files were uploaded", "errors": errors}, http_status.HTTP_500_INTERNAL_SERVER_ERROR
 
-        direct_ingest_batch_submit.delay(
-            [item["task_manager_uuid"] for item in uploaded_files],
-            content_base_uuid,
-            [item["filename"] for item in uploaded_files],
-            project_uuid=project_uuid,
-        )
+        if use_direct_ingest:
+            direct_ingest_batch_submit.delay(
+                [item["task_manager_uuid"] for item in uploaded_files],
+                content_base_uuid,
+                [item["filename"] for item in uploaded_files],
+                project_uuid=project_uuid,
+            )
+        else:
+            for item in uploaded_files:
+                trigger_bedrock_ingestion.delay(
+                    item["task_manager_uuid"],
+                    project_uuid=project_uuid,
+                )
 
         response_data = {
             "files": [

@@ -30,6 +30,7 @@ CONVERSATIONS_LIST_RESPONSE = {
             "contact_urn": "tel:+5511999999999",
             "channel_uuid": str(uuid4()),
             "topic": "General",
+            "is_amazing": False,
         }
     ],
 }
