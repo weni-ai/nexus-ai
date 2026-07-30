@@ -11,7 +11,10 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from nexus.projects.models import Project, ProjectGuardrailsConfig
-from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolService
+from nexus.usecases.guardrails.bedrock_guardrail_pool import (
+    BedrockGuardrailPoolError,
+    BedrockGuardrailPoolService,
+)
 
 _UNSET = object()
 logger = logging.getLogger(__name__)
@@ -99,7 +102,7 @@ class ProjectGuardrailsConfigUseCase:
         return merged
 
     @classmethod
-    def get_or_initialize(cls, project: Project) -> ProjectGuardrailsConfig:
+    def get_or_initialize(cls, project: Project, *, assign_pool: bool = True) -> ProjectGuardrailsConfig:
         default_blocked = cls.default_blocked_for_project(project)
         config, created = ProjectGuardrailsConfig.objects.get_or_create(
             project=project,
@@ -109,15 +112,59 @@ class ProjectGuardrailsConfigUseCase:
                 "initialized_as_new_project": default_blocked,
             },
         )
-        if created:
+        if not created:
+            default_blocked = config.initialized_as_new_project
+            merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
+            if merged_states != config.category_states:
+                config.category_states = merged_states
+                config.save(update_fields=["category_states", "modified_on"])
+
+        # GET/runtime assign the pool for blocked defaults. update_config uses
+        # assign_pool=False so message-only PATCH never resolves/creates Bedrock pools.
+        if assign_pool:
+            return cls.ensure_pool_assignment(config)
+        return config
+
+    @classmethod
+    def ensure_pool_assignment(cls, config: ProjectGuardrailsConfig) -> ProjectGuardrailsConfig:
+        """
+        Resolve and persist the Bedrock pool when categories are blocked but no
+        identifier/version is assigned yet.
+
+        Fail-open on Bedrock errors so GET / lazy init does not fail the request.
+        """
+        if not cls.has_blocked_category(config.category_states or {}):
+            return config
+        if config.bedrock_guardrail_identifier and config.bedrock_guardrail_version:
             return config
 
-        default_blocked = config.initialized_as_new_project
-        merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
-        if merged_states != config.category_states:
-            config.category_states = merged_states
-            config.save(update_fields=["category_states", "modified_on"])
+        blocked_slugs = BedrockGuardrailPoolService.blocked_slugs_from_states(config.category_states)
+        combination_key = BedrockGuardrailPoolService.combination_key(blocked_slugs)
+        try:
+            resolved = BedrockGuardrailPoolService.get_or_create_pool(config.category_states)
+        except BedrockGuardrailPoolError as exc:
+            logger.exception(
+                "Failed to assign Bedrock pool on lazy init (fail-open) project_uuid=%s combination_key=%s",
+                config.project_id,
+                combination_key,
+            )
+            sentry_sdk.capture_exception(exc)
+            return config
 
+        if resolved is None:
+            return config
+
+        config.bedrock_guardrail_pool = resolved.pool
+        config.bedrock_guardrail_identifier = resolved.pool.bedrock_guardrail_identifier
+        config.bedrock_guardrail_version = resolved.pool.bedrock_guardrail_version
+        config.save(
+            update_fields=[
+                "bedrock_guardrail_pool",
+                "bedrock_guardrail_identifier",
+                "bedrock_guardrail_version",
+                "modified_on",
+            ]
+        )
         return config
 
     @classmethod
@@ -386,7 +433,7 @@ class ProjectGuardrailsConfigUseCase:
         category_states: dict | None = None,
         blocking_message: str | None = _UNSET,
     ) -> ProjectGuardrailsConfig:
-        config = cls.get_or_initialize(project)
+        config = cls.get_or_initialize(project, assign_pool=False)
         previous_states = dict(config.category_states)
         next_states = dict(previous_states)
 
