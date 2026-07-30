@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
+import boto3
+import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from nexus.projects.models import Project, ProjectGuardrailsConfig
+from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolService
+
+_UNSET = object()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -169,13 +176,88 @@ class ProjectGuardrailsConfigUseCase:
         )
 
     @classmethod
+    def get_runtime_config_as_dict(cls, project_uuid: str) -> dict:
+        """
+        Cache-friendly runtime payload for ApplyGuardrail preprocess.
+
+        Lazy-initializes config so new-project defaults can apply without requiring
+        a prior visit to the guardrails config API.
+        """
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return {
+                "guardrailIdentifier": None,
+                "guardrailVersion": None,
+                "blocking_message": None,
+                "has_blocked_category": False,
+            }
+
+        config = cls.get_or_initialize(project)
+        message, _ = cls.effective_blocking_message(config)
+        return {
+            "guardrailIdentifier": config.bedrock_guardrail_identifier or None,
+            "guardrailVersion": config.bedrock_guardrail_version or None,
+            "blocking_message": message,
+            "has_blocked_category": cls.has_blocked_category(config.category_states or {}),
+        }
+
+    @classmethod
+    def apply_input_guardrail(
+        cls,
+        text: str,
+        runtime_config: dict | None,
+        *,
+        client=None,
+    ) -> str | None:
+        """
+        Evaluate user input with Bedrock ApplyGuardrail (source=INPUT).
+
+        Returns the project effective blocking message on GUARDRAIL_INTERVENED (Option A).
+        Returns None when the check is skipped or the input is allowed.
+        Fail-open on AWS errors (log + Sentry).
+        """
+        if not text or not text.strip():
+            return None
+        if not runtime_config:
+            return None
+        if not runtime_config.get("has_blocked_category"):
+            return None
+
+        identifier = runtime_config.get("guardrailIdentifier")
+        version = runtime_config.get("guardrailVersion")
+        if not identifier or not version:
+            logger.info(
+                "Skipping ApplyGuardrail: categories blocked but no pool identifier/version assigned",
+            )
+            return None
+
+        bedrock = client or boto3.client("bedrock-runtime", region_name=settings.AWS_BEDROCK_REGION_NAME)
+        try:
+            response = bedrock.apply_guardrail(
+                guardrailIdentifier=str(identifier),
+                guardrailVersion=str(version),
+                source="INPUT",
+                content=[{"text": {"text": text}}],
+            )
+        except Exception as exc:
+            logger.exception("ApplyGuardrail failed; allowing message (fail-open)")
+            sentry_sdk.capture_exception(exc)
+            return None
+
+        if response.get("action") != "GUARDRAIL_INTERVENED":
+            return None
+
+        # Option A: ignore Bedrock canned outputs; use project effective message.
+        return runtime_config.get("blocking_message") or settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
+
+    @classmethod
     def update_config(
         cls,
         project: Project,
         *,
         category_states: dict | None = None,
-        blocking_message: str | None = None,
-        blocking_message_provided: bool = False,
+        blocking_message: str | None = _UNSET,
     ) -> ProjectGuardrailsConfig:
         config = cls.get_or_initialize(project)
         previous_states = dict(config.category_states)
@@ -190,7 +272,7 @@ class ProjectGuardrailsConfigUseCase:
             )
 
         next_blocking_message = config.blocking_message
-        if blocking_message_provided:
+        if blocking_message is not _UNSET:
             if blocking_message is None:
                 next_blocking_message = None
             elif isinstance(blocking_message, str):
@@ -202,13 +284,35 @@ class ProjectGuardrailsConfigUseCase:
         cls.validate_blocking_message_for_states(next_blocking_message, next_states)
 
         category_states_changed = next_states != config.category_states
-        blocking_message_changed = blocking_message_provided and next_blocking_message != config.blocking_message
+        blocking_message_changed = blocking_message is not _UNSET and next_blocking_message != config.blocking_message
+
+        # Message-only PATCH must not resolve/create Bedrock pools (FR-023).
+        pool_to_assign = None
+        pool_identifier = None
+        pool_version = None
+        if category_states_changed:
+            # Resolve before local save so Bedrock failure leaves config unchanged.
+            resolved = BedrockGuardrailPoolService.get_or_create_pool(next_states)
+            if resolved is not None:
+                pool_to_assign = resolved.pool
+                pool_identifier = resolved.pool.bedrock_guardrail_identifier
+                pool_version = resolved.pool.bedrock_guardrail_version
 
         if category_states_changed or blocking_message_changed:
             update_fields = ["modified_on"]
             if category_states_changed:
                 config.category_states = next_states
-                update_fields.append("category_states")
+                config.bedrock_guardrail_pool = pool_to_assign
+                config.bedrock_guardrail_identifier = pool_identifier
+                config.bedrock_guardrail_version = pool_version
+                update_fields.extend(
+                    [
+                        "category_states",
+                        "bedrock_guardrail_pool",
+                        "bedrock_guardrail_identifier",
+                        "bedrock_guardrail_version",
+                    ]
+                )
             if blocking_message_changed:
                 config.blocking_message = next_blocking_message
                 update_fields.append("blocking_message")

@@ -285,49 +285,6 @@ def dispatch_preview(
     return response_msg if response_msg is not None else response
 
 
-def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
-    logger.debug(
-        "Guardrails complexity layer - text_len: %s, guardrail_id: %s, guardrail_version: %s",
-        len(input_text or ""),
-        guardrail_id,
-        guardrail_version,
-    )
-    try:
-        payload = {
-            "first_input": input_text,
-            "guardrail_id": guardrail_id,
-            "guardrail_version": guardrail_version,
-        }
-        response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
-            FunctionName=settings.GUARDRAILS_LAYER_LAMBDA,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(payload).encode("utf-8"),
-        )
-        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            payload = json.loads(response["Payload"].read().decode("utf-8"))
-
-            logger.debug(f"Guardrails complexity layer response - keys: {list(payload.keys())}")
-            response = payload
-            status_code = payload.get("statusCode")
-            if status_code == 200:
-                guardrails_message = response.get("body", {}).get("message")
-                return guardrails_message
-            else:
-                return None
-
-    except Exception as e:
-        sentry_sdk.capture_exception(e)
-        sentry_sdk.set_context(
-            "extra_data",
-            {
-                "input_text": input_text,
-                "guardrail_id": guardrail_id,
-                "guardrail_version": guardrail_version,
-            },
-        )
-        return None
-
-
 class UnsafeMessageException(Exception):
     message: str
 
@@ -336,10 +293,16 @@ class UnsafeMessageException(Exception):
         super().__init__(self.message)
 
 
-def _preprocess_message_input(message: dict, backend: str) -> tuple[dict, str | None, bool]:
+def _preprocess_message_input(
+    message: dict,
+    backend: str,
+    guardrails_config: dict | None = None,
+) -> tuple[dict, str | None, bool]:
     """
-    Handles complexity layer, attachments, and product items.
+    Handles project ApplyGuardrail gate, complexity layer, attachments, and product items.
     """
+    from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
+
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
@@ -348,14 +311,6 @@ def _preprocess_message_input(message: dict, backend: str) -> tuple[dict, str | 
 
     if backend == "BedrockBackend":
         foundation_model = complexity_layer(text)
-    else:
-        pass
-        # guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        # guardrails_message = guardrails_complexity_layer(
-        #     text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
-        # )
-        # if guardrails_message:
-        #     raise UnsafeMessageException(guardrails_message)
 
     text, turn_off_rationale = handle_attachments(text=text, attachments=attachments)
 
@@ -364,6 +319,12 @@ def _preprocess_message_input(message: dict, backend: str) -> tuple[dict, str | 
 
     if overwrite_message:
         text = handle_overwrite_message(text, overwrite_message)
+
+    # Evaluate the final composed text (attachments/product_items/overwrite included).
+    # Do not use GUARDRAILS_LAYER_LAMBDA for this feature.
+    blocking_message = ProjectGuardrailsConfigUseCase.apply_input_guardrail(text, guardrails_config)
+    if blocking_message:
+        raise UnsafeMessageException(blocking_message)
 
     if not text.strip():
         raise EmptyTextException(
@@ -603,7 +564,9 @@ def start_inline_agents(  # noqa: C901
                 flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
                 processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(
-                    message, agents_backend
+                    message,
+                    agents_backend,
+                    guardrails_config=guardrails_config,
                 )
                 foundation_model = apply_simulation_foundation_model_override(
                     simulation_channel_effective,

@@ -9,7 +9,9 @@ from rest_framework.test import APIClient
 
 from nexus.projects.models import Project, ProjectAuthorizationRole, ProjectGuardrailsConfig
 from nexus.projects.permissions import has_project_permission
+from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolError
 from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
+from nexus.usecases.guardrails.tests.guardrail_test_helpers import fake_pool_resolve as _fake_pool_resolve
 from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -37,7 +39,14 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         self._mock_ext_permission.side_effect = _local_permission
         self.client.force_authenticate(user=self.user)
 
+        self._pool_patcher = mock.patch(
+            "nexus.usecases.guardrails.project_guardrails_config.BedrockGuardrailPoolService.get_or_create_pool",
+            side_effect=_fake_pool_resolve,
+        )
+        self._mock_get_or_create_pool = self._pool_patcher.start()
+
     def tearDown(self):
+        self._pool_patcher.stop()
         self._patcher.stop()
 
     def test_get_lazy_init_new_project_blocks_all(self):
@@ -109,6 +118,7 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
 
     def test_patch_blocking_message_success(self):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
+        self._mock_get_or_create_pool.reset_mock()
 
         response = self.client.patch(
             self.url,
@@ -119,6 +129,42 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["blocking_message_is_custom"])
         self.assertEqual(response.data["blocking_message"], "Custom refusal message")
+        self._mock_get_or_create_pool.assert_not_called()
+
+    def test_patch_category_assigns_pool_on_config(self):
+        ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
+        ProjectGuardrailsConfig.objects.filter(project=self.project).update(
+            category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+        )
+
+        response = self.client.patch(
+            self.url,
+            {"category_states": {"politics": True}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        config = ProjectGuardrailsConfig.objects.get(project=self.project)
+        self.assertIsNotNone(config.bedrock_guardrail_pool_id)
+        self.assertTrue(config.bedrock_guardrail_identifier)
+
+    def test_patch_category_bedrock_failure_returns_502_without_saving(self):
+        ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
+        ProjectGuardrailsConfig.objects.filter(project=self.project).update(
+            category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+        )
+        self._mock_get_or_create_pool.side_effect = BedrockGuardrailPoolError("AccessDenied")
+
+        response = self.client.patch(
+            self.url,
+            {"category_states": {"politics": True}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        config = ProjectGuardrailsConfig.objects.get(project=self.project)
+        self.assertFalse(config.category_states["politics"])
+        self.assertIsNone(config.bedrock_guardrail_pool_id)
 
     def test_patch_blocking_message_over_limit_returns_400(self):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)

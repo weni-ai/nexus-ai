@@ -27,6 +27,7 @@ from nexus.task_managers.file_database.opensearch_knowledge_base import (
     OpenSearchKnowledgeBaseError,
     list_chunks,
 )
+from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolError
 from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.intelligences.exceptions import ContentBaseDoesNotExist
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -885,16 +886,23 @@ class ProjectGuardrailsConfigView(APIView):
         data = serializer.validated_data
 
         try:
-            config = ProjectGuardrailsConfigUseCase.update_config(
-                project,
-                category_states=data.get("category_states"),
-                blocking_message=data.get("blocking_message"),
-                blocking_message_provided="blocking_message" in request.data,
-            )
+            update_kwargs = {"category_states": data.get("category_states")}
+            if "blocking_message" in data:
+                update_kwargs["blocking_message"] = data.get("blocking_message")
+            config = ProjectGuardrailsConfigUseCase.update_config(project, **update_kwargs)
         except DjangoValidationError as exc:
             return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+        except BedrockGuardrailPoolError as exc:
+            return Response(
+                {"detail": "Could not resolve Bedrock guardrail pool.", "error": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-        payload = ProjectGuardrailsConfigUseCase.to_payload(config, writable=True)
+        payload = ProjectGuardrailsConfigUseCase.to_payload(
+            config,
+            writable=self._is_writable(request.user, project),
+        )
+        notify_async(event="cache_invalidation:project", project=project)
         return Response(payload.as_dict(), status=status.HTTP_200_OK)
 
     @staticmethod

@@ -279,7 +279,12 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     )
 
     # Preprocess message
-    processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
+    guardrails_config = ctx.cached_data.guardrails_config if ctx.cached_data else None
+    processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(
+        ctx.message,
+        ctx.agents_backend,
+        guardrails_config=guardrails_config,
+    )
     foundation_model = apply_simulation_foundation_model_override(
         ctx.simulation_channel,
         ctx.project_uuid or "",

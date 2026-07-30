@@ -21,7 +21,7 @@ class CacheService:
         "data": {"ttl": PROJECT_DATA_TTL, "key_suffix": "data"},
         "content_base": {"ttl": CONTENT_BASE_TTL, "key_suffix": "content_base"},
         "team": {"ttl": TEAM_DATA_TTL, "key_suffix": "team", "requires_backend": True},
-        "guardrails": {"ttl": GUARDRAILS_TTL, "key_suffix": "guardrails"},
+        "guardrails": {"ttl": GUARDRAILS_TTL, "key_suffix": "guardrails_v2"},
         "inline_agent_config": {"ttl": INLINE_AGENT_CONFIG_TTL, "key_suffix": "inline_agent_config"},
         "instructions": {"ttl": INSTRUCTIONS_TTL, "key_suffix": "instructions"},
         "agent": {"ttl": AGENT_DATA_TTL, "key_suffix": "agent"},
@@ -66,7 +66,11 @@ class CacheService:
 
     def _record_cache_metric(self, cache_key: str, *, hit: bool) -> None:
         try:
-            from router.tasks.latency_context import cache_type_from_key, project_uuid_from_cache_key, record_cache_access
+            from router.tasks.latency_context import (
+                cache_type_from_key,
+                project_uuid_from_cache_key,
+                record_cache_access,
+            )
 
             project_uuid = project_uuid_from_cache_key(cache_key)
             cache_type = cache_type_from_key(cache_key)
@@ -84,7 +88,7 @@ class CacheService:
         """Get all project data in one cache operation (composite key)."""
         composite_key = f"project:{project_uuid}:all"
         cached = self.cache_repository.get(composite_key)
-        if cached:
+        if cached and self._is_valid_guardrails_payload(cached.get("guardrails")):
             return cached
 
         # Cache miss - fetch all data
@@ -142,10 +146,20 @@ class CacheService:
         cache_key = self._get_cache_key(project_uuid, "team", agents_backend)
         return self._get_or_create(cache_key, fetch_func, self.TEAM_DATA_TTL, project_uuid, agents_backend)
 
+    def _is_valid_guardrails_payload(self, payload: Any) -> bool:
+        """Reject legacy cache entries missing the ApplyGuardrail runtime schema."""
+        return isinstance(payload, dict) and "has_blocked_category" in payload
+
     def get_guardrails_config(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Dict:
         """Get guardrails configuration from cache or fetch and cache."""
         cache_key = self._get_cache_key(project_uuid, "guardrails")
-        return self._get_or_create(cache_key, fetch_func, self.GUARDRAILS_TTL, project_uuid)
+        cached = self.cache_repository.get(cache_key)
+        if cached and self._is_valid_guardrails_payload(cached):
+            return cached
+
+        data = fetch_func(project_uuid)
+        self.cache_repository.set(cache_key, data, self.GUARDRAILS_TTL)
+        return data
 
     def get_inline_agent_config(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Optional[Dict]:
         """Get inline agent configuration from cache or fetch and cache."""

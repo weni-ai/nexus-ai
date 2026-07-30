@@ -307,16 +307,6 @@ if USE_EDA:
     EDA_BROKER_PASSWORD = env("EDA_BROKER_PASSWORD", default="guest")
     EDA_WAIT_TIME_RETRY = env("EDA_WAIT_TIME_RETRY", default=5)
 
-    AMQ_BROKER_HOST = env.str("AMQ_BROKER_HOST", default="localhost")
-    AMQ_BROKER_USER = env.str("AMQ_BROKER_USER", default="guest")
-    AMQ_BROKER_PASSWORD = env.str("AMQ_BROKER_PASSWORD", default="guest")
-    AMQ_VIRTUAL_HOST = env.str("AMQ_VIRTUAL_HOST", default="/")
-    AMQ_BROKER_PORT = env.int("AMQ_BROKER_PORT", default=5671)
-    AMQ_BROKER_SSL_SERVER_HOSTNAME = env.str("AMQ_BROKER_SSL_SERVER_HOSTNAME", default=None)
-    AMQ_BROKER_HEARTBEAT = env.int("AMQ_BROKER_HEARTBEAT", default=300)
-
-    PROJECT_AMQ_QUEUE_NAME = env.str("PROJECT_AMQ_QUEUE_NAME", default="nexus-ai.projects.queue")
-
 RABBITMQ_DEFAULT_USER = env.str("RABBITMQ_DEFAULT_USER")
 RABBITMQ_DEFAULT_PASS = env.str("RABBITMQ_DEFAULT_PASS")
 
@@ -513,9 +503,6 @@ AWS_BEDROCK_LARGE_DATASOURCE_ID = env.str("AWS_BEDROCK_LARGE_DATASOURCE_ID")
 AWS_BEDROCK_DIRECT_DATASOURCE_ID = env.str("AWS_BEDROCK_DIRECT_DATASOURCE_ID", default="")
 AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX = env.str("AWS_BEDROCK_DIRECT_INGEST_S3_PREFIX", default="direct-ingest/")
 AWS_BEDROCK_KNOWLEDGE_BASE_ID = env.str("AWS_BEDROCK_KNOWLEDGE_BASE_ID")
-AWS_BEDROCK_OPENSEARCH_INDEX_NAME = env.str(
-    "AWS_BEDROCK_OPENSEARCH_INDEX_NAME", default="bedrock-knowledge-base-default-index"
-)
 AWS_BEDROCK_BUCKET_NAME = env.str("AWS_BEDROCK_BUCKET_NAME")
 AWS_BEDROCK_ACCESS_KEY = env.str("AWS_BEDROCK_ACCESS_KEY")
 AWS_BEDROCK_SECRET_KEY = env.str("AWS_BEDROCK_SECRET_KEY")
@@ -600,7 +587,7 @@ if not CREDENTIAL_ENCRYPTION_KEY and not TESTING:
     CREDENTIAL_ENCRYPTION_KEY = Fernet.generate_key()
 
 BEDROCK_FILE_SIZE_LIMIT = env.int("BEDROCK_FILE_SIZE_LIMIT", 50)
-BEDROCK_INGESTION_JOB_ENABLED = env.bool("BEDROCK_INGESTION_JOB_ENABLED", True)
+BEDROCK_INGESTION_JOB_ENABLED = env.bool("BEDROCK_INGESTION_JOB_ENABLED", False)
 BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST = env.int("BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST", 25)
 
 
@@ -692,56 +679,78 @@ GUARDRAIL_CATEGORY_CATALOG = [
         "slug": "politics",
         "name": "Politics",
         "description": "Political topics, elections, and government affairs",
+        "bedrock_definition": "Political topics, elections, parties, and government affairs",
+        "bedrock_examples": ["Who should I vote for?", "What do you think of the government?"],
     },
     {
         "slug": "physical_health",
         "name": "Physical health",
         "description": "Medical advice, diagnoses, and physical health conditions",
+        "bedrock_definition": "Medical advice, diagnoses, symptoms, and physical health conditions",
+        "bedrock_examples": ["Do I have diabetes?", "What medicine should I take?"],
     },
     {
         "slug": "sexual_content",
         "name": "Sexual content",
         "description": "Explicit or adult sexual material",
+        "bedrock_definition": "Explicit or adult sexual material and erotic content",
+        "bedrock_examples": ["Write an erotic story", "Describe explicit sexual acts"],
     },
     {
         "slug": "bias",
         "name": "Bias",
         "description": "Discriminatory or biased statements about groups",
+        "bedrock_definition": "Discriminatory or prejudiced statements about groups by identity or origin",
+        "bedrock_examples": ["Why are people from X inferior?", "Stereotypes about a nationality"],
     },
     {
         "slug": "hate",
         "name": "Hate",
         "description": "Hate speech and incitement against individuals or groups",
+        "bedrock_definition": "Hate speech and incitement against individuals or groups",
+        "bedrock_examples": ["I hate that group", "How do I attack people like them?"],
     },
     {
         "slug": "religion",
         "name": "Religion",
         "description": "Religious beliefs, practices, and institutions",
+        "bedrock_definition": "Religious doctrines, practices, proselytism, and faith debates",
+        "bedrock_examples": ["Which religion is true?", "Pray for me in your religion"],
     },
     {
         "slug": "suicide",
         "name": "Suicide",
         "description": "Suicide methods, encouragement, or glorification",
+        "bedrock_definition": "Suicide methods, encouragement, or glorification",
+        "bedrock_examples": ["How can I kill myself?", "Best method for suicide"],
     },
     {
         "slug": "self_harm",
         "name": "Self-harm",
         "description": "Self-injury methods or encouragement",
+        "bedrock_definition": "Non-suicidal self-injury methods or encouragement",
+        "bedrock_examples": ["How do people self-harm?", "Ways to cut myself"],
     },
     {
         "slug": "beliefs",
         "name": "Beliefs",
         "description": "Personal belief systems and ideological debates",
+        "bedrock_definition": "Personal belief systems, ideologies, and worldview debates",
+        "bedrock_examples": ["Defend my ideology", "Which worldview is correct?"],
     },
     {
         "slug": "gender_identity",
         "name": "Gender identity",
         "description": "Gender identity and expression topics",
+        "bedrock_definition": "Gender identity, expression, and transition topics",
+        "bedrock_examples": ["Is gender identity real?", "Tell me how to transition"],
     },
     {
         "slug": "sexual_relations",
         "name": "Sexual relations",
         "description": "Sexual relationships and intimacy topics",
+        "bedrock_definition": "Sexual relationships, intimacy, and romantic/sexual behavior advice",
+        "bedrock_examples": ["How do I seduce someone?", "Advice on sexual relationships"],
     },
 ]
 
@@ -749,6 +758,23 @@ GUARDRAILS_DEFAULT_BLOCKING_MESSAGE = env.str(
     "GUARDRAILS_DEFAULT_BLOCKING_MESSAGE",
     default="This message can't be processed because it may contain sensitive content.",
 )
+
+# Baseline policies applied to every pool Guardrail (Models guidance). Not project-configurable.
+GUARDRAILS_BEDROCK_CONTENT_FILTERS = [
+    {"type": "SEXUAL", "inputStrength": "HIGH", "outputStrength": "HIGH"},
+    {"type": "VIOLENCE", "inputStrength": "HIGH", "outputStrength": "HIGH"},
+    {"type": "HATE", "inputStrength": "HIGH", "outputStrength": "HIGH"},
+    {"type": "MISCONDUCT", "inputStrength": "HIGH", "outputStrength": "HIGH"},
+    {"type": "PROMPT_ATTACK", "inputStrength": "HIGH", "outputStrength": "NONE"},
+    {"type": "INSULTS", "inputStrength": "MEDIUM", "outputStrength": "MEDIUM"},
+]
+
+GUARDRAILS_BEDROCK_PII_ENTITIES = [
+    {"type": "EMAIL", "action": "BLOCK"},
+    {"type": "PHONE", "action": "BLOCK"},
+    {"type": "CREDIT_DEBIT_CARD_NUMBER", "action": "BLOCK"},
+    {"type": "ADDRESS", "action": "ANONYMIZE"},
+]
 
 _guardrails_deploy_at_raw = env.str("GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT", default="2026-07-01")
 _guardrails_deploy_at = datetime.fromisoformat(_guardrails_deploy_at_raw)
