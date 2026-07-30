@@ -145,6 +145,31 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertEqual(updated.category_states, config.category_states)
         self._mock_get_or_create_pool.assert_not_called()
 
+    def test_get_runtime_config_as_dict_includes_pool_and_message(self):
+        project = ProjectFactory()
+        self.use_case.get_or_initialize(project)
+        ProjectGuardrailsConfig.objects.filter(project=project).update(
+            category_states=self.use_case.build_default_category_states(blocked=False),
+        )
+        config = self.use_case.update_config(
+            project,
+            category_states={"politics": True},
+            blocking_message="Custom runtime message",
+            blocking_message_provided=True,
+        )
+
+        runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
+
+        self.assertTrue(runtime["has_blocked_category"])
+        self.assertEqual(runtime["guardrailIdentifier"], config.bedrock_guardrail_identifier)
+        self.assertEqual(runtime["guardrailVersion"], "1")
+        self.assertEqual(runtime["blocking_message"], "Custom runtime message")
+
+    def test_get_runtime_config_as_dict_missing_config_skips_gate(self):
+        runtime = self.use_case.get_runtime_config_as_dict("00000000-0000-0000-0000-000000000000")
+        self.assertFalse(runtime["has_blocked_category"])
+        self.assertIsNone(runtime["guardrailIdentifier"])
+
     def test_update_category_assigns_pool_identifier_and_version(self):
         project = ProjectFactory()
         self.use_case.get_or_initialize(project)
@@ -209,6 +234,73 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         config = ProjectGuardrailsConfig.objects.get(project=project)
         self.assertFalse(config.category_states["politics"])
         self.assertIsNone(config.bedrock_guardrail_pool_id)
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+    )
+    def test_apply_input_guardrail_skips_when_no_blocked_categories(self):
+        client = MagicMock()
+        result = ProjectGuardrailsConfigUseCase.apply_input_guardrail(
+            "Talk about politics",
+            {
+                "has_blocked_category": False,
+                "guardrailIdentifier": "gr-1",
+                "guardrailVersion": "1",
+                "blocking_message": "Custom",
+            },
+            client=client,
+        )
+        self.assertIsNone(result)
+        client.apply_guardrail.assert_not_called()
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+    )
+    def test_apply_input_guardrail_intervene_returns_project_message(self):
+        client = MagicMock()
+        client.apply_guardrail.return_value = {
+            "action": "GUARDRAIL_INTERVENED",
+            "outputs": [{"text": "Bedrock canned text"}],
+        }
+        result = ProjectGuardrailsConfigUseCase.apply_input_guardrail(
+            "Who should I vote for?",
+            {
+                "has_blocked_category": True,
+                "guardrailIdentifier": "gr-1",
+                "guardrailVersion": "1",
+                "blocking_message": "Project refusal message",
+            },
+            client=client,
+        )
+        self.assertEqual(result, "Project refusal message")
+        self.assertEqual(client.apply_guardrail.call_args.kwargs["source"], "INPUT")
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+    )
+    def test_apply_input_guardrail_fail_open_on_bedrock_error(self):
+        from botocore.exceptions import ClientError
+
+        client = MagicMock()
+        client.apply_guardrail.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "denied"}},
+            "ApplyGuardrail",
+        )
+        with patch("nexus.usecases.guardrails.project_guardrails_config.sentry_sdk.capture_exception"):
+            result = ProjectGuardrailsConfigUseCase.apply_input_guardrail(
+                "Hello",
+                {
+                    "has_blocked_category": True,
+                    "guardrailIdentifier": "gr-1",
+                    "guardrailVersion": "1",
+                    "blocking_message": "Custom",
+                },
+                client=client,
+            )
+        self.assertIsNone(result)
 
 
 class GuardrailsConfigAdminPermissionTestCase(TestCase):

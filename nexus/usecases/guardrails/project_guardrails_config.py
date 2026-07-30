@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
+import boto3
+import sentry_sdk
+from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -10,6 +14,7 @@ from nexus.projects.models import Project, ProjectGuardrailsConfig
 from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolService
 
 _UNSET = object()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -170,6 +175,84 @@ class ProjectGuardrailsConfigUseCase:
             blocking_message_is_custom=is_custom,
             writable=writable,
         )
+
+    @classmethod
+    def get_runtime_config_as_dict(cls, project_uuid: str) -> dict:
+        """
+        Cache-friendly runtime payload for ApplyGuardrail preprocess.
+
+        Does not lazy-initialize config rows; missing config means skip gate.
+        """
+        try:
+            config = ProjectGuardrailsConfig.objects.get(project__uuid=project_uuid)
+        except ProjectGuardrailsConfig.DoesNotExist:
+            return {
+                "guardrailIdentifier": None,
+                "guardrailVersion": None,
+                "blocking_message": None,
+                "has_blocked_category": False,
+            }
+
+        message, _ = cls.effective_blocking_message(config)
+        return {
+            "guardrailIdentifier": config.bedrock_guardrail_identifier or None,
+            "guardrailVersion": config.bedrock_guardrail_version or None,
+            "blocking_message": message,
+            "has_blocked_category": cls.has_blocked_category(config.category_states or {}),
+        }
+
+    @classmethod
+    def apply_input_guardrail(
+        cls,
+        text: str,
+        runtime_config: dict | None,
+        *,
+        client=None,
+    ) -> str | None:
+        """
+        Evaluate user input with Bedrock ApplyGuardrail (source=INPUT).
+
+        Returns the project effective blocking message on GUARDRAIL_INTERVENED (Option A).
+        Returns None when the check is skipped or the input is allowed.
+        Fail-open on AWS errors (log + Sentry).
+        """
+        if not text or not text.strip():
+            return None
+        if not runtime_config:
+            return None
+        if not runtime_config.get("has_blocked_category"):
+            return None
+
+        identifier = runtime_config.get("guardrailIdentifier")
+        version = runtime_config.get("guardrailVersion")
+        if not identifier or not version:
+            logger.info(
+                "Skipping ApplyGuardrail: categories blocked but no pool identifier/version assigned",
+            )
+            return None
+
+        bedrock = client or boto3.client("bedrock-runtime", region_name=settings.AWS_BEDROCK_REGION_NAME)
+        try:
+            response = bedrock.apply_guardrail(
+                guardrailIdentifier=str(identifier),
+                guardrailVersion=str(version),
+                source="INPUT",
+                content=[{"text": {"text": text}}],
+            )
+        except (ClientError, BotoCoreError) as exc:
+            logger.exception("ApplyGuardrail failed; allowing message (fail-open)")
+            sentry_sdk.capture_exception(exc)
+            return None
+        except Exception as exc:
+            logger.exception("Unexpected ApplyGuardrail error; allowing message (fail-open)")
+            sentry_sdk.capture_exception(exc)
+            return None
+
+        if response.get("action") != "GUARDRAIL_INTERVENED":
+            return None
+
+        # Option A: ignore Bedrock canned outputs; use project effective message.
+        return runtime_config.get("blocking_message") or settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
 
     @classmethod
     def update_config(
