@@ -77,6 +77,9 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         ProjectGuardrailsConfig.objects.filter(project=self.project).update(
             category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
 
         response = self.client.patch(
@@ -135,6 +138,9 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         ProjectGuardrailsConfig.objects.filter(project=self.project).update(
             category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
 
         response = self.client.patch(
@@ -152,6 +158,9 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         ProjectGuardrailsConfig.objects.filter(project=self.project).update(
             category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
         self._mock_get_or_create_pool.side_effect = BedrockGuardrailPoolError("AccessDenied")
 
