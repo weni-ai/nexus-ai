@@ -129,7 +129,6 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         updated = self.use_case.update_config(
             project,
             blocking_message="Brand refusal",
-            blocking_message_provided=True,
         )
 
         self.assertEqual(updated.blocking_message, "Brand refusal")

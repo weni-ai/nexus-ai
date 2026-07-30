@@ -836,12 +836,10 @@ class ProjectGuardrailsConfigView(APIView):
         data = serializer.validated_data
 
         try:
-            config = ProjectGuardrailsConfigUseCase.update_config(
-                project,
-                category_states=data.get("category_states"),
-                blocking_message=data.get("blocking_message"),
-                blocking_message_provided="blocking_message" in serializer.validated_data,
-            )
+            update_kwargs = {"category_states": data.get("category_states")}
+            if "blocking_message" in data:
+                update_kwargs["blocking_message"] = data.get("blocking_message")
+            config = ProjectGuardrailsConfigUseCase.update_config(project, **update_kwargs)
         except DjangoValidationError as exc:
             return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
 
