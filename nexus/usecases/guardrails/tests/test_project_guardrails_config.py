@@ -172,7 +172,13 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     def test_update_message_only_leaves_category_states(self):
         project = ProjectFactory()
-        config = self.use_case.get_or_initialize(project)
+        ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            initialized_as_new_project=True,
+            bedrock_guardrail_identifier="",
+            bedrock_guardrail_version="",
+        )
         self._mock_get_or_create_pool.reset_mock()
 
         updated = self.use_case.update_config(
@@ -181,7 +187,8 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         )
 
         self.assertEqual(updated.blocking_message, "Brand refusal")
-        self.assertEqual(updated.category_states, config.category_states)
+        self.assertTrue(all(updated.category_states.values()))
+        self.assertFalse(updated.bedrock_guardrail_identifier)
         self._mock_get_or_create_pool.assert_not_called()
 
     def test_get_runtime_config_as_dict_includes_pool_and_message(self):
