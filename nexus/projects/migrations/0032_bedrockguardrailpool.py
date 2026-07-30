@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0030_projectguardrailsconfig"),
+        ("projects", "0031_projectguardrailsconfig"),
     ]
 
     operations = [
