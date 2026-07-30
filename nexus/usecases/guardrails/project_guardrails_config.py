@@ -8,6 +8,8 @@ from django.utils import timezone
 
 from nexus.projects.models import Project, ProjectGuardrailsConfig
 
+_UNSET = object()
+
 
 @dataclass(frozen=True)
 class GuardrailsConfigPayload:
@@ -174,8 +176,7 @@ class ProjectGuardrailsConfigUseCase:
         project: Project,
         *,
         category_states: dict | None = None,
-        blocking_message: str | None = None,
-        blocking_message_provided: bool = False,
+        blocking_message: str | None = _UNSET,
     ) -> ProjectGuardrailsConfig:
         config = cls.get_or_initialize(project)
         previous_states = dict(config.category_states)
@@ -190,7 +191,7 @@ class ProjectGuardrailsConfigUseCase:
             )
 
         next_blocking_message = config.blocking_message
-        if blocking_message_provided:
+        if blocking_message is not _UNSET:
             if blocking_message is None:
                 next_blocking_message = None
             elif isinstance(blocking_message, str):
@@ -202,7 +203,7 @@ class ProjectGuardrailsConfigUseCase:
         cls.validate_blocking_message_for_states(next_blocking_message, next_states)
 
         category_states_changed = next_states != config.category_states
-        blocking_message_changed = blocking_message_provided and next_blocking_message != config.blocking_message
+        blocking_message_changed = blocking_message is not _UNSET and next_blocking_message != config.blocking_message
 
         if category_states_changed or blocking_message_changed:
             update_fields = ["modified_on"]
