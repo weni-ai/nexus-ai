@@ -46,7 +46,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
             # Lazy imports to avoid circular dependencies
             # (usecases/repositories may import nexus.events, which imports this module)
             from nexus.inline_agents.team.repository import ORMTeamRepository
-            from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
+            from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
             from router.services.cache_service import CacheService
             from router.services.manager_pipeline_version import manager_pipeline_version_from_project
@@ -91,7 +91,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "project": lambda uuid: _project_to_dict(project_obj),
                     "content_base": lambda uuid: _content_base_to_dict(content_base_obj),
                     "team": lambda uuid, backend: team,
-                    "guardrails": lambda uuid: GuardrailsUsecase.get_guardrail_as_dict(uuid),
+                    "guardrails": lambda uuid: ProjectGuardrailsConfigUseCase.get_runtime_config_as_dict(uuid),
                     "inline_agent_config": lambda uuid: inline_agent_config_dict_for_cache(inline_agent_config),
                 },
             )
