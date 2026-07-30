@@ -155,7 +155,6 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
             project,
             category_states={"politics": True},
             blocking_message="Custom runtime message",
-            blocking_message_provided=True,
         )
 
         runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
@@ -165,10 +164,21 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertEqual(runtime["guardrailVersion"], "1")
         self.assertEqual(runtime["blocking_message"], "Custom runtime message")
 
-    def test_get_runtime_config_as_dict_missing_config_skips_gate(self):
+    def test_get_runtime_config_as_dict_missing_project_skips_gate(self):
         runtime = self.use_case.get_runtime_config_as_dict("00000000-0000-0000-0000-000000000000")
         self.assertFalse(runtime["has_blocked_category"])
         self.assertIsNone(runtime["guardrailIdentifier"])
+
+    def test_get_runtime_config_as_dict_initializes_missing_config(self):
+        project = ProjectFactory()
+        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
+        project.save(update_fields=["created_at"])
+        self.assertFalse(ProjectGuardrailsConfig.objects.filter(project=project).exists())
+
+        runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
+
+        self.assertTrue(ProjectGuardrailsConfig.objects.filter(project=project).exists())
+        self.assertTrue(runtime["has_blocked_category"])
 
     def test_update_category_assigns_pool_identifier_and_version(self):
         project = ProjectFactory()
