@@ -10,7 +10,10 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from nexus.projects.models import Project, ProjectGuardrailsConfig
-from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolService
+from nexus.usecases.guardrails.bedrock_guardrail_pool import (
+    BedrockGuardrailPoolError,
+    BedrockGuardrailPoolService,
+)
 
 _UNSET = object()
 logger = logging.getLogger(__name__)
@@ -93,15 +96,51 @@ class ProjectGuardrailsConfigUseCase:
                 "initialized_as_new_project": default_blocked,
             },
         )
-        if created:
+        if not created:
+            default_blocked = config.initialized_as_new_project
+            merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
+            if merged_states != config.category_states:
+                config.category_states = merged_states
+                config.save(update_fields=["category_states", "modified_on"])
+
+        return cls.ensure_pool_assignment(config)
+
+    @classmethod
+    def ensure_pool_assignment(cls, config: ProjectGuardrailsConfig) -> ProjectGuardrailsConfig:
+        """
+        Resolve and persist the Bedrock pool when categories are blocked but no
+        identifier/version is assigned yet.
+
+        Fail-open on Bedrock errors so GET / lazy init does not fail the request.
+        """
+        if not cls.has_blocked_category(config.category_states or {}):
+            return config
+        if config.bedrock_guardrail_identifier and config.bedrock_guardrail_version:
             return config
 
-        default_blocked = config.initialized_as_new_project
-        merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
-        if merged_states != config.category_states:
-            config.category_states = merged_states
-            config.save(update_fields=["category_states", "modified_on"])
+        try:
+            resolved = BedrockGuardrailPoolService.get_or_create_pool(config.category_states)
+        except BedrockGuardrailPoolError as exc:
+            logger.exception(
+                "Failed to assign Bedrock guardrail pool during lazy init; " "leaving config without pool (fail-open)"
+            )
+            sentry_sdk.capture_exception(exc)
+            return config
 
+        if resolved is None:
+            return config
+
+        config.bedrock_guardrail_pool = resolved.pool
+        config.bedrock_guardrail_identifier = resolved.pool.bedrock_guardrail_identifier
+        config.bedrock_guardrail_version = resolved.pool.bedrock_guardrail_version
+        config.save(
+            update_fields=[
+                "bedrock_guardrail_pool",
+                "bedrock_guardrail_identifier",
+                "bedrock_guardrail_version",
+                "modified_on",
+            ]
+        )
         return config
 
     @classmethod
