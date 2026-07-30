@@ -298,12 +298,6 @@ def _preprocess_message_input(
     overwrite_message = message.get("metadata", {}).get("overwrite_message")
     foundation_model = None
 
-    # Project category guardrails (Bedrock ApplyGuardrail INPUT) — all backends.
-    # Do not use GUARDRAILS_LAYER_LAMBDA for this feature.
-    blocking_message = ProjectGuardrailsConfigUseCase.apply_input_guardrail(text, guardrails_config)
-    if blocking_message:
-        raise UnsafeMessageException(blocking_message)
-
     if backend == "BedrockBackend":
         foundation_model = complexity_layer(text)
 
@@ -314,6 +308,10 @@ def _preprocess_message_input(
 
     if overwrite_message:
         text = handle_overwrite_message(text, overwrite_message)
+
+    blocking_message = ProjectGuardrailsConfigUseCase.apply_input_guardrail(text, guardrails_config)
+    if blocking_message:
+        raise UnsafeMessageException(blocking_message)
 
     if not text.strip():
         raise EmptyTextException(
