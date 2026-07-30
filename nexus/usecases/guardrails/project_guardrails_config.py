@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 import boto3
@@ -14,6 +15,21 @@ from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoo
 
 _UNSET = object()
 logger = logging.getLogger(__name__)
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((time.perf_counter() - started_at) * 1000, 2)
+
+
+def _latency_scenario(blocked_count: int, catalog_count: int) -> str:
+    """Label blocked-category density for latency comparisons."""
+    if blocked_count <= 0:
+        return "none_blocked"
+    if blocked_count == 1:
+        return "one_blocked"
+    if catalog_count > 0 and blocked_count >= catalog_count:
+        return "all_blocked"
+    return "partial_blocked"
 
 
 @dataclass(frozen=True)
@@ -115,6 +131,16 @@ class ProjectGuardrailsConfigUseCase:
         return any(category_states.get(slug, False) for slug in cls.catalog_slugs())
 
     @classmethod
+    def blocked_category_count(cls, category_states: dict[str, bool] | None) -> int:
+        if not category_states:
+            return 0
+        return sum(1 for slug in cls.catalog_slugs() if category_states.get(slug) is True)
+
+    @classmethod
+    def catalog_category_count(cls) -> int:
+        return len(cls.catalog_slugs())
+
+    @classmethod
     def validate_blocking_message_for_states(
         cls,
         blocking_message: str | None,
@@ -191,16 +217,58 @@ class ProjectGuardrailsConfigUseCase:
                 "guardrailVersion": None,
                 "blocking_message": None,
                 "has_blocked_category": False,
+                "blocked_category_count": 0,
+                "catalog_category_count": cls.catalog_category_count(),
             }
 
         config = cls.get_or_initialize(project)
         message, _ = cls.effective_blocking_message(config)
+        states = config.category_states or {}
+        blocked_count = cls.blocked_category_count(states)
+        catalog_count = cls.catalog_category_count()
         return {
             "guardrailIdentifier": config.bedrock_guardrail_identifier or None,
             "guardrailVersion": config.bedrock_guardrail_version or None,
             "blocking_message": message,
-            "has_blocked_category": cls.has_blocked_category(config.category_states or {}),
+            "has_blocked_category": blocked_count > 0,
+            "blocked_category_count": blocked_count,
+            "catalog_category_count": catalog_count,
         }
+
+    @classmethod
+    def _log_apply_latency(
+        cls,
+        *,
+        outcome: str,
+        started_at: float,
+        runtime_config: dict | None,
+        text: str | None = None,
+        bedrock_processing_ms: int | float | None = None,
+        action: str | None = None,
+    ) -> None:
+        catalog_count = int((runtime_config or {}).get("catalog_category_count") or cls.catalog_category_count())
+        if runtime_config and "blocked_category_count" in runtime_config:
+            blocked_count = int(runtime_config.get("blocked_category_count") or 0)
+        elif runtime_config and runtime_config.get("has_blocked_category"):
+            # Legacy cache payload without count — still label as blocked.
+            blocked_count = -1
+        else:
+            blocked_count = 0
+
+        scenario = "blocked_unknown_count" if blocked_count < 0 else _latency_scenario(blocked_count, catalog_count)
+        logger.info(
+            "guardrails_latency event=apply_input outcome=%s scenario=%s "
+            "blocked_count=%s catalog_count=%s duration_ms=%.2f "
+            "bedrock_processing_ms=%s action=%s text_chars=%s",
+            outcome,
+            scenario,
+            blocked_count if blocked_count >= 0 else "unknown",
+            catalog_count,
+            _elapsed_ms(started_at),
+            bedrock_processing_ms if bedrock_processing_ms is not None else "-",
+            action or "-",
+            len(text) if text else 0,
+        )
 
     @classmethod
     def apply_input_guardrail(
@@ -217,11 +285,31 @@ class ProjectGuardrailsConfigUseCase:
         Returns None when the check is skipped or the input is allowed.
         Fail-open on AWS errors (log + Sentry).
         """
+        started_at = time.perf_counter()
+
         if not text or not text.strip():
+            cls._log_apply_latency(
+                outcome="skipped_empty_text",
+                started_at=started_at,
+                runtime_config=runtime_config,
+                text=text,
+            )
             return None
         if not runtime_config:
+            cls._log_apply_latency(
+                outcome="skipped_missing_config",
+                started_at=started_at,
+                runtime_config=runtime_config,
+                text=text,
+            )
             return None
         if not runtime_config.get("has_blocked_category"):
+            cls._log_apply_latency(
+                outcome="skipped_none_blocked",
+                started_at=started_at,
+                runtime_config=runtime_config,
+                text=text,
+            )
             return None
 
         identifier = runtime_config.get("guardrailIdentifier")
@@ -229,6 +317,12 @@ class ProjectGuardrailsConfigUseCase:
         if not identifier or not version:
             logger.info(
                 "Skipping ApplyGuardrail: categories blocked but no pool identifier/version assigned",
+            )
+            cls._log_apply_latency(
+                outcome="skipped_missing_pool",
+                started_at=started_at,
+                runtime_config=runtime_config,
+                text=text,
             )
             return None
 
@@ -243,11 +337,44 @@ class ProjectGuardrailsConfigUseCase:
         except Exception as exc:
             logger.exception("ApplyGuardrail failed; allowing message (fail-open)")
             sentry_sdk.capture_exception(exc)
+            cls._log_apply_latency(
+                outcome="fail_open",
+                started_at=started_at,
+                runtime_config=runtime_config,
+                text=text,
+            )
             return None
 
-        if response.get("action") != "GUARDRAIL_INTERVENED":
+        assessments = response.get("assessments") or []
+        bedrock_processing_ms = None
+        if assessments and isinstance(assessments[0], dict):
+            invocation_metrics = assessments[0].get("invocationMetrics") or {}
+            bedrock_processing_ms = invocation_metrics.get("guardrailProcessingLatency")
+        if bedrock_processing_ms is None:
+            top_metrics = response.get("invocationMetrics") or response.get("usage") or {}
+            if isinstance(top_metrics, dict):
+                bedrock_processing_ms = top_metrics.get("guardrailProcessingLatency")
+
+        action = response.get("action")
+        if action != "GUARDRAIL_INTERVENED":
+            cls._log_apply_latency(
+                outcome="allowed",
+                started_at=started_at,
+                runtime_config=runtime_config,
+                text=text,
+                bedrock_processing_ms=bedrock_processing_ms,
+                action=action,
+            )
             return None
 
+        cls._log_apply_latency(
+            outcome="intervened",
+            started_at=started_at,
+            runtime_config=runtime_config,
+            text=text,
+            bedrock_processing_ms=bedrock_processing_ms,
+            action=action,
+        )
         # Option A: ignore Bedrock canned outputs; use project effective message.
         return runtime_config.get("blocking_message") or settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
 

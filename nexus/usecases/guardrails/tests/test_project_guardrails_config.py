@@ -160,6 +160,8 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
 
         self.assertTrue(runtime["has_blocked_category"])
+        self.assertEqual(runtime["blocked_category_count"], 1)
+        self.assertEqual(runtime["catalog_category_count"], len(self.use_case.catalog_slugs()))
         self.assertEqual(runtime["guardrailIdentifier"], config.bedrock_guardrail_identifier)
         self.assertEqual(runtime["guardrailVersion"], "1")
         self.assertEqual(runtime["blocking_message"], "Custom runtime message")
@@ -167,6 +169,7 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
     def test_get_runtime_config_as_dict_missing_project_skips_gate(self):
         runtime = self.use_case.get_runtime_config_as_dict("00000000-0000-0000-0000-000000000000")
         self.assertFalse(runtime["has_blocked_category"])
+        self.assertEqual(runtime["blocked_category_count"], 0)
         self.assertIsNone(runtime["guardrailIdentifier"])
 
     def test_get_runtime_config_as_dict_initializes_missing_config(self):

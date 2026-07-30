@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 import boto3
@@ -30,6 +31,20 @@ class BedrockGuardrailPoolError(Exception):
 class ResolvedGuardrailPool:
     pool: BedrockGuardrailPool
     created: bool
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((time.perf_counter() - started_at) * 1000, 2)
+
+
+def _latency_scenario(blocked_count: int, catalog_count: int) -> str:
+    if blocked_count <= 0:
+        return "none_blocked"
+    if blocked_count == 1:
+        return "one_blocked"
+    if catalog_count > 0 and blocked_count >= catalog_count:
+        return "all_blocked"
+    return "partial_blocked"
 
 
 class BedrockGuardrailPoolService:
@@ -130,22 +145,63 @@ class BedrockGuardrailPoolService:
 
         Returns None when no categories are blocked (no Bedrock resource needed).
         """
+        started_at = time.perf_counter()
+        catalog_count = len(settings.GUARDRAIL_CATEGORY_CATALOG)
         blocked_slugs = cls.blocked_slugs_from_states(category_states)
+        blocked_count = len(blocked_slugs)
+        scenario = _latency_scenario(blocked_count, catalog_count)
+
         if not blocked_slugs:
+            logger.info(
+                "guardrails_latency event=pool_resolve outcome=skip_none_blocked "
+                "scenario=%s blocked_count=%s catalog_count=%s duration_ms=%.2f "
+                "bedrock_create_ms=- combination_key=-",
+                scenario,
+                blocked_count,
+                catalog_count,
+                _elapsed_ms(started_at),
+            )
             return None
 
         key = cls.combination_key(blocked_slugs)
         existing = BedrockGuardrailPool.objects.filter(combination_key=key).first()
         if existing:
+            logger.info(
+                "guardrails_latency event=pool_resolve outcome=reuse "
+                "scenario=%s blocked_count=%s catalog_count=%s duration_ms=%.2f "
+                "bedrock_create_ms=- combination_key=%s pool_id=%s identifier=%s",
+                scenario,
+                blocked_count,
+                catalog_count,
+                _elapsed_ms(started_at),
+                key,
+                existing.id,
+                existing.bedrock_guardrail_identifier,
+            )
             return ResolvedGuardrailPool(pool=existing, created=False)
 
         bedrock = client or cls.get_bedrock_client()
         payload = cls.build_create_guardrail_payload(combination_key=key, blocked_slugs=blocked_slugs)
+        create_started_at = time.perf_counter()
         identifier, version = cls.create_bedrock_guardrail(bedrock, payload)
+        bedrock_create_ms = _elapsed_ms(create_started_at)
 
         with transaction.atomic():
             existing = BedrockGuardrailPool.objects.select_for_update().filter(combination_key=key).first()
             if existing:
+                logger.info(
+                    "guardrails_latency event=pool_resolve outcome=reuse_race "
+                    "scenario=%s blocked_count=%s catalog_count=%s duration_ms=%.2f "
+                    "bedrock_create_ms=%.2f combination_key=%s pool_id=%s identifier=%s",
+                    scenario,
+                    blocked_count,
+                    catalog_count,
+                    _elapsed_ms(started_at),
+                    bedrock_create_ms,
+                    key,
+                    existing.id,
+                    existing.bedrock_guardrail_identifier,
+                )
                 return ResolvedGuardrailPool(pool=existing, created=False)
 
             pool = BedrockGuardrailPool.objects.create(
@@ -153,5 +209,18 @@ class BedrockGuardrailPoolService:
                 category_slugs=blocked_slugs,
                 bedrock_guardrail_identifier=identifier,
                 bedrock_guardrail_version=version,
+            )
+            logger.info(
+                "guardrails_latency event=pool_resolve outcome=create "
+                "scenario=%s blocked_count=%s catalog_count=%s duration_ms=%.2f "
+                "bedrock_create_ms=%.2f combination_key=%s pool_id=%s identifier=%s",
+                scenario,
+                blocked_count,
+                catalog_count,
+                _elapsed_ms(started_at),
+                bedrock_create_ms,
+                key,
+                pool.id,
+                identifier,
             )
             return ResolvedGuardrailPool(pool=pool, created=True)
