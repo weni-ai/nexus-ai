@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 import boto3
 import sentry_sdk
-from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -181,11 +180,12 @@ class ProjectGuardrailsConfigUseCase:
         """
         Cache-friendly runtime payload for ApplyGuardrail preprocess.
 
-        Does not lazy-initialize config rows; missing config means skip gate.
+        Lazy-initializes config so new-project defaults can apply without requiring
+        a prior visit to the guardrails config API.
         """
         try:
-            config = ProjectGuardrailsConfig.objects.get(project__uuid=project_uuid)
-        except ProjectGuardrailsConfig.DoesNotExist:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
             return {
                 "guardrailIdentifier": None,
                 "guardrailVersion": None,
@@ -193,6 +193,7 @@ class ProjectGuardrailsConfigUseCase:
                 "has_blocked_category": False,
             }
 
+        config = cls.get_or_initialize(project)
         message, _ = cls.effective_blocking_message(config)
         return {
             "guardrailIdentifier": config.bedrock_guardrail_identifier or None,
@@ -239,12 +240,8 @@ class ProjectGuardrailsConfigUseCase:
                 source="INPUT",
                 content=[{"text": {"text": text}}],
             )
-        except (ClientError, BotoCoreError) as exc:
-            logger.exception("ApplyGuardrail failed; allowing message (fail-open)")
-            sentry_sdk.capture_exception(exc)
-            return None
         except Exception as exc:
-            logger.exception("Unexpected ApplyGuardrail error; allowing message (fail-open)")
+            logger.exception("ApplyGuardrail failed; allowing message (fail-open)")
             sentry_sdk.capture_exception(exc)
             return None
 

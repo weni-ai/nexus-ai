@@ -19,7 +19,7 @@ class PreprocessApplyGuardrailTestCase(SimpleTestCase):
             )
 
         self.assertEqual(ctx.exception.message, "Project blocked this topic")
-        mock_apply.assert_called_once()
+        mock_apply.assert_called_once_with("politics question", {"has_blocked_category": True})
 
     @patch("router.tasks.invoke.complexity_layer")
     @patch("nexus.usecases.guardrails.project_guardrails_config.ProjectGuardrailsConfigUseCase.apply_input_guardrail")
@@ -36,7 +36,10 @@ class PreprocessApplyGuardrailTestCase(SimpleTestCase):
 
         self.assertEqual(processed["text"], "hello")
         self.assertIsNone(foundation_model)
-        mock_apply.assert_called_once()
+        mock_apply.assert_called_once_with(
+            "hello",
+            {"has_blocked_category": True, "guardrailIdentifier": "gr-1"},
+        )
 
     @patch("nexus.usecases.guardrails.project_guardrails_config.ProjectGuardrailsConfigUseCase.apply_input_guardrail")
     def test_does_not_call_guardrails_layer_lambda(self, mock_apply):
@@ -48,3 +51,27 @@ class PreprocessApplyGuardrailTestCase(SimpleTestCase):
             mock_boto.assert_not_called()
 
         mock_apply.assert_called_once_with("hello", None)
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ProjectGuardrailsConfigUseCase.apply_input_guardrail")
+    def test_evaluates_composed_text_including_metadata(self, mock_apply):
+        mock_apply.return_value = None
+        message = {
+            "text": "safe",
+            "attachments": ["https://example.com/a.png"],
+            "metadata": {
+                "order": {"product_items": [{"sku": "1"}]},
+                "overwrite_message": "blocked politics payload",
+            },
+        }
+
+        _preprocess_message_input(
+            message,
+            "OpenAIBackend",
+            guardrails_config={"has_blocked_category": True},
+        )
+
+        composed_text = mock_apply.call_args.args[0]
+        self.assertIn("safe", composed_text)
+        self.assertIn("https://example.com/a.png", composed_text)
+        self.assertIn("product items", composed_text)
+        self.assertIn("blocked politics payload", composed_text)
