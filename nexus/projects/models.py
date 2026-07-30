@@ -271,6 +271,24 @@ class ProjectGuardrailsConfig(models.Model):
         return f"Guardrails config for {self.project}"
 
     def save(self, *args, **kwargs):
+        if self.bedrock_guardrail_pool_id:
+            pool = self.bedrock_guardrail_pool
+            self.bedrock_guardrail_identifier = pool.bedrock_guardrail_identifier
+            self.bedrock_guardrail_version = pool.bedrock_guardrail_version
+        else:
+            self.bedrock_guardrail_identifier = None
+            self.bedrock_guardrail_version = None
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = list(
+                set(update_fields)
+                | {
+                    "bedrock_guardrail_identifier",
+                    "bedrock_guardrail_version",
+                }
+            )
+
         self.full_clean()
         super().save(*args, **kwargs)
 
