@@ -11,6 +11,8 @@ from uuid import UUID
 
 import sentry_sdk
 
+from nexus.analytics.latency_writer import TurnCorrelation, record_turn_latency
+
 from router.tasks.inline_agent_metrics import (
     INLINE_AGENT_BROKER_QUEUE_WAIT_SECONDS,
     INLINE_AGENT_ERRORS_TOTAL,
@@ -92,6 +94,7 @@ class TurnLatencyRecorder:
     _started_at: Optional[float] = None
     _router_received_at: Optional[float] = None
     _finished: bool = False
+    _correlation: TurnCorrelation = field(default_factory=TurnCorrelation)
 
     def __post_init__(self) -> None:
         if not self.metrics_enabled:
@@ -158,6 +161,21 @@ class TurnLatencyRecorder:
             self._phase_durations[name] = time.perf_counter() - start
             self.last_completed_phase = name
 
+    def attach_correlation(
+        self,
+        *,
+        contact_urn: str = "",
+        message_conversation_log_uuid: str = "",
+        channel_type: str = "",
+        execution_path: str = "inline_agents",
+    ) -> None:
+        self._correlation = TurnCorrelation(
+            contact_urn=contact_urn or "",
+            message_conversation_log_uuid=message_conversation_log_uuid or "",
+            channel_type=channel_type or "",
+            execution_path=execution_path or "inline_agents",
+        )
+
     def finish(self, status: str, *, record_error: bool = False) -> None:
         if self._finished:
             return
@@ -188,6 +206,19 @@ class TurnLatencyRecorder:
 
         if record_error and self.last_completed_phase:
             INLINE_AGENT_ERRORS_TOTAL.labels(phase=self.last_completed_phase, project_uuid=project_uuid).inc()
+
+        record_turn_latency(
+            project_uuid=project_uuid,
+            status=status,
+            total_seconds=total_seconds,
+            phase_seconds=dict(self._phase_durations),
+            correlation=self._correlation,
+            task_id=self.task_id,
+            turn_id=self.turn_id,
+            enqueued_at=self._enqueued_at,
+            started_at=self._started_at,
+            router_received_at=self._router_received_at,
+        )
 
         logger.debug(
             "Inline agent turn latency",

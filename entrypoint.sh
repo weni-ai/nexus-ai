@@ -56,12 +56,16 @@ elif [[ "celery-worker" == "$1" ]]; then
     if [ "${2}" ] ; then
         celery_queue="${2}"
     fi
-    do_gosu "${APP_USER}:${APP_GROUP}" exec celery \
-        -A "${CELERY_APP}" --workdir="${PROJECT_PATH}" worker \
-        -Q "${celery_queue}" \
-        -O fair \
-        -l "${LOG_LEVEL}" \
-        --autoscale=${CELERY_MAX_WORKERS},1
+    export PROMETHEUS_MULTIPROC_DIR="${PROMETHEUS_MULTIPROC_DIR:-/tmp/prometheus_multiproc}"
+    do_gosu "${APP_USER}:${APP_GROUP}" bash -c "
+        rm -rf \"\${PROMETHEUS_MULTIPROC_DIR}\" &&
+        mkdir -p \"\${PROMETHEUS_MULTIPROC_DIR}\" &&
+        exec celery -A \"${CELERY_APP}\" --workdir=\"${PROJECT_PATH}\" worker \
+            -Q \"${celery_queue}\" \
+            -O fair \
+            -l \"${LOG_LEVEL}\" \
+            --autoscale=${CELERY_MAX_WORKERS},1
+    "
 elif [[ "healthcheck-celery-worker" == "$1" ]]; then
     celery_queue="celery"
     if [ "${2}" ] ; then

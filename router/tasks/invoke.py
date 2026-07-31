@@ -522,6 +522,11 @@ def start_inline_agents(  # noqa: C901
     turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
 
     recorder = TurnLatencyRecorder.from_message_and_request(message, self.request, turn_id=turn_id)
+    recorder.attach_correlation(
+        contact_urn=message.get("contact_urn") or "",
+        message_conversation_log_uuid=message_conversation_log_uuid,
+        channel_type=message.get("channel_type") or "",
+    )
     recorder.apply_sentry_tags()
 
     task_manager = task_manager or get_task_manager()

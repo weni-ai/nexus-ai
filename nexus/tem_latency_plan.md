@@ -3,371 +3,423 @@
 **Last updated:** July 2026  
 **Scope:** OpenAI backend only (`OpenAIBackend`). Bedrock paths are deprecated and out of scope.  
 **Entry point:** `router/tasks/invoke.py` → `start_inline_agents` (single production path)  
-**Supersedes:** `nexus/tem_latency_old_plan.md`
+**Supersedes:** `nexus/tem_latency_old_plan.md`  
+**Speckit:** `specs/002-inline-agent-latency-storage/`
 
 ---
 
 ## Executive Summary
 
-Previous work on caching, `PreGenerationService`, workflow state, and observers ** materially improved the codebase** and surfaced patterns worth keeping. That effort paused before end-to-end latency measurement shipped; the workflow entry point was never adopted in production.
+Previous work on caching, `PreGenerationService`, workflow state, and observers **materially improved the codebase** and surfaced patterns worth keeping. That effort paused before end-to-end latency measurement shipped; the workflow entry point was never adopted in production.
 
-**This plan continues from that foundation** with three priorities:
+**Phase 0 (instrumentation) is implemented** on branch `feat/inline-agent-phase0-latency-instrumentation` and shipped to staging (e.g. tag `3.6.66-staging-alpha15`): `TurnLatencyRecorder`, Celery lifecycle signals, phase timers, and optional Prometheus metrics in the worker process.
 
-1. **Map the full timeline** — from HTTP `/messages` through Celery broker pickup to each processing phase (not just in-task work)
-2. **Treat shared Redis as a first-class suspect** — production evidence points to Redis/Celery dequeue latency as a top contributor
-3. **Instrument via Prometheus + Grafana from day one** — structured latency views without adding hot-path overhead
+**Direction change (July 2026):** Primary storage and staff-facing metrics move to **PostgreSQL (Plan B: rollups + outliers)** owned by Nexus, not Prometheus/Mimir scrape dependency. This unblocks staff and Grafana (Postgres datasource) without waiting on cloud team Celery scrape config.
 
-All improvements ship in **`start_inline_agents` only**, via continuous delivery. Workflow-era modules remain as libraries to reuse or retire later — never as a second entry point.
+**Three priorities going forward:**
 
-**Hard rule:** Nothing in this plan may **increase** user-visible latency. Instrumentation must be in-process counters/histograms or deferred to task `finally`; no synchronous network calls, no extra Redis round-trips per turn, no expanded Elastic APM in the Celery worker.
+1. **Map the full timeline** — HTTP → Celery broker → in-task phases (already instrumented in Phase 0)
+2. **Persist aggregates at scale** — hourly rollups for millions of turns/month; selective outlier rows for spike drill-down
+3. **Treat shared Redis as a first-class suspect** — broker wait measured separately from in-task work
 
----
+All improvements ship in **`start_inline_agents` only**, via continuous delivery. Workflow-era modules remain as libraries — never as a second entry point.
 
-## What Previous Work Delivered (Keep Building On)
-
-| Deliverable | Value |
-|-------------|-------|
-| `CacheService` + invalidation observers | Reduced DB load; reusable across the app |
-| `PreGenerationService` + `CachedProjectData` | Dict-based, cache-first data layer |
-| `RedisTaskManager` | Pending-task and message-cache patterns |
-| Observer infrastructure | Decoupled side effects (SQS, traces, typing) |
-| Workflow orchestrator (unused) | Reference for concat/revoke semantics |
-
-**Direction change:** Stop routing through `inline_agent_workflow`; import useful pieces into the live path.
+**Hard rule:** Nothing in this plan may **increase** user-visible latency. Instrumentation must use in-process timers and a bounded write in `finish()` (rollup UPSERT + conditional outlier INSERT). No per-turn sync HTTP, no extra Redis round-trips for metrics, no expanded Elastic APM in Celery workers.
 
 ---
 
-## Known Production Signal: Shared Redis
+## Architecture Overview
 
-Redis is **shared across multiple applications** and used for several roles in Nexus:
+```
+POST /messages → enqueue → Celery start_inline_agents
+                                │
+                    TurnLatencyRecorder.finish()
+                                │
+              ┌─────────────────┴─────────────────┐
+              ▼                                   ▼
+   inline_agent_latency_hourly          inline_agent_turn_outlier
+   (UPSERT every turn)                   (INSERT if slow/failed/sample)
+              │                                   │
+              ├─► Grafana (Postgres datasource)   ├─► Staff REST API
+              ├─► Internal analytics API          ├─► Future MCP (Keycloak)
+              └─► 90-day retention in PG          └─► nexus-conversation lookup
+                                                        │
+   > 90 days ──────────────────────────────────────────┴─► S3 Parquet / ES (cold)
+```
 
-| Role | Config today |
-|------|----------------|
-| **Celery broker** | `CELERY_BROKER_URL` → `REDIS_URL` |
-| **Celery result backend** | Same URL (`CELERY_TASK_IGNORE_RESULT = True` but connection still exists) |
-| **Django cache** | `CACHES["default"]` → same `REDIS_URL` |
-| **App cache** (pending tasks, project cache, sessions) | `router/utils/redis_clients.py` → same cluster |
-| **Channels** (websockets) | `channels_redis` — separate config but often same cluster in practice |
+### Why not Prometheus-first?
 
-When Redis is contended, **Celery workers block on BRPOP/LPUSH**, which shows up as long gaps before `start_inline_agents` even begins — often misattributed to "slow agent code."
+| Issue | Resolution |
+|-------|------------|
+| Metrics recorded in Celery worker memory | Postgres write at `finish()` |
+| Grafana depends on Mimir scrape + cloud team | Grafana reads Postgres rollups |
+| Millions of raw rows in PG | Rollups + outliers only (~1–5% detail rows) |
+| Conversations in nexus-conversation | Outlier rows store URN + correlation IDs |
 
-**Implication:** Phase 0 must measure **broker wait** separately from **in-task Redis** (cache, pending tasks). Infrastructure remediation (dedicated broker Redis) may deliver more gain than code micro-optimizations.
+**Optional later:** Celery `/api/prometheus/` exporter (`nexus/celery_prometheus_exporter.py`) for platform/SRE — **paused** until ops needs it. Does not block staff metrics.
+
+---
+
+## Plan B — Storage Design
+
+### Design principles
+
+1. **Dashboards never scan raw executions** — only rollup views.
+2. **`project_uuid` required** on every write; guardrail if missing (Phase 0).
+3. **Drill-down uses outliers** — slow, failed, or sampled turns with correlation fields.
+4. **Low-cardinality rollups only** — no `contact_urn`, tool name, or model in hourly aggregates.
+5. **Extensibility** — `execution_path`, JSONB `buckets` / `phase_ms` / `context` for new paths and phases.
+
+### Tables
+
+#### `inline_agent_latency_hourly`
+
+One row per `(project_uuid, hour_ts, execution_path, phase)`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `project_uuid` | UUID | Required |
+| `hour_ts` | timestamptz | Truncated to hour UTC |
+| `execution_path` | varchar | e.g. `inline_agents` (extensible) |
+| `phase` | varchar | `total`, `orchestration`, `pre_generation`, `generation_setup`, `agent_execution`, `post_generation`, `broker_queue_wait`, … |
+| `turn_count` | int | |
+| `sum_ms` | bigint | |
+| `max_ms` | int | |
+| `buckets` | jsonb | Histogram counts — must include **`15000`, `20000`, `30000`** for SLO bands |
+| `error_count` | int | |
+| `blocked_count` | int | |
+| `schema_version` | smallint | Default `1` |
+
+**Unique key:** `(project_uuid, hour_ts, execution_path, phase)`
+
+#### `inline_agent_turn_outlier`
+
+One row per slow, failed, or sampled turn.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `project_uuid` | UUID | |
+| `execution_path` | varchar | |
+| `turn_finished_at` | timestamptz | Index for spike hour queries |
+| `contact_urn` | varchar | nexus-conversation lookup |
+| `turn_id` | varchar | `msg_external_id` / correlation id |
+| `message_conversation_log_uuid` | UUID | Dynamo incoming row id |
+| `channel_type` | varchar | e.g. `TG`, `WC` |
+| `celery_task_id` | varchar | Ops debug |
+| `status` | varchar | `success`, `failed`, `blocked` |
+| `total_ms` | int | |
+| `boundaries_ms` | jsonb | `broker_queue_wait`, `router_to_enqueue`, … |
+| `phase_ms` | jsonb | Extensible phase durations |
+| `context` | jsonb | `backend`, `pipeline_version`, enums only |
+| `router_received_at` | timestamptz | Optional end-to-end later |
+| `sample_reason` | varchar | `threshold`, `failed`, `blocked`, `broker_threshold`, `elevated_sample`, `random_sample` |
+| `schema_version` | smallint | |
+
+**Indexes:** `(project_uuid, turn_finished_at DESC)`, optional `(project_uuid, total_ms DESC)` on recent partitions.
+
+### SLO targets (product)
+
+| Concept | Default | Meaning |
+|---------|---------|---------|
+| **Target band** | 15 – 20 s | Where we want to operate — tracked in rollups |
+| **Max tolerable** | 30 s | Hard ceiling — not acceptable; always outlier |
+
+### Outlier capture rules
+
+| Rule | Action |
+|------|--------|
+| `status != success` | Always insert |
+| `total_ms >= 30_000` (max tolerable) | Always insert (`threshold`) |
+| `broker_queue_wait_ms > threshold` | Always insert |
+| `15_000 <= total_ms < 30_000` | Insert if elevated sample hits (`elevated_sample`, default 1%, configurable) |
+| Random sample | Insert (`random_sample`, default 0.1%, env-configurable) |
+| Otherwise | Rollup only |
+
+**15–20s understanding:** primarily from rollup buckets and API SLO fields (`p95_ms`, `% under 20s`). Elevated sampling gives optional drill-down in that band without storing every turn.
+
+### Retention
+
+| Tier | Data | Retention | Query |
+|------|------|-----------|-------|
+| **Hot** | Hourly (+ optional daily) rollups | 90 days PG | Grafana, analytics API |
+| **Warm** | Outliers | 90 days PG | Drill-down API, future MCP |
+| **Cold** | Parquet or ES export | 12+ months | Athena / support tooling |
+
+Daily job: export partitions older than 90 days → S3; drop PG partitions.
+
+### Scale estimate (5M turns/month)
+
+| Store | Rows / 90 days | Size (order of) |
+|-------|----------------|-----------------|
+| Hourly rollups | ~few M small rows | hundreds MB – low GB |
+| Outliers (~2–5%) | ~2–7M | ~1–5 GB |
+| Raw every turn | ~15M | **Avoid in PG** |
+
+---
+
+## Correlation with nexus-conversation
+
+Conversations are **not** stored in Nexus. Outlier rows must carry:
+
+| Field | Use |
+|-------|-----|
+| `project_uuid` | Scope |
+| `contact_urn` | Primary lookup |
+| `turn_id` | SQS / `correlation_id` on `message.received` |
+| `message_conversation_log_uuid` | Incoming row id |
+| `turn_finished_at` ± window | Time-bounded conversation search |
+
+**API response helper (`conversation_lookup`):**
+
+```json
+{
+  "service": "nexus-conversations",
+  "project_uuid": "...",
+  "contact_urn": "telegram:1487030707",
+  "start_date": "2026-07-16T19:12:00Z",
+  "end_date": "2026-07-16T19:22:00Z",
+  "correlation_id": "<turn_id>"
+}
+```
 
 ---
 
 ## End-to-End Latency Model
 
-Every user message should be traceable across these checkpoints:
-
 ```
 T-1  HTTP POST /messages accepted          router/main.py
 T0a  Celery task published                 before_task_publish signal
-T0b  Worker received task from broker      task_received signal  ← Redis dequeue
+T0b  Worker received task from broker      task_received signal
 T0c  Task execution starts                 task_prerun signal
-     ─── start_inline_agents body begins ───
-T1   Orchestration                         pending tasks, typing (Redis + revoke)
-T2   Pre-generation                        PreGenerationService, CacheService (Redis + PG)
-T3   Generation setup                      supervisor, adapter, conversation (PG + Redis session)
-T4   Agent execution                       LLM + Lambda tools
-T5   Post-generation                      dispatch, SQS observers
-T6  Task finished                           task_postrun signal
+     ─── start_inline_agents body ───
+T1   Orchestration
+T2   Pre-generation
+T3   Generation setup
+T4   Agent execution                       Langfuse detail
+T5   Post-generation
+T6   Task finished                          TurnLatencyRecorder.finish()
 ```
 
-### Derived metrics (all exportable to Prometheus, label **`project_uuid`** required)
-
-| Metric | Formula | What it tells us |
-|--------|---------|------------------|
-| `broker_queue_wait` | T0c − T0a | Celery + **shared Redis broker** contention |
-| `worker_scheduling_delay` | T0c − T0b | Worker pool / prefetch / CPU |
-| `orchestration` | T2 − T0c | In-task setup + Redis pending-task I/O |
-| `pre_generation` | T3 − T2 | Cache + DB bootstrap |
-| `generation_setup` | T4_start − T3 | Backend prep before LLM |
-| `agent_execution` | T4_end − T4_start | LLM + tools (Langfuse detail) |
-| `post_generation` | T6 − T4_end | Dispatch + side effects |
-| `user_turn_total` | T6 − T-1 | Full platform latency (needs router timestamp propagation) |
-
-Filter or group any panel in Grafana by **`project_uuid`** to isolate slow tenants vs platform-wide issues.
-
-**Today:** Only pre-generation logs duration internally. Celery lifecycle is **not** mapped. This gap is Phase 0's main deliverable.
+| Metric | Formula | Rollup phase |
+|--------|---------|--------------|
+| `broker_queue_wait` | T0c − T0a | `broker_queue_wait` |
+| `router_to_enqueue` | T0a − T-1 | boundary on outlier |
+| `orchestration` | phase timer | `orchestration` |
+| `pre_generation` | phase timer | `pre_generation` |
+| `generation_setup` | phase timer | `generation_setup` |
+| `agent_execution` | phase timer | `agent_execution` |
+| `post_generation` | phase timer | `post_generation` |
+| `user_turn_total` | T6 − T0c (in-task) | `total` |
 
 ---
 
-## Is Celery the Right Tool?
+## Read Surfaces
 
-Evaluate per step — default is **keep Celery** unless metrics prove otherwise.
+### 1. Internal REST API (Phase 1b — primary)
 
-| Step | Current | Fits? | Notes |
-|------|---------|-------|-------|
-| **Agent turn** (`start_inline_agents`) | Celery task, `inline-agents` queue | **Yes** | Long-running (minutes), retries, rate limit, isolation from web workers |
-| **Message routing** (`start_route`) | Celery | Yes | Separate concern |
-| **Save inline message** | `save_inline_message_async.delay` | **Maybe** | Already async; if broker is slow, inline thread-pool or batch may be cheaper — measure publish latency first |
-| **Typing indicator** | Sync HTTP in task | **Maybe** | Blocks T1; observer already exists — prefer async fire-and-forget **only if** it reduces T1 without extra Redis |
-| **Trace upload / SQS** | Observers + Celery tasks | Yes | Already off critical path if dispatch-first |
-| **Splitting pre-gen / gen / post into separate Celery tasks** | Not deployed | **No (for now)** | Adds broker round-trips on shared Redis — likely **increases** latency |
+Under `nexus/analytics/api/`, same auth as resolution-rate (`InternalCommunicationPermission`):
 
-**Broker alternative:** If Phase 0 shows `broker_queue_wait` dominates, evaluate **dedicated Redis instance for Celery broker only** (infra change, zero code latency cost) before migrating to RabbitMQ/SQS.
+| Endpoint | Source | Purpose |
+|----------|--------|---------|
+| `GET …/inline-agent-latency/summary/` | daily rollup | Project overview |
+| `GET …/inline-agent-latency/timeseries/` | hourly rollup | Charts |
+| `GET …/inline-agent-latency/outliers/` | outlier table | Spike investigation |
+
+**Guardrails:** require `project_uuid`; max 90-day range; `limit` cap (e.g. 100); read replica + `statement_timeout`.
+
+### 2. Grafana (Postgres datasource)
+
+Query **views only** (never outlier table for global dashboards):
+
+```sql
+SELECT hour_ts, turn_count, sum_ms / turn_count AS avg_ms, max_ms
+FROM inline_agent_latency_hourly_v
+WHERE project_uuid = '$project_uuid' AND phase = 'total'
+  AND hour_ts >= now() - interval '7 days';
+```
+
+P95 from JSONB `buckets` (same math as Prometheus histogram_quantile).
+
+Existing `contrib/grafana/inline_agent_turn_latency.json` (Prometheus) remains reference; add Postgres dashboard JSON when schema lands.
+
+### 3. Future MCP for staff (Phase 3)
+
+MCP tools call the **same analytics API** — not Postgres directly.
+
+| Phase | Auth |
+|-------|------|
+| 1b | `InternalCommunicationPermission`, superuser token, OIDC |
+| 3 | Keycloak JWT on MCP server + project scope claims |
+
+Example tools: `latency_summary`, `latency_timeseries`, `latency_outliers`, `latency_spike_investigate`.
+
+### 4. Secondary observability (unchanged)
+
+| Tool | Use |
+|------|-----|
+| **Langfuse / Logfire** | LLM/tool spans inside T4 |
+| **Sentry** | Errors, tags from recorder |
+| **S3 inline traces** | Per-turn jsonl drill-down |
+| **Prometheus** (optional) | Ops/SRE if Celery scrape enabled later |
 
 ---
 
-## Observability Stack (Structured View From Day One)
+## Write Path
 
-### Primary: Prometheus + Grafana ✅
+### Phase 0 (done)
 
-Already in the project (`django-prometheus`, `prometheus_client`, `/api/prometheus/` endpoint, existing `Gauge` patterns in `nexus/logs/observers.py`).
+- `TurnLatencyRecorder` in `router/tasks/latency_context.py`
+- Celery signals in `nexus/celery_latency_signals.py`
+- `router/tasks/inline_agent_enqueue.py` — router timestamps
+- Optional `prometheus_client` metrics in `router/tasks/inline_agent_metrics.py`
 
-**Use for:**
+### Phase 1b (next)
 
-- Histograms: `inline_agent_*_duration_seconds` (phase breakdown)
-- Counters: errors by phase, cache hit/miss
-- Gauges: Celery queue depth (via exporter or custom probe)
+1. Django models + migrations for hourly rollup + outlier tables
+2. `InlineAgentLatencyWriter` called from `TurnLatencyRecorder.finish()`
+3. Phase registry in code (extensible paths/phases)
+4. Analytics API + serializers
+5. SQL views for Grafana
+6. Retention management command (export + partition drop)
+7. Tests: writer unit tests, outlier rules, API auth
 
-**Why primary:** In-process `Histogram.observe()` is microseconds — **no added latency** when done once per task in `finally`.
+Add to `nexus/settings.py` (all overridable via env):
 
-**Grafana dashboards (deliver with Phase 0):**
+| Setting | Default |
+|---------|---------|
+| `INLINE_AGENT_LATENCY_TARGET_MS_LOW` | `15000` |
+| `INLINE_AGENT_LATENCY_TARGET_MS_HIGH` | `20000` |
+| `INLINE_AGENT_LATENCY_OUTLIER_MS` | `30000` |
+| `INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS` | `2000` |
+| `INLINE_AGENT_LATENCY_SAMPLE_RATE` | `0.001` |
+| `INLINE_AGENT_LATENCY_ELEVATED_MS` | `15000` |
+| `INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE` | `0.01` |
+| `INLINE_AGENT_LATENCY_ENABLED` | `true` |
 
-1. **Turn overview** — P50/P95/P99 `user_turn_total`, error rate; **`project_uuid` filter required**
-2. **Per-project drill-down** — same panels scoped to one project (compare against global baseline)
-3. **Celery & Redis** — `broker_queue_wait`, queue depth, correlation with Redis CPU/latency (infra panels)
-4. **In-task phases** — stacked P95: T1–T5 by `project_uuid`
-5. **Cache** — hit ratio by type and project
-6. **Tools** — P95 per tool name (top N, cardinality capped)
+**Write cost:** sync rollup UPSERT (~6–8 rows/turn) + conditional outlier INSERT. Target +2–10 ms; if pressure appears → Redis buffer + batch flush.
 
-### Secondary: Sentry ✅
+---
 
-**Use for:** Exceptions, tags (`last_completed_phase`, `project_uuid`, `task_id`), optional **low sample rate** performance transactions.
+## Extensibility
 
-**Do not use for:** Primary latency dashboards or per-turn phase timing (overhead + sampling gaps).
+| Change | Schema impact |
+|--------|---------------|
+| New phase name | New `phase` value + key in `phase_ms` |
+| New execution path | New `execution_path` value |
+| New backend metadata | `context` JSONB |
+| High-cardinality (tool/model) | **Outlier `context` or cold store only** — not rollups |
 
-### Generation traces: Langfuse / Logfire ✅
-
-**Use for:** LLM/tool span detail inside T4 (already integrated in `OpenAIBackend`).
-
-**Keep separate from** platform turn dashboard — link via `turn_id` / `message_conversation_log_uuid`.
-
-### Elastic APM — not recommended for new instrumentation ⚠️
-
-Elastic APM is enabled for Django (`TracingMiddleware`) and used minimally in `invoke.py` (`set_custom_context`). It is valuable for web requests but **problematic for Celery** in this setup (overhead, configuration friction, overlap with Prometheus/Langfuse).
-
-**Policy:**
-
-- Do **not** add new Elastic APM spans or middleware in `start_inline_agents` or Celery signals
-- Keep existing Django APM as-is unless team decides to remove it separately
-- If distributed trace correlation is needed later, prefer **OpenTelemetry → existing backend** with explicit sampling — not default Elastic in the worker hot path
+```python
+PHASE_REGISTRY = {
+    "inline_agents": [
+        "orchestration", "pre_generation", "generation_setup",
+        "agent_execution", "post_generation",
+    ],
+}
+BOUNDARY_METRICS = ["broker_queue_wait", "router_to_enqueue"]
+```
 
 ---
 
 ## Zero-Latency-Cost Constraint
 
-Every deliverable must pass this checklist:
-
 | Allowed | Not allowed |
 |---------|-------------|
-| `time.perf_counter()` in task body | Sync HTTP in new observers on critical path |
-| Single `Histogram.observe()` batch in `finally` | Per-phase `event_manager.notify()` with sync observers |
-| Celery signals writing timestamps to `request.headers` / task meta only | Extra Redis GET/SET per turn for metrics |
-| Reuse existing Redis connections (pools) | New Redis keys written synchronously for tracing |
-| Prometheus counters in `CacheService` on existing code path | Elastic APM transaction per phase |
-| Propagate `enqueued_at` in task kwargs (one field) | JSON log line per phase at INFO on every message |
-| Sampled DEBUG logs | Mandatory Sentry transaction per turn |
+| `perf_counter` in task body | Sync HTTP per turn |
+| Bounded PG write in `finish()` | Full raw row for every turn in PG forever |
+| Celery signal timestamps in headers | Extra Redis keys for metrics |
+| Conditional outlier INSERT | Mandatory Sentry transaction per turn |
+| Sampled DEBUG logs | High-cardinality rollup labels |
 
-**Validation:** Compare P95 `user_turn_total` and P95 `broker_queue_wait` for 24h before vs after each instrumentation PR. Roll back if +5% regression.
+**Validation:** P95 in-task turn duration before vs after persistence PR; roll back if +5% regression.
 
 ---
 
-## Single-Path Strategy
+## Known Production Signal: Shared Redis
 
-```
-POST /messages → start_inline_agents.delay(...) → invoke.py (only path)
-```
+(Unchanged — see Phase 1 infra below.)
 
-**Reuse from workflow effort (libraries only):** `PreGenerationService`, `CacheService`, `CachedProjectData`, optionally `handle_workflow_message_concatenation`, `TypingIndicatorObserver`.
-
-**Retire routing:** `WORKFLOW_ARCHITECTURE_PROJECTS`, `inline_agent_workflow.run()` branch — remove in Phase 0.
+Redis is shared for Celery broker, Django cache, app cache, Channels. Contention shows as high `broker_queue_wait` — measure via rollup phase `broker_queue_wait`.
 
 ---
 
 ## Implementation Phases
 
----
+### Phase 0 — Instrumentation + single path ✅ (shipped)
 
-### Phase 0 — Full Timeline Instrumentation + Single Path (CRITICAL)
+**Status:** Implemented on `feat/inline-agent-phase0-latency-instrumentation`.
 
-**Goal:** Grafana dashboards show broker wait vs in-task phases for 100% of production traffic, with zero measurable latency regression.
-
-**Deliverables**
-
-1. **Remove workflow branch** from `invoke.py` (confirmed unused)
-
-2. **Celery lifecycle timestamps** via lightweight signals in `nexus/celery.py`:
-   - `before_task_publish` → stamp `enqueued_at` in headers
-   - `task_received` → stamp `received_at`
-   - `task_prerun` → stamp `started_at` (only for `start_inline_agents`)
-   - Pass through to task via headers (no Redis)
-
-3. **Required `project_uuid`** — every turn must be attributable to a project:
-   - **`TurnLatencyRecorder(project_uuid: str, ...)`** — `project_uuid` is a **required** constructor argument (no default, no empty string)
-   - Read from `message["project_uuid"]` at task start; validate format (UUID) before recording
-   - If missing or invalid: **do not observe latency histograms**; increment `inline_agent_turn_missing_project_uuid_total` and report to Sentry at warning level — same pattern as existing required-field guards
-   - Propagate `project_uuid` in Celery task headers at publish time (`before_task_publish`) so broker-wait metrics can be labeled even before the message dict is parsed in the worker
-
-4. **`TurnLatencyRecorder`** in `router/tasks/latency_context.py`:
-   - Required fields: `project_uuid`, `turn_id`, `task_id`
-   - Records T1–T5 with `perf_counter` only
-   - Single method `finish(status)` → observes all Prometheus histograms once, always with `project_uuid` label
-
-5. **Prometheus metrics** (module-level, follow `nexus/logs/observers.py` pattern):
-   ```
-   inline_agent_broker_queue_wait_seconds     Histogram  label: project_uuid
-   inline_agent_phase_duration_seconds        Histogram  labels: phase, project_uuid
-   inline_agent_turn_duration_seconds         Histogram  labels: status, project_uuid
-   inline_agent_cache_access_total            Counter    labels: cache_type, hit, project_uuid
-   inline_agent_errors_total                  Counter    labels: phase, project_uuid
-   inline_agent_turn_missing_project_uuid_total  Counter   (no project label — global guardrail)
-   ```
-   - **Per-project slicing:** Grafana uses a `project_uuid` template variable to filter P50/P95/P99 by project
-   - **Cardinality:** `project_uuid` is acceptable (bounded tenant set); do **not** add `contact_urn` as a metric label
-
-6. **Router timestamp:** add optional `received_at` to message payload or task kwargs at `router/main.py` for T-1 → T0a gap
-
-7. **Grafana dashboard JSON** checked into repo (`contrib/grafana/` or docs path team prefers):
-   - Required variable: **`project_uuid`** (dropdown / text, “All” uses `sum without (project_uuid)` or top-N recording rule)
-   - Panels: phase breakdown and broker wait **filterable by project**
-
-8. **Sentry enrichment only:** set tags in existing error handler from recorder (`project_uuid` required) — no new transactions
-
-**Not in Phase 0:** Elastic APM changes, new observers that run network I/O, per-phase event bus.
-
-**Success metrics**
-
-- Dashboards live; 7-day baseline captured
-- `broker_queue_wait` P95 visible separately from `agent_execution` P95
-- **Per-project:** any project selectable in Grafana; P95 by phase available for incident investigation
-- `inline_agent_turn_missing_project_uuid_total` = 0 in production (required field enforced)
-- Instrumentation PR shows ≤ 2% change in P95 turn duration vs prior week
-
-**Tasks**
-
-- [ ] Remove workflow flag/branch
-- [ ] Celery signal timestamps + header propagation (include `project_uuid` in headers)
-- [ ] `TurnLatencyRecorder` with **required** `project_uuid` + wire into `invoke.py`
-- [ ] Prometheus metrics module (`project_uuid` label) + scrape verified
-- [ ] Grafana dashboard with **`project_uuid` variable**
-- [ ] Propagate router `received_at`
-- [ ] Validation test: task without `project_uuid` increments guardrail counter, skips histograms
-- [ ] 24h before/after latency comparison runbook
+- [x] Remove workflow branch from `invoke.py`
+- [x] Celery lifecycle signals + headers
+- [x] `TurnLatencyRecorder` with required `project_uuid`
+- [x] Prometheus metrics module (optional observe)
+- [x] Router timestamp propagation
+- [x] Grafana JSON starter (Prometheus — superseded by Postgres path for staff)
+- [x] Celery startup fix (`nexus/celery_latency_signals.py`)
+- [ ] Celery Prometheus exporter scrape — **paused** (cloud team dependency)
 
 ---
 
-### Phase 1 — Redis & Celery Infrastructure (CRITICAL — parallel with Phase 0 analysis)
+### Phase 1b — Postgres storage + staff API (CRITICAL — current focus)
 
-**Goal:** Reduce T0b–T0c (`broker_queue_wait`) and in-task Redis contention without code that adds round-trips.
+**Goal:** Staff/super users see per-project latency without Mimir; Grafana optional via Postgres.
 
-**Context:** Shared Redis likely hurts Celery dequeue more than Python processing time.
+**Deliverables:** See `specs/002-inline-agent-latency-storage/`.
 
-**Deliverables (infra — highest ROI, zero app latency cost)**
+**Success metrics:**
 
-1. **Dedicated Redis for Celery broker** — separate instance/DB index from Django cache + app cache + Channels
-2. **Document topology** — which apps share which Redis; target state diagram
-3. **Redis monitoring** — Grafana panels: connected clients, CPU, memory, ops/sec, latency (`redis_exporter` or cloud metrics)
-4. **Celery worker tuning review:**
-   - `CELERY_WORKER_PREFETCH_MULTIPLIER = 1` (already set) — keep for fair `inline-agents` queue
-   - `worker_disable_prefetch = True` in `celery.py` — verify interaction
-   - Dedicated workers consuming **only** `inline-agents` queue
-   - `INVOKE_AGENTS_RATE_LIMIT` vs worker count — ensure not artificial backlog
-
-**Deliverables (app — must reduce or neutral Redis use)**
-
-5. **Audit Redis calls in T1–T2** per turn (`RedisTaskManager`, `CacheService`) — count round-trips; pipeline where safe
-6. **Ensure read replica** (`REDIS_READ_URL`) used for all read-only cache paths (already partially done)
-7. **Evaluate** moving Django `CACHES` off Celery broker Redis (config change)
-
-**Celery fit review (output doc, not immediate migration)**
-
-8. Decision record: stay on Redis broker vs RabbitMQ — based on Phase 0 `broker_queue_wait` after dedicated broker trial
-
-**Success metrics**
-
-- `broker_queue_wait` P95 drops measurably after dedicated broker Redis (target set from baseline)
-- In-task Redis round-trips per turn documented and not increased by later phases
-
-**Tasks**
-
-- [ ] Redis topology doc + dedicated Celery broker instance
-- [ ] Grafana Redis + Celery queue panels
-- [ ] Dedicated `inline-agents` workers verification
-- [ ] Per-turn Redis call audit
-- [ ] Broker decision record
+- Rollups updating for 100% of turns with valid `project_uuid`
+- Outlier rate stable (~1–5% of traffic)
+- API P95 response < 200 ms for 90-day summary
+- Spike drill-down returns `conversation_lookup` for nexus-conversation
+- 90-day PG size within budget
 
 ---
 
-### Phase 2 — Internal Structure (HIGH, zero-behavior-change)
+### Phase 1 — Redis & Celery infrastructure (parallel)
 
-**Goal:** Readable, testable `invoke.py` — same Celery task, no new broker hops.
+**Goal:** Reduce `broker_queue_wait` without app latency cost.
 
-**Deliverables**
-
-- Extract `router/tasks/inline_agent/phases.py` (private functions)
-- Optional: adopt workflow concat/revoke logic if metrics show T1 improvement
-- Phase unit tests
-
-**Constraint:** Refactor-only PRs must show ≤ 2% P95 regression.
+- Dedicated Redis for Celery broker
+- Redis monitoring (infra Grafana — independent of Nexus PG metrics)
+- Dedicated `inline-agents` workers
+- Per-turn Redis call audit
 
 ---
 
-### Phase 3 — Pre-Generation & Setup (HIGH)
+### Phase 2 — Internal structure (HIGH)
 
-**Goal:** Reduce T2–T3 when Phase 0 shows they matter **after** broker wait is understood.
-
-**Deliverables**
-
-1. Cache-first `PreGenerationService` (skip DB on composite hit)
-2. Optimized `get_project_and_content_base_data` on miss
-3. Supervisor cache + invalidation
-4. Tool index from cached `team` (remove per-tool DB in adapter)
-5. Module-level boto3 Lambda client
-
-**Excluded unless proven neutral:** parallel thread pools in T2 (GIL + complexity — measure first)
-
-**Success metrics**
-
-- T2 P95 < 500 ms on cache hit
-- T3 supervisor cache hit > 90%
-- No increase in Redis round-trips per turn
+Refactor `invoke.py` into phases module — no new broker hops.
 
 ---
 
-### Phase 4 — Agent Execution & Tools (MEDIUM)
+### Phase 3 — Pre-generation & setup (HIGH)
 
-**Goal:** T4 tail latency and reliability.
-
-**Deliverables**
-
-- Lambda retry (transient only) + timeouts
-- `inline_agent_tool_duration_seconds` histogram (observe in tool wrapper — one call per tool, acceptable)
-- Formatter path counter (which merge path taken)
-- Data lake serialization fix
-
-Langfuse continues to cover LLM span detail; Prometheus covers aggregate T4.
+Cache-first pre-gen, supervisor cache — driven by rollup phase P95.
 
 ---
 
-### Phase 5 — Post-Generation & Capacity (MEDIUM)
+### Phase 4 — Agent execution & tools (MEDIUM)
 
-**Goal:** T5 and worker capacity without new Celery tasks on shared broker.
-
-**Deliverables**
-
-- Confirm dispatch happens before heavy observers
-- Autoscale workers on queue depth / `broker_queue_wait` P95
-- Post-generation Celery bundle **only if** T5 > 10% of total **and** broker is isolated
+Tool timeouts, retries; detail in Langfuse + outlier `context` enums.
 
 ---
 
-### Phase 6 — Cleanup (LOW)
+### Phase 5 — Post-generation & capacity (MEDIUM)
 
-- Delete unused workflow entry files
-- Remove Bedrock dead code in `invoke.py`
-- Remove `WORKFLOW_ARCHITECTURE_PROJECTS` from settings
+Dispatch-first validation; worker autoscale from rollup `broker_queue_wait`.
+
+---
+
+### Phase 6 — Staff MCP (OPTIONAL)
+
+Keycloak-authenticated MCP server wrapping analytics API.
+
+---
+
+### Phase 7 — Cleanup (LOW)
+
+Remove workflow dead code; optional remove Prometheus metrics if unused.
 
 ---
 
@@ -375,34 +427,14 @@ Langfuse continues to cover LLM span detail; Prometheus covers aggregate T4.
 
 | Concern | Tool | Phase |
 |---------|------|-------|
-| Broker wait, phase P95, cache hits, errors (by **`project_uuid`**) | **Prometheus + Grafana** | 0 |
-| Queue depth, Redis health | **Grafana** (+ infra exporters) | 1 |
-| Exceptions, phase tags on error | **Sentry** | 0 |
+| Phase P95, cache hits, errors by `project_uuid` | **Postgres rollups + API** | 1b |
+| Spike → conversation | **Outlier table + nexus-conversation** | 1b |
+| Staff Grafana charts | **Grafana → Postgres** | 1b |
 | LLM/tool spans | **Langfuse / Logfire** | existing |
-| Web request tracing | Elastic APM (Django only) | no change |
-| Celery worker APM | **Not planned** | — |
-
----
-
-## Rollout: Continuous Delivery
-
-```
-Phase 0 + Phase 1 analysis in parallel
-  → baseline Grafana
-  → dedicated broker Redis (infra PR)
-  → then Phase 3+ optimizations one per PR
-Each PR: 24h P95 comparison, roll back if regression
-```
-
----
-
-## Open Questions (Answer from Phase 0/1 dashboards)
-
-1. What % of `user_turn_total` P95 is `broker_queue_wait` vs `agent_execution`?
-2. Does dedicated broker Redis clear the backlog?
-3. How many Redis round-trips per turn in T1–T2 today?
-4. Is `save_inline_message_async.delay` publishing to contended broker worth keeping async?
-5. Cache hit rate per type at production QPS?
+| Exceptions | **Sentry** | 0 |
+| Platform ops scrape | **Prometheus** (optional) | paused |
+| AI-assisted staff queries | **MCP + Keycloak** | 6 |
+| Queue depth, Redis health | **Infra Grafana** | 1 |
 
 ---
 
@@ -411,26 +443,33 @@ Each PR: 24h P95 comparison, roll back if regression
 | Role | Path |
 |------|------|
 | Production entry | `router/tasks/invoke.py` |
-| HTTP entry | `router/main.py` |
-| Celery config | `nexus/celery.py`, `nexus/settings.py` |
-| Redis clients | `router/utils/redis_clients.py` |
-| Pre-generation | `router/services/pre_generation_service.py` |
-| Cache | `router/services/cache_service.py` |
-| Pending tasks | `router/tasks/redis_task_manager.py` |
-| Prometheus patterns | `nexus/logs/observers.py`, `django_prometheus` |
-| Backend | `inline_agents/backends/openai/backend.py` |
+| Latency recorder | `router/tasks/latency_context.py` |
+| Prometheus metrics (optional) | `router/tasks/inline_agent_metrics.py` |
+| Celery signals | `nexus/celery_latency_signals.py` |
+| Celery exporter (paused) | `nexus/celery_prometheus_exporter.py` |
+| Enqueue timestamps | `router/tasks/inline_agent_enqueue.py` |
+| Analytics API pattern | `nexus/analytics/api/views.py` |
+| Speckit spec | `specs/002-inline-agent-latency-storage/` |
+| Grafana (Prometheus ref) | `contrib/grafana/inline_agent_turn_latency.json` |
+
+---
+
+## Open Questions
+
+1. ~~Outlier threshold~~ — **resolved:** 30s max tolerable; 15–20s target band via rollups + elevated sample
+2. ~~Random sample rate~~ — **resolved:** default 0.1%, env-configurable; elevated band 1%, env-configurable
+3. Cold export: S3 Parquet vs Elasticsearch?
+4. Grafana: team-managed Postgres datasource vs Nexus UI only?
+5. After Phase 1 infra: % of total time in `broker_queue_wait` vs `agent_execution`?
 
 ---
 
 ## Summary
 
-This plan **builds on** prior caching and service extraction work, focuses on **`start_inline_agents` only**, and treats **shared Redis / Celery dequeue** as the leading hypothesis for platform latency — not just in-task Python time.
-
-1. **Map the full Celery lifecycle** (publish → receive → prerun → phases → postrun)  
-2. **Prometheus + Grafana first** — structured latency from day one, zero hot-path network cost  
-3. **Isolate Celery broker Redis** — infra win without code overhead  
-4. **Sentry for errors; Langfuse for LLM; skip new Elastic APM in workers**  
-5. **Hard rule: no change that increases latency** — validate every PR against P95  
-6. **Question Celery splits** — more tasks on shared Redis likely hurt; dedicated broker first  
-
-Each phase has clear deliverables and success metrics for task creation and prioritization by measured ROI.
+1. **Phase 0 instrumentation ships** — full timeline captured in `TurnLatencyRecorder`  
+2. **Plan B Postgres** — rollups for scale, outliers for drill-down, 90-day hot retention  
+3. **Nexus-owned read path** — analytics API + optional Grafana Postgres; no Mimir blocker  
+4. **nexus-conversation correlation** — URN, turn_id, timestamps on every outlier  
+5. **Future MCP + Keycloak** — same API, later auth phase  
+6. **Prometheus/Celery scrape** — optional for ops, paused  
+7. **Hard rule: no latency regression** — validate every persistence PR against P95  

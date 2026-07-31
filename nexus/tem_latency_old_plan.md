@@ -1,5 +1,12 @@
 # Architecture Improvement Plan: start_inline_agents Refactoring
 
+> **Reference only — not the active plan.**  
+> Superseded by `nexus/tem_latency_plan.md` (July 2026).  
+> The active approach: Phase 0 instrumentation + **Plan B Postgres storage** (rollups + outliers).  
+> Speckit: `specs/002-inline-agent-latency-storage/`.
+
+---
+
 ## Executive Summary
 
 This document outlines a plan to refactor the monolithic `start_inline_agents` Celery task into a more modular, scalable, and maintainable architecture. The proposed solution breaks the task into three distinct phases (Pre-Generation, Generation, Post-Generation) and leverages the **existing Observer infrastructure** in the codebase for cross-cutting concerns.
