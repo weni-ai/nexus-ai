@@ -213,26 +213,3 @@ class TurnLatencyRecorder:
         sentry_sdk.set_tag("task_id", self.task_id)
         if self.last_completed_phase:
             sentry_sdk.set_tag("last_completed_phase", self.last_completed_phase)
-
-
-def record_cache_access(project_uuid: str, cache_type: str, hit: bool) -> None:
-    """Reserved for future cache hit/miss persistence; no-op today."""
-    del project_uuid, cache_type, hit
-
-
-def cache_type_from_key(cache_key: str) -> Optional[str]:
-    if not cache_key.startswith("project:"):
-        return None
-    parts = cache_key.split(":")
-    if len(parts) >= 3:
-        return parts[2]
-    return None
-
-
-def project_uuid_from_cache_key(cache_key: str) -> Optional[str]:
-    if not cache_key.startswith("project:"):
-        return None
-    parts = cache_key.split(":")
-    if len(parts) >= 2:
-        return parse_valid_project_uuid(parts[1])
-    return None

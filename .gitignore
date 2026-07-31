@@ -197,3 +197,4 @@ celerybeat-schedule.*
 
 .cursor
 .specify
+specs/
