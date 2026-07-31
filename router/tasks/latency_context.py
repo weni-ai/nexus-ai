@@ -1,4 +1,4 @@
-"""Turn-level latency recording for start_inline_agents (Phase 0)."""
+"""Turn-level latency recording for start_inline_agents."""
 
 from __future__ import annotations
 
@@ -12,16 +12,6 @@ from uuid import UUID
 import sentry_sdk
 
 from nexus.analytics.latency_writer import TurnCorrelation, record_turn_latency
-
-from router.tasks.inline_agent_metrics import (
-    INLINE_AGENT_BROKER_QUEUE_WAIT_SECONDS,
-    INLINE_AGENT_ERRORS_TOTAL,
-    INLINE_AGENT_PHASE_DURATION_SECONDS,
-    INLINE_AGENT_ROUTER_TO_ENQUEUE_SECONDS,
-    INLINE_AGENT_TURN_DURATION_SECONDS,
-    INLINE_AGENT_TURN_MISSING_PROJECT_UUID_TOTAL,
-    INLINE_AGENT_WORKER_SCHEDULING_DELAY_SECONDS,
-)
 from nexus.inline_agent_latency_headers import (
     HEADER_ENQUEUED_AT,
     HEADER_PROJECT_UUID,
@@ -67,7 +57,6 @@ def _header_float(headers: Optional[Dict], key: str) -> Optional[float]:
 
 
 def report_missing_project_uuid(reason: str, task_id: Optional[str] = None) -> None:
-    INLINE_AGENT_TURN_MISSING_PROJECT_UUID_TOTAL.inc()
     sentry_sdk.set_tag("inline_agent_latency", "missing_project_uuid")
     if task_id:
         sentry_sdk.set_tag("task_id", task_id)
@@ -80,7 +69,7 @@ def report_missing_project_uuid(reason: str, task_id: Optional[str] = None) -> N
 
 @dataclass
 class TurnLatencyRecorder:
-    """Records phase timings and observes Prometheus metrics once in finish()."""
+    """Records phase timings and persists latency to Postgres in finish()."""
 
     project_uuid: str
     turn_id: str
@@ -187,26 +176,6 @@ class TurnLatencyRecorder:
         project_uuid = self.project_uuid
         total_seconds = time.perf_counter() - self._turn_start
 
-        if self._enqueued_at is not None and self._started_at is not None:
-            broker_wait = max(0.0, self._started_at - self._enqueued_at)
-            INLINE_AGENT_BROKER_QUEUE_WAIT_SECONDS.labels(project_uuid=project_uuid).observe(broker_wait)
-
-        if self._received_at is not None and self._started_at is not None:
-            scheduling = max(0.0, self._started_at - self._received_at)
-            INLINE_AGENT_WORKER_SCHEDULING_DELAY_SECONDS.labels(project_uuid=project_uuid).observe(scheduling)
-
-        if self._router_received_at is not None and self._enqueued_at is not None:
-            router_to_enqueue = max(0.0, self._enqueued_at - self._router_received_at)
-            INLINE_AGENT_ROUTER_TO_ENQUEUE_SECONDS.labels(project_uuid=project_uuid).observe(router_to_enqueue)
-
-        for phase_name, duration in self._phase_durations.items():
-            INLINE_AGENT_PHASE_DURATION_SECONDS.labels(phase=phase_name, project_uuid=project_uuid).observe(duration)
-
-        INLINE_AGENT_TURN_DURATION_SECONDS.labels(status=status, project_uuid=project_uuid).observe(total_seconds)
-
-        if record_error and self.last_completed_phase:
-            INLINE_AGENT_ERRORS_TOTAL.labels(phase=self.last_completed_phase, project_uuid=project_uuid).inc()
-
         record_turn_latency(
             project_uuid=project_uuid,
             status=status,
@@ -219,6 +188,9 @@ class TurnLatencyRecorder:
             started_at=self._started_at,
             router_received_at=self._router_received_at,
         )
+
+        if record_error and self.last_completed_phase:
+            sentry_sdk.set_tag("last_completed_phase", self.last_completed_phase)
 
         logger.debug(
             "Inline agent turn latency",
@@ -244,16 +216,8 @@ class TurnLatencyRecorder:
 
 
 def record_cache_access(project_uuid: str, cache_type: str, hit: bool) -> None:
-    validated = parse_valid_project_uuid(project_uuid)
-    if validated is None:
-        return
-    from router.tasks.inline_agent_metrics import INLINE_AGENT_CACHE_ACCESS_TOTAL
-
-    INLINE_AGENT_CACHE_ACCESS_TOTAL.labels(
-        cache_type=cache_type,
-        hit="true" if hit else "false",
-        project_uuid=validated,
-    ).inc()
+    """Reserved for future cache hit/miss persistence; no-op today."""
+    del project_uuid, cache_type, hit
 
 
 def cache_type_from_key(cache_key: str) -> Optional[str]:

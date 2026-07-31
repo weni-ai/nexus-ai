@@ -12,7 +12,7 @@
 
 Previous work on caching, `PreGenerationService`, workflow state, and observers **materially improved the codebase** and surfaced patterns worth keeping. That effort paused before end-to-end latency measurement shipped; the workflow entry point was never adopted in production.
 
-**Phase 0 (instrumentation) is implemented** on branch `feat/inline-agent-phase0-latency-instrumentation` and shipped to staging (e.g. tag `3.6.66-staging-alpha15`): `TurnLatencyRecorder`, Celery lifecycle signals, phase timers, and optional Prometheus metrics in the worker process.
+**Phase 0 (instrumentation) is implemented:** `TurnLatencyRecorder`, Celery lifecycle signals, phase timers, and Postgres persistence in `finish()`.
 
 **Direction change (July 2026):** Primary storage and staff-facing metrics move to **PostgreSQL (Plan B: rollups + outliers)** owned by Nexus, not Prometheus/Mimir scrape dependency. This unblocks staff and Grafana (Postgres datasource) without waiting on cloud team Celery scrape config.
 
@@ -56,7 +56,7 @@ POST /messages → enqueue → Celery start_inline_agents
 | Millions of raw rows in PG | Rollups + outliers only (~1–5% detail rows) |
 | Conversations in nexus-conversation | Outlier rows store URN + correlation IDs |
 
-**Optional later:** Celery `/api/prometheus/` exporter (`nexus/celery_prometheus_exporter.py`) for platform/SRE — **paused** until ops needs it. Does not block staff metrics.
+**Optional later:** Celery Prometheus scrape was removed — Postgres + analytics API is the sole staff metrics path (no cloud scrape required).
 
 ---
 
@@ -240,7 +240,7 @@ WHERE project_uuid = '$project_uuid' AND phase = 'total'
 
 P95 from JSONB `buckets` (same math as Prometheus histogram_quantile).
 
-Existing `contrib/grafana/inline_agent_turn_latency.json` (Prometheus) remains reference; add Postgres dashboard JSON when schema lands.
+Grafana Postgres dashboards can query `inline_agent_latency_hourly` directly — see `contrib/grafana/README.md`.
 
 ### 3. Future MCP for staff (Phase 3)
 
@@ -260,7 +260,6 @@ Example tools: `latency_summary`, `latency_timeseries`, `latency_outliers`, `lat
 | **Langfuse / Logfire** | LLM/tool spans inside T4 |
 | **Sentry** | Errors, tags from recorder |
 | **S3 inline traces** | Per-turn jsonl drill-down |
-| **Prometheus** (optional) | Ops/SRE if Celery scrape enabled later |
 
 ---
 
@@ -271,7 +270,7 @@ Example tools: `latency_summary`, `latency_timeseries`, `latency_outliers`, `lat
 - `TurnLatencyRecorder` in `router/tasks/latency_context.py`
 - Celery signals in `nexus/celery_latency_signals.py`
 - `router/tasks/inline_agent_enqueue.py` — router timestamps
-- Optional `prometheus_client` metrics in `router/tasks/inline_agent_metrics.py`
+- Postgres persistence via `TurnLatencyRecorder.finish()` → `record_turn_latency()`
 
 ### Phase 1b (next)
 
@@ -352,11 +351,10 @@ Redis is shared for Celery broker, Django cache, app cache, Channels. Contention
 - [x] Remove workflow branch from `invoke.py`
 - [x] Celery lifecycle signals + headers
 - [x] `TurnLatencyRecorder` with required `project_uuid`
-- [x] Prometheus metrics module (optional observe)
+- [x] Postgres persistence in `finish()` via `record_turn_latency()`
 - [x] Router timestamp propagation
-- [x] Grafana JSON starter (Prometheus — superseded by Postgres path for staff)
+- [x] Grafana query doc (`contrib/grafana/README.md`)
 - [x] Celery startup fix (`nexus/celery_latency_signals.py`)
-- [ ] Celery Prometheus exporter scrape — **paused** (cloud team dependency)
 
 ---
 
@@ -419,7 +417,7 @@ Keycloak-authenticated MCP server wrapping analytics API.
 
 ### Phase 7 — Cleanup (LOW)
 
-Remove workflow dead code; optional remove Prometheus metrics if unused.
+Remove workflow dead code.
 
 ---
 
@@ -431,8 +429,7 @@ Remove workflow dead code; optional remove Prometheus metrics if unused.
 | Spike → conversation | **Outlier table + nexus-conversation** | 1b |
 | Staff Grafana charts | **Grafana → Postgres** | 1b |
 | LLM/tool spans | **Langfuse / Logfire** | existing |
-| Exceptions | **Sentry** | 0 |
-| Platform ops scrape | **Prometheus** (optional) | paused |
+| Errors, tags on failure | **Sentry** | 0 |
 | AI-assisted staff queries | **MCP + Keycloak** | 6 |
 | Queue depth, Redis health | **Infra Grafana** | 1 |
 
@@ -444,13 +441,12 @@ Remove workflow dead code; optional remove Prometheus metrics if unused.
 |------|------|
 | Production entry | `router/tasks/invoke.py` |
 | Latency recorder | `router/tasks/latency_context.py` |
-| Prometheus metrics (optional) | `router/tasks/inline_agent_metrics.py` |
+| Postgres writer | `nexus/analytics/latency_writer.py` |
 | Celery signals | `nexus/celery_latency_signals.py` |
-| Celery exporter (paused) | `nexus/celery_prometheus_exporter.py` |
 | Enqueue timestamps | `router/tasks/inline_agent_enqueue.py` |
-| Analytics API pattern | `nexus/analytics/api/views.py` |
+| Analytics API | `nexus/analytics/api/latency_views.py` |
 | Speckit spec | `specs/002-inline-agent-latency-storage/` |
-| Grafana (Prometheus ref) | `contrib/grafana/inline_agent_turn_latency.json` |
+| Grafana queries | `contrib/grafana/README.md` |
 
 ---
 
@@ -471,5 +467,4 @@ Remove workflow dead code; optional remove Prometheus metrics if unused.
 3. **Nexus-owned read path** — analytics API + optional Grafana Postgres; no Mimir blocker  
 4. **nexus-conversation correlation** — URN, turn_id, timestamps on every outlier  
 5. **Future MCP + Keycloak** — same API, later auth phase  
-6. **Prometheus/Celery scrape** — optional for ops, paused  
-7. **Hard rule: no latency regression** — validate every persistence PR against P95  
+6. **Hard rule: no latency regression** — validate every persistence PR against P95  

@@ -6,10 +6,9 @@
 - [x] Celery lifecycle signals (`nexus/celery_latency_signals.py`)
 - [x] Router/enqueue timestamps
 - [x] Required `project_uuid` guardrail
-- [x] Optional Prometheus metrics module
+- [x] Postgres persistence in `TurnLatencyRecorder.finish()`
 - [x] Celery startup import fix
 - [ ] Merge Phase 0 to main/staging (if not already)
-- [ ] Celery Prometheus scrape — **paused** (ops optional)
 
 ## Phase 1 — Spec & plan
 
@@ -51,8 +50,7 @@
 
 ## Phase 6 — Grafana & docs
 
-- [ ] Postgres dashboard JSON or query doc in `contrib/grafana/`
-- [ ] Note in plan: Prometheus dashboard is ops-optional reference
+- [x] Postgres query doc in `contrib/grafana/README.md`
 
 ## Phase 7 — Validation
 
@@ -76,4 +74,3 @@
 ## Future — Infra (parallel track)
 
 - [ ] Dedicated Celery broker Redis (Phase 1 in master plan)
-- [ ] Optional: enable Celery Prometheus exporter scrape

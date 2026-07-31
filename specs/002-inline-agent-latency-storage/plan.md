@@ -146,14 +146,14 @@ Schedule via Celery beat (daily).
 - Panels query `inline_agent_latency_hourly_v` only
 - Template variable: `project_uuid`
 
-Prometheus dashboard `contrib/grafana/inline_agent_turn_latency.json` — keep as reference for optional ops path.
+Grafana query examples: `contrib/grafana/README.md`
 
-## Optional / Paused
+## Optional / removed
 
 | Item | Status |
 |------|--------|
-| `nexus/celery_prometheus_exporter.py` | Implemented; scrape config paused |
-| `router/tasks/inline_agent_metrics.py` | Keep observe calls optional or remove in Phase 7 |
+| Celery Prometheus exporter | **Removed** — Postgres path only, no cloud scrape |
+| `inline_agent_*` prometheus_client metrics | **Removed** |
 
 ## Key Files
 

@@ -101,4 +101,3 @@ def setup_logfire_and_langfuse(sender, **kwargs):
 
 # Phase 0: Celery lifecycle timestamps for start_inline_agents latency metrics.
 import nexus.celery_latency_signals  # noqa: F401, E402
-import nexus.celery_prometheus_exporter  # noqa: F401, E402
