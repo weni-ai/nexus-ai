@@ -33,6 +33,10 @@ from inline_agents.backends.openai.hooks import (
 )
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.legacy_formatter_pipeline import use_legacy_formatter_after_manager
+from inline_agents.backends.openai.message_context import (
+    emit_context_tool_traces,
+    inject_context_as_tool_result,
+)
 from inline_agents.backends.openai.sessions import (
     RedisSession,
     delete_openai_inline_session_keys_for_contact,
@@ -302,6 +306,7 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
         manager_pipeline_version = kwargs.pop("manager_pipeline_version", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
+        injected_context = kwargs.pop("injected_context", None)
         rationale_switch = rationale_switch_cached
         progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
             contact_urn,
@@ -547,6 +552,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     grpc_session=grpc_session,
                     formatter_agent_configurations=formatter_agent_configurations,
                     manager_pipeline_version=manager_pipeline_version,
+                    injected_context=injected_context,
                 )
             )
 
@@ -858,6 +864,7 @@ class OpenAIBackend(InlineAgentsBackend):
         grpc_session: Optional[StreamingSession] = None,
         formatter_agent_configurations: Optional[Dict[str, Any]] = None,
         manager_pipeline_version: Optional[str] = None,
+        injected_context: Optional[str] = None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
@@ -874,6 +881,15 @@ class OpenAIBackend(InlineAgentsBackend):
                 user_model_credentials = external_team.pop("user_model_credentials", {})
                 model_vendor = external_team.pop("model_vendor", "")
                 self._set_openai_client(user_model_credentials, model_vendor)
+
+                if injected_context:
+                    await inject_context_as_tool_result(session, injected_context)
+                    await emit_context_tool_traces(
+                        supervisor_hooks.trace_handler,
+                        external_team["context"],
+                        injected_context,
+                    )
+
                 result = client.run_streamed(
                     **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
                 )

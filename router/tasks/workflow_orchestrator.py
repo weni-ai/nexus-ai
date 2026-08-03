@@ -37,6 +37,7 @@ from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,
+    _extract_and_apply_message_context,
     _invoke_backend,
     _invoke_is_final_debug,
     _preprocess_message_input,
@@ -288,6 +289,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     # Create message object
     message_obj = _create_message_object(processed_message)
+    injected_context = _extract_and_apply_message_context(message_obj)
 
     # Get backend and invoke (incoming message is saved inside backend via save_inline_message_async)
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
@@ -335,6 +337,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         preview_websocket=ctx.preview_websocket,
         skip_conversation_sqs=skip_conv_sqs,
+        injected_context=injected_context,
     )
 
     return response, skip_dispatch

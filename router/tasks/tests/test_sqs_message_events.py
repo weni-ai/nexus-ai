@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from router.tasks.sqs_message_events import (
     EVENT_TYPE_MESSAGE_SENT,
+    build_message_received_event,
     extract_messages_sent_texts,
     send_tool_messages_sent_to_conversation_sqs,
     sqs_response_text_from_agent_output,
@@ -115,6 +116,32 @@ class TestToolResultHasFinalOutput(unittest.TestCase):
 
     def test_no_flag(self):
         self.assertFalse(tool_result_has_final_output({"messages_sent": [{"text": "a"}]}))
+
+
+class TestBuildMessageReceivedEvent(unittest.TestCase):
+    def test_passes_message_text_through_unchanged(self):
+        """Caller is responsible for stripping `; Context:` before building the event."""
+        raw = "O café é 100% Arábica?; Context: Product: Café Torrado"
+        event = build_message_received_event(
+            project_uuid="proj-1",
+            contact_urn="urn:1",
+            channel_uuid="chan-1",
+            contact_name="Alice",
+            message_text=raw,
+            created_at="2026-07-28T12:00:00Z",
+        )
+        self.assertEqual(event.data.message.text, raw)
+
+    def test_keeps_text_without_context_delimiter(self):
+        event = build_message_received_event(
+            project_uuid="proj-1",
+            contact_urn="urn:1",
+            channel_uuid="chan-1",
+            contact_name="Alice",
+            message_text="Hello world",
+            created_at="2026-07-28T12:00:00Z",
+        )
+        self.assertEqual(event.data.message.text, "Hello world")
 
 
 class TestSendToolMessagesSentToConversationSqs(unittest.TestCase):
