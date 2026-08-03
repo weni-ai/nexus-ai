@@ -59,7 +59,7 @@ def backwards_noop(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0032_bedrockguardrailpool"),
+        ("projects", "0033_bedrockguardrailpool"),
     ]
 
     operations = [
