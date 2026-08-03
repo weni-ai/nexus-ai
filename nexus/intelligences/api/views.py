@@ -1526,6 +1526,8 @@ class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
     def post(self, request, project_uuid):
         project_uuid = self.get_scoped_project_uuid(project_uuid)
         user_email = self.user_email or getattr(request.user, "email", None)
+        if not user_email:
+            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
         is_internal = self.is_internal or (
             hasattr(request.user, "has_perm") and request.user.has_perm("users.can_communicate_internally")
         )
@@ -1573,6 +1575,8 @@ class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
     def delete(self, request, project_uuid):
         project_uuid = self.get_scoped_project_uuid(project_uuid)
         user_email = self.user_email or getattr(request.user, "email", None)
+        if not user_email:
+            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
         is_internal = self.is_internal or (
             hasattr(request.user, "has_perm") and request.user.has_perm("users.can_communicate_internally")
         )
