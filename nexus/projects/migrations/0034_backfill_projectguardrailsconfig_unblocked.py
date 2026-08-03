@@ -1,12 +1,22 @@
 # Generated manually for guardrails defaults backfill
 
-from django.conf import settings
 from django.db import migrations
 from django.utils import timezone
 
 
-def _catalog_slugs():
-    return [entry["slug"] for entry in getattr(settings, "GUARDRAIL_CATEGORY_CATALOG", []) or []]
+_BACKFILL_SLUGS = [
+    "politics",
+    "physical_health",
+    "sexual_content",
+    "bias",
+    "hate",
+    "religion",
+    "suicide",
+    "self_harm",
+    "beliefs",
+    "gender_identity",
+    "sexual_relations",
+]
 
 
 def forwards_backfill_existing_projects_unblocked(apps, schema_editor):
@@ -17,11 +27,7 @@ def forwards_backfill_existing_projects_unblocked(apps, schema_editor):
     Project = apps.get_model("projects", "Project")
     ProjectGuardrailsConfig = apps.get_model("projects", "ProjectGuardrailsConfig")
 
-    slugs = _catalog_slugs()
-    if not slugs:
-        return
-
-    unblocked_states = {slug: False for slug in slugs}
+    unblocked_states = {slug: False for slug in _BACKFILL_SLUGS}
     existing_project_ids = set(ProjectGuardrailsConfig.objects.values_list("project_id", flat=True))
     now = timezone.now()
     batch = []
