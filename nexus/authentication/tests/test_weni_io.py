@@ -4,17 +4,62 @@ from uuid import uuid4
 from django.test import SimpleTestCase
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.test import APIRequestFactory
-from weni_commons.auth import WeniAuthContext
+from weni_commons.auth import WeniAuthContext, WeniAuthUser
 
 from nexus.authentication.weni_io import (
     HybridIOInternalPermission,
     HybridIOProjectPermission,
     WeniIOAuthViewMixin,
+    resolve_django_user,
 )
+from nexus.users.models import User
 
 
 class _DummyView(WeniIOAuthViewMixin):
     kwargs = {}
+
+
+class ResolveDjangoUserTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+
+    @mock.patch("nexus.authentication.weni_io.CreateUserUseCase")
+    def test_maps_weni_auth_user_to_django_user(self, mock_create_use_case):
+        django_user = mock.Mock(spec=User)
+        django_user.email = "io@example.com"
+        mock_create_use_case.return_value.create_user.return_value = django_user
+
+        request = self.factory.get("/")
+        request.user = WeniAuthUser(email="io@example.com")
+        request.auth = WeniAuthContext(
+            project_uuid=str(uuid4()),
+            user_email="io@example.com",
+            token_type="jwt",
+        )
+
+        user = resolve_django_user(request)
+
+        self.assertIs(user, django_user)
+        mock_create_use_case.return_value.create_user.assert_called_once_with("io@example.com")
+
+    def test_keeps_existing_django_user(self):
+        existing = User(email="dash@example.com")
+        request = self.factory.get("/")
+        request.user = existing
+        request.auth = WeniAuthContext(
+            project_uuid=str(uuid4()),
+            user_email="dash@example.com",
+            token_type="keycloak",
+        )
+
+        self.assertIs(resolve_django_user(request), existing)
+
+    def test_keeps_external_token_bool_user(self):
+        request = self.factory.get("/")
+        request.user = True
+        request.auth = None
+
+        self.assertIs(resolve_django_user(request), True)
 
 
 class HybridIOProjectPermissionTests(SimpleTestCase):
