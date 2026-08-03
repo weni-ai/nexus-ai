@@ -651,7 +651,7 @@ PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION = env.str(
 START_INLINE_AGENTS_ACK_LATE = env.bool("START_INLINE_AGENTS_ACK_LATE", False)
 ENABLE_LOGFIRE_OPENAI_AGENTS = env.bool("ENABLE_LOGFIRE_OPENAI_AGENTS", False)
 
-JWT_PUBLIC_KEY_PATH = BASE_DIR / "nexus" / "authentication" / "jwt_keys" / "public_key.pem"
+JWT_PUBLIC_KEY_PATH = BASE_DIR / "nexus" / "authentication" / "jwt_keys" / "public_key.perm"
 JWT_SECRET_KEY = env.str("JWT_SECRET_KEY")
 OPENAI_AGENTS_FOUNDATION_MODEL = env.str("OPENAI_AGENTS_FOUNDATION_MODEL", "gpt-4o-mini")
 
