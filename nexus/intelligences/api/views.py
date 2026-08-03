@@ -1793,14 +1793,12 @@ class UploadFileView(views.APIView):
         return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)
 
 
-class CommerceHasAgentBuilder(views.APIView):
-    permission_classes = [InternalCommunicationPermission]
+class CommerceHasAgentBuilder(WeniIOAuthViewMixin, views.APIView):
+    permission_classes = [HybridIOIdentityPermission, HybridIOInternalPermission]
 
     def get(self, request):
-        project_uuid = request.query_params.get("project_uuid", None)
-
-        if not project_uuid:
-            return Response({"Error": "The project_uuid is required!"}, status=status.HTTP_400_BAD_REQUEST)
+        # project_uuid may arrive as query param (legacy) or from JWT/Keycloak auth context.
+        project_uuid = self.get_scoped_project_uuid(request.query_params.get("project_uuid"))
 
         content_base = get_default_content_base_by_project(project_uuid=project_uuid)
         agent = content_base.agent
