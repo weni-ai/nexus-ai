@@ -17,7 +17,7 @@ def update_message(update_project_dto: UpdateProjectDTO):  # pragma: no cover
     action = "UPDATE"
     entity = "NEXUS"
     user = update_project_dto.user_email
-    project_uuid = update_project_dto.uuid
+    project_uuid = str(update_project_dto.uuid)
 
     message = {
         "action": action,
