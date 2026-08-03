@@ -8,7 +8,6 @@ import boto3
 import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.utils import timezone
 
 from nexus.projects.models import Project, ProjectGuardrailsConfig
 from nexus.usecases.guardrails.bedrock_guardrail_pool import (
@@ -61,20 +60,6 @@ class ProjectGuardrailsConfigUseCase:
         return [entry["slug"] for entry in settings.GUARDRAIL_CATEGORY_CATALOG]
 
     @classmethod
-    def is_new_project(cls, project: Project) -> bool:
-        deploy_at = settings.GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT
-        created_at = project.created_at
-        if timezone.is_naive(created_at):
-            created_at = timezone.make_aware(created_at, timezone.get_current_timezone())
-        if timezone.is_naive(deploy_at):
-            deploy_at = timezone.make_aware(deploy_at, timezone.get_current_timezone())
-        return created_at >= deploy_at
-
-    @classmethod
-    def default_blocked_for_project(cls, project: Project) -> bool:
-        return cls.is_new_project(project)
-
-    @classmethod
     def build_default_category_states(cls, *, blocked: bool) -> dict[str, bool]:
         return {slug: blocked for slug in cls.catalog_slugs()}
 
@@ -103,13 +88,12 @@ class ProjectGuardrailsConfigUseCase:
 
     @classmethod
     def get_or_initialize(cls, project: Project, *, assign_pool: bool = True) -> ProjectGuardrailsConfig:
-        default_blocked = cls.default_blocked_for_project(project)
         config, created = ProjectGuardrailsConfig.objects.get_or_create(
             project=project,
             defaults={
-                "category_states": cls.build_default_category_states(blocked=default_blocked),
+                "category_states": cls.build_default_category_states(blocked=True),
                 "blocking_message": None,
-                "initialized_as_new_project": default_blocked,
+                "initialized_as_new_project": True,
             },
         )
         if not created:
@@ -119,8 +103,6 @@ class ProjectGuardrailsConfigUseCase:
                 config.category_states = merged_states
                 config.save(update_fields=["category_states", "modified_on"])
 
-        # GET/runtime assign the pool for blocked defaults. update_config uses
-        # assign_pool=False so message-only PATCH never resolves/creates Bedrock pools.
         if assign_pool:
             return cls.ensure_pool_assignment(config)
         return config

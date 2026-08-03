@@ -1,9 +1,7 @@
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase, override_settings
-from django.utils import timezone as django_timezone
 from rest_framework.request import Request
 
 from nexus.projects.api.permissions import GuardrailsConfigAdminPermission
@@ -27,11 +25,8 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
     def tearDown(self) -> None:
         self._pool_patcher.stop()
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
     def test_lazy_init_new_project_blocks_all_categories(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
 
         config = self.use_case.get_or_initialize(project)
 
@@ -43,11 +38,13 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertEqual(config.bedrock_guardrail_version, "1")
         self._mock_get_or_create_pool.assert_called_once()
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
-    def test_lazy_init_existing_project_unblocks_all_categories(self):
+    def test_lazy_init_keeps_backfilled_unblocked_config(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2025, 1, 1))
-        project.save(update_fields=["created_at"])
+        ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=False),
+            initialized_as_new_project=False,
+        )
 
         config = self.use_case.get_or_initialize(project)
 
@@ -57,11 +54,8 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertIsNone(config.bedrock_guardrail_pool_id)
         self._mock_get_or_create_pool.assert_not_called()
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
     def test_lazy_init_backfills_pool_when_blocked_without_assignment(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
         ProjectGuardrailsConfig.objects.create(
             project=project,
             category_states=self.use_case.build_default_category_states(blocked=True),
@@ -76,11 +70,8 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertTrue(config.bedrock_guardrail_identifier)
         self._mock_get_or_create_pool.assert_called_once()
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
     def test_lazy_init_pool_failure_is_fail_open(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
         self._mock_get_or_create_pool.side_effect = BedrockGuardrailPoolError("aws down")
 
         config = self.use_case.get_or_initialize(project)
@@ -89,12 +80,8 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertIsNone(config.bedrock_guardrail_pool_id)
         self.assertFalse(config.bedrock_guardrail_identifier)
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
     def test_merge_adds_new_catalog_slug_on_get(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2025, 1, 1))
-        project.save(update_fields=["created_at"])
-
         ProjectGuardrailsConfig.objects.create(
             project=project,
             category_states={"politics": True},
@@ -159,8 +146,6 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     def test_update_unblocks_without_confirmation(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
         self.use_case.get_or_initialize(project)
 
         config = self.use_case.update_config(
@@ -220,8 +205,6 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     def test_get_runtime_config_as_dict_initializes_missing_config(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
         self.assertFalse(ProjectGuardrailsConfig.objects.filter(project=project).exists())
 
         runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
