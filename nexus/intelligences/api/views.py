@@ -1729,6 +1729,9 @@ class ContentBasePersonalizationViewSet(WeniIOAuthViewMixin, ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instruction_id = request.query_params.get("id")
+        if not instruction_id:
+            return Response({"error": "id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
         project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
         content_base = self._get_content_base(project_uuid)
 
