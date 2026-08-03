@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import json
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -775,12 +774,6 @@ GUARDRAILS_BEDROCK_PII_ENTITIES = [
     {"type": "CREDIT_DEBIT_CARD_NUMBER", "action": "BLOCK"},
     {"type": "ADDRESS", "action": "ANONYMIZE"},
 ]
-
-_guardrails_deploy_at_raw = env.str("GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT", default="2026-07-01")
-_guardrails_deploy_at = datetime.fromisoformat(_guardrails_deploy_at_raw)
-if _guardrails_deploy_at.tzinfo is None:
-    _guardrails_deploy_at = _guardrails_deploy_at.replace(tzinfo=timezone.utc)
-GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT = _guardrails_deploy_at
 
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")
