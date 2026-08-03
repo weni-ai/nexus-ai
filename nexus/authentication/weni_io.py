@@ -1,6 +1,6 @@
 """Hybrid JWT/Keycloak auth helpers for App IO endpoints."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
@@ -9,11 +9,14 @@ from weni_commons.auth import (
     CanCommunicateInternally,
     WeniAuthContext,
     WeniAuthentication,
+    WeniAuthUser,
     WeniAuthViewMixin,
 )
 
 from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.projects.api.permissions import ExternalTokenPermission, ProjectPermission
+from nexus.usecases.users.create import CreateUserUseCase
+from nexus.users.models import User
 
 
 class ExternalTokenAuthenticationWithHeader(ExternalTokenAuthentication):
@@ -24,6 +27,30 @@ class ExternalTokenAuthenticationWithHeader(ExternalTokenAuthentication):
 
 
 WENI_IO_AUTHENTICATION_CLASSES = [ExternalTokenAuthenticationWithHeader, WeniAuthentication]
+
+
+def resolve_django_user(request: Request) -> Any:
+    """Replace JWT ``WeniAuthUser`` with a persisted Django ``User``.
+
+    Nexus writes ``request.user`` into FKs (e.g. ``RecentActivities.created_by``).
+    ``WeniAuthentication`` returns a lightweight ``WeniAuthUser`` for App IO JWTs,
+    which is not a model instance — resolve by email via get_or_create.
+    Keycloak already yields a Django user; external tokens keep their bool user.
+    """
+    user = getattr(request, "user", None)
+    if isinstance(user, User):
+        return user
+
+    email = None
+    if isinstance(user, WeniAuthUser):
+        email = user.email
+    elif isinstance(getattr(request, "auth", None), WeniAuthContext):
+        email = request.auth.user_email
+
+    if email:
+        return CreateUserUseCase().create_user(email)
+
+    return user
 
 
 class HybridIOIdentityPermission(permissions.BasePermission):
@@ -98,6 +125,10 @@ class WeniIOAuthViewMixin(WeniAuthViewMixin):
 
     authentication_classes = WENI_IO_AUTHENTICATION_CLASSES
     permission_classes = [HybridIOIdentityPermission, HybridIOProjectPermission]
+
+    def perform_authentication(self, request: Request) -> None:
+        super().perform_authentication(request)
+        request.user = resolve_django_user(request)
 
     def get_scoped_project_uuid(self, path_project_uuid: Optional[str] = None) -> str:
         """Resolve project UUID for App IO hybrid auth.

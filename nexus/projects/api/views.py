@@ -345,7 +345,17 @@ class ConversationsProxyView(WeniIOAuthViewMixin, APIView):
             status_code = getattr(e.response, "status_code", 500)
 
         if status_code == 404:
-            return Response({}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "count": 0,
+                    "next": None,
+                    "previous": None,
+                    "results": [],
+                    "status_summary": None,
+                    "total_count": 0,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         try:
             error_message, error_details = self.usecase.extract_error_message(e.response)
