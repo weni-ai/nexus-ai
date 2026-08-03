@@ -1,7 +1,8 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pendulum
-from django.test import TestCase, override_settings
+from django.test import TestCase
+from weni_commons.change_history import Action, Entity, Module, Notifier
 
 from nexus.event_domain.recent_activity.create import create_recent_activity
 from nexus.event_domain.recent_activity.publishers_dto import RecentActivitiesDTO
@@ -26,15 +27,9 @@ class RecentActivityAmqTestCase(TestCase):
 
         EDAConnection.clear_connection()
 
-    @override_settings(
-        RECENT_ACTIVITIES_AMQ_EXCHANGE="change-history.topic",
-        RECENT_ACTIVITIES_AMQ_ROUTING_KEY="",
-    )
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAConnection.clear_connection")
-    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAPublisher")
-    def test_notify_change_sends_change_history_envelope(self, mock_publisher_cls, mock_clear_connection):
-        mock_publisher = MagicMock()
-        mock_publisher_cls.return_value = mock_publisher
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
+    def test_notify_change_uses_entity_user_and_module_nexus(self, mock_notifier, mock_clear_connection):
         date = pendulum.datetime(2026, 5, 20, 11, 15, 0, tz="UTC")
 
         notify_change(
@@ -42,40 +37,35 @@ class RecentActivityAmqTestCase(TestCase):
             user_email=self.project.created_by.email,
             date=date,
             action="UPDATE",
-            entity="Project",
             object_id=str(self.project.uuid),
             object_name="brain_on",
-            correlation_id="req-abc-123",
+            old_value="False",
+            new_value="True",
         )
 
-        mock_publisher.send_message.assert_called_once()
+        mock_notifier.assert_called_once()
         mock_clear_connection.assert_called_once()
-        kwargs = mock_publisher.send_message.call_args.kwargs
-        self.assertEqual(kwargs["exchange"], "change-history.topic")
-        self.assertEqual(kwargs["routing_key"], "")
+        kwargs = mock_notifier.call_args.kwargs
+        self.assertEqual(kwargs["project_uuid"], str(self.project.uuid))
+        self.assertEqual(kwargs["user_email"], self.project.created_by.email)
+        self.assertEqual(kwargs["date"], date)
+        self.assertEqual(kwargs["action"], Action.UPDATE)
+        self.assertEqual(kwargs["entity"], Entity.USER)
+        self.assertEqual(kwargs["module"], Module.NEXUS)
+        self.assertEqual(kwargs["object_id"], str(self.project.uuid))
+        self.assertEqual(kwargs["object_name"], "brain_on")
+        self.assertEqual(kwargs["old_value"], "False")
+        self.assertEqual(kwargs["new_value"], "True")
 
-        body = kwargs["body"]
-        self.assertEqual(body["event_type"], "nexus.project.updated")
-        self.assertEqual(body["producer"], "nexus-ai")
-        self.assertEqual(body["timestamp"], date.to_iso8601_string())
-        self.assertEqual(body["correlation_id"], "req-abc-123")
-        self.assertIn("event_id", body)
-        self.assertEqual(body["data"]["project_uuid"], str(self.project.uuid))
-        self.assertEqual(body["data"]["user_email"], self.project.created_by.email)
-        self.assertEqual(body["data"]["action"], "UPDATE")
-        self.assertEqual(body["data"]["entity"], "Project")
-        self.assertEqual(body["data"]["module"], "nexus")
-
-    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAPublisher")
-    def test_notify_change_skips_when_project_uuid_missing(self, mock_publisher_cls):
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
+    def test_notify_change_skips_when_project_uuid_missing(self, mock_notifier):
         notify_change(
             project_uuid="",
             user_email=self.project.created_by.email,
             date=pendulum.now("UTC"),
             action="UPDATE",
-            entity="Project",
         )
-        mock_publisher_cls.assert_not_called()
+        mock_notifier.assert_not_called()
 
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.notify_change")
     def test_publish_recent_activity_maps_to_notify_change(self, mock_notify_change):
@@ -94,9 +84,11 @@ class RecentActivityAmqTestCase(TestCase):
         kwargs = mock_notify_change.call_args.kwargs
         self.assertEqual(kwargs["project_uuid"], str(self.project.uuid))
         self.assertEqual(kwargs["user_email"], self.project.created_by.email)
-        self.assertEqual(kwargs["action"], "UPDATE")
-        self.assertEqual(kwargs["entity"], "ContentBase")
+        self.assertEqual(kwargs["action"], "U")
+        self.assertEqual(kwargs["object_name"], "ContentBase")
         self.assertEqual(kwargs["object_id"], str(recent_activity.uuid))
+        self.assertEqual(kwargs["old_value"], "a")
+        self.assertEqual(kwargs["new_value"], "b")
 
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.notify_change")
     def test_publish_external_fans_out_per_project(self, mock_notify_change):
@@ -128,3 +120,6 @@ class RecentActivityAmqTestCase(TestCase):
 
         self.assertEqual(RecentActivities.objects.count(), 1)
         mock_publish.assert_called_once_with(recent_activity=recent_activity)
+
+    def test_notifier_exchange_matches_contract(self):
+        self.assertEqual(Notifier.EXCHANGE, "change-history.topic")

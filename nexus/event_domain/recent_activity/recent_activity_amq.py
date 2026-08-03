@@ -1,11 +1,10 @@
+import json
 import logging
-from typing import Any, Dict, Optional
-from uuid import uuid4
+from typing import Optional, Tuple
 
 import pendulum
-from django.conf import settings
-from weni.eda.django import AMQConnectionParamsFactory
-from weni.eda.eda_publisher import EDAPublisher
+from weni.eda.connection import EDAConnection
+from weni_commons.change_history import Action, Entity, Module, Notifier
 
 from nexus.logs.models import RecentActivities
 
@@ -13,32 +12,38 @@ from .publishers_dto import RecentActivitiesDTO
 
 logger = logging.getLogger(__name__)
 
-PRODUCER = "nexus-ai"
-DEFAULT_MODULE = "nexus"
-
 ACTION_TYPE_TO_ACTION = {
-    "C": "CREATE",
-    "U": "UPDATE",
-    "D": "DELETE",
-}
-
-ACTION_TO_EVENT_SUFFIX = {
-    "CREATE": "created",
-    "UPDATE": "updated",
-    "DELETE": "deleted",
-    "C": "created",
-    "U": "updated",
-    "D": "deleted",
+    "C": Action.CREATE,
+    "U": Action.UPDATE,
+    "D": Action.DELETE,
+    "CREATE": Action.CREATE,
+    "UPDATE": Action.UPDATE,
+    "DELETE": Action.DELETE,
+    "ADD": Action.ADD,
 }
 
 
-def _to_utc_z(value) -> str:
-    return pendulum.instance(value).in_timezone("UTC").to_iso8601_string()
+def _resolve_action(action: str) -> Action:
+    resolved = ACTION_TYPE_TO_ACTION.get(action)
+    if resolved is not None:
+        return resolved
+    try:
+        return Action(action)
+    except ValueError:
+        logger.warning("Unknown change-history action %r, defaulting to UPDATE", action)
+        return Action.UPDATE
 
 
-def _event_type(*, entity: str, action: str) -> str:
-    suffix = ACTION_TO_EVENT_SUFFIX.get(action, action.lower())
-    return f"nexus.{entity.lower()}.{suffix}"
+def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str], Optional[str]]:
+    if not action_details:
+        return None, None
+
+    if len(action_details) == 1:
+        change = next(iter(action_details.values()))
+        if isinstance(change, dict) and "old" in change and "new" in change:
+            return str(change["old"]), str(change["new"])
+
+    return None, json.dumps(action_details)
 
 
 def notify_change(
@@ -47,69 +52,53 @@ def notify_change(
     user_email: str,
     date: pendulum.DateTime,
     action: str,
-    entity: str,
-    module: str = DEFAULT_MODULE,
     object_id: Optional[str] = None,
     object_name: Optional[str] = None,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None,
     user_ip: Optional[str] = None,
-    correlation_id: Optional[str] = None,
 ) -> None:
     """
-    Publish a change-history event to Amazon MQ.
+    Publish change history via weni-commons Notifier (Amazon MQ).
 
-    Mirrors the weni-commons Notifier.notify_change contract Sandro is introducing.
-    Envelope format agreed for Change History:
-    event_id, event_type, producer, timestamp, correlation_id, data.
+    object_name carries the concrete Nexus model/resource name.
     """
     if not project_uuid:
         logger.warning("Skipping change-history AMQ publish: missing project_uuid")
         return
 
-    event_id = str(uuid4())
-    timestamp = _to_utc_z(date)
-    body: Dict[str, Any] = {
-        "event_id": event_id,
-        "event_type": _event_type(entity=entity, action=action),
-        "producer": PRODUCER,
-        "timestamp": timestamp,
-        "correlation_id": correlation_id,
-        "data": {
-            "project_uuid": project_uuid,
-            "user_email": user_email,
-            "date": timestamp,
-            "action": action,
-            "entity": entity,
-            "module": module,
-            "object_id": object_id,
-            "object_name": object_name,
-            "user_ip": user_ip,
-        },
-    }
-
-    exchange = getattr(settings, "RECENT_ACTIVITIES_AMQ_EXCHANGE", "change-history.topic")
-    routing_key = getattr(settings, "RECENT_ACTIVITIES_AMQ_ROUTING_KEY", "")
-
     try:
-        EDAPublisher(AMQConnectionParamsFactory).send_message(
-            body=body,
-            exchange=exchange,
-            routing_key=routing_key,
+        Notifier.notify_change(
+            project_uuid=project_uuid,
+            user_email=user_email,
+            date=date,
+            action=_resolve_action(action),
+            entity=Entity.USER,
+            module=Module.NEXUS,
+            object_id=object_id,
+            object_name=object_name,
+            old_value=old_value,
+            new_value=new_value,
+            user_ip=user_ip,
         )
     except Exception:
         logger.exception("Failed to publish change history to Amazon MQ")
+    finally:
+        # Avoid leaking thread-local AMQP connections across Django tests.
+        EDAConnection.clear_connection()
 
 
 def publish_recent_activity_to_amq(*, recent_activity: RecentActivities) -> None:
-    """Map a persisted RecentActivities row into notify_change."""
-    action = ACTION_TYPE_TO_ACTION.get(recent_activity.action_type, recent_activity.action_type)
+    old_value, new_value = _values_from_details(recent_activity.action_details)
     notify_change(
         project_uuid=str(recent_activity.project.uuid),
         user_email=recent_activity.created_by.email,
         date=pendulum.instance(recent_activity.created_at),
-        action=action,
-        entity=recent_activity.action_model,
+        action=recent_activity.action_type,
         object_id=str(recent_activity.uuid),
         object_name=recent_activity.action_model,
+        old_value=old_value,
+        new_value=new_value,
     )
 
 
@@ -133,7 +122,6 @@ def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
             user_email=dto.user.email,
             date=now,
             action=dto.action,
-            entity=dto.entity,
             object_name=dto.entity_name,
         )
 
@@ -144,7 +132,8 @@ def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool)
         user_email=user,
         date=pendulum.now("UTC"),
         action="UPDATE",
-        entity="Project",
         object_id=project_uuid,
-        object_name=f"brain_on={brain_on}",
+        object_name="brain_on",
+        old_value=str(not brain_on),
+        new_value=str(brain_on),
     )
