@@ -3,7 +3,6 @@
 from django.db import migrations
 from django.utils import timezone
 
-
 _BACKFILL_SLUGS = [
     "politics",
     "physical_health",
@@ -28,15 +27,16 @@ def forwards_backfill_existing_projects_unblocked(apps, schema_editor):
     ProjectGuardrailsConfig = apps.get_model("projects", "ProjectGuardrailsConfig")
 
     unblocked_states = {slug: False for slug in _BACKFILL_SLUGS}
-    existing_project_ids = set(ProjectGuardrailsConfig.objects.values_list("project_id", flat=True))
+    existing_ids_qs = ProjectGuardrailsConfig.objects.values_list("project_id", flat=True)
     now = timezone.now()
     batch = []
 
     for project_id in (
-        Project.objects.filter(is_active=True).values_list("uuid", flat=True).iterator(chunk_size=500)
+        Project.objects.filter(is_active=True)
+        .exclude(uuid__in=existing_ids_qs)
+        .values_list("uuid", flat=True)
+        .iterator(chunk_size=500)
     ):
-        if project_id in existing_project_ids:
-            continue
         batch.append(
             ProjectGuardrailsConfig(
                 project_id=project_id,

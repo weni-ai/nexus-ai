@@ -146,6 +146,7 @@ class ProjectGuardrailsConfigUseCase:
     def resolve_default_blocking_message(cls, project_uuid: str | None = None) -> str:
         """
         Resolve platform default blocking message by project language (Connect),
+        mirroring DEFAULT_ERROR_MESSAGES / OpenAIBackend._get_default_error_message.
         """
         messages = cls.default_blocking_messages()
         language = _DEFAULT_BLOCKING_LANGUAGE
@@ -153,6 +154,12 @@ class ProjectGuardrailsConfigUseCase:
             try:
                 language = ConnectRESTClient().get_project_language(str(project_uuid))
             except Exception:
+                logger.warning(
+                    "Failed to fetch project language for %s, falling back to %s",
+                    project_uuid,
+                    _DEFAULT_BLOCKING_LANGUAGE,
+                    exc_info=True,
+                )
                 language = _DEFAULT_BLOCKING_LANGUAGE
         return messages.get(language) or messages.get(_DEFAULT_BLOCKING_LANGUAGE) or ""
 
