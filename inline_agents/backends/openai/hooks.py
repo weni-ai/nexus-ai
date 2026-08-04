@@ -683,6 +683,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         print("==============on_tool_end================")
         print(f"Tool name: {tool.name}")
         print(result)
+        print(context.context.contact)
         print("==========================================")
 
         context_data = context.context
