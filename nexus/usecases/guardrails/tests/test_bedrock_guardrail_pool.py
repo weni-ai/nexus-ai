@@ -75,7 +75,7 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
         self.assertEqual(BedrockGuardrailPool.objects.count(), 0)
 
     @override_settings(
-        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Blocked.",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={"en-us": "Blocked.", "pt-br": "Blocked.", "es": "Blocked."},
         GUARDRAILS_BEDROCK_CONTENT_FILTERS=[{"type": "HATE", "inputStrength": "HIGH", "outputStrength": "HIGH"}],
         GUARDRAILS_BEDROCK_PII_ENTITIES=[{"type": "EMAIL", "action": "BLOCK"}],
     )
