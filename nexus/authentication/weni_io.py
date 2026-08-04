@@ -30,13 +30,7 @@ WENI_IO_AUTHENTICATION_CLASSES = [ExternalTokenAuthenticationWithHeader, WeniAut
 
 
 def resolve_django_user(request: Request) -> Any:
-    """Replace JWT ``WeniAuthUser`` with a persisted Django ``User``.
-
-    Nexus writes ``request.user`` into FKs (e.g. ``RecentActivities.created_by``).
-    ``WeniAuthentication`` returns a lightweight ``WeniAuthUser`` for App IO JWTs,
-    which is not a model instance — resolve by email via get_or_create.
-    Keycloak already yields a Django user; external tokens keep their bool user.
-    """
+    """Map JWT ``WeniAuthUser`` to a Django ``User`` (get_or_create by email)."""
     user = getattr(request, "user", None)
     if isinstance(user, User):
         return user
@@ -48,17 +42,13 @@ def resolve_django_user(request: Request) -> Any:
         email = request.auth.user_email
 
     if email:
-        return CreateUserUseCase().create_user(email)
+        return CreateUserUseCase().get_or_create_user(email)
 
     return user
 
 
 class HybridIOIdentityPermission(permissions.BasePermission):
-    """Require a Weni auth context, Django user, or external superuser token.
-
-    ExternalTokenAuthentication historically sets ``request.user`` to a bool,
-    so ``IsAuthenticated`` cannot be used directly.
-    """
+    """Require Weni auth context, Django user, or external superuser token."""
 
     def has_permission(self, request: Request, view) -> bool:
         if isinstance(getattr(request, "auth", None), WeniAuthContext):
@@ -72,12 +62,7 @@ class HybridIOIdentityPermission(permissions.BasePermission):
 
 
 class HybridIOProjectPermission(permissions.BasePermission):
-    """Authorize App IO routes under hybrid JWT + Keycloak auth.
-
-    - JWT: ``project_uuid`` claim is required (IO always sends it on these routes).
-    - Keycloak: keep existing project authorization checks.
-    - Legacy external/internal tokens remain allowed for compatibility.
-    """
+    """Authorize App IO routes under hybrid JWT + Keycloak auth."""
 
     def has_permission(self, request: Request, view) -> bool:
         auth = request.auth
@@ -98,12 +83,7 @@ class HybridIOProjectPermission(permissions.BasePermission):
 
 
 class HybridIOInternalPermission(permissions.BasePermission):
-    """Like HybridIOProjectPermission, but Keycloak stays internal-only.
-
-    Used by commerce-router, which historically required
-    ``users.can_communicate_internally`` and should not open to every
-    project member via Keycloak.
-    """
+    """Like HybridIOProjectPermission, but Keycloak stays internal-only."""
 
     def has_permission(self, request: Request, view) -> bool:
         auth = request.auth
@@ -131,21 +111,12 @@ class WeniIOAuthViewMixin(WeniAuthViewMixin):
         request.user = resolve_django_user(request)
 
     def get_scoped_project_uuid(self, path_project_uuid: Optional[str] = None) -> str:
-        """Resolve project UUID for App IO hybrid auth.
-
-        - JWT / Keycloak (``WeniAuthContext``): read exclusively from
-          ``self.auth.project_uuid`` (403 when absent). Path may only match;
-          it never overrides the claim/resolved scope.
-        - External superuser token (no auth context): fall back to the path
-          for compatibility until those callers are migrated.
-        """
+        """Resolve project UUID from auth scope (JWT/Keycloak) or path (external token)."""
         if path_project_uuid is None:
             path_project_uuid = self.kwargs.get("project_uuid")
 
         auth = getattr(self.request, "auth", None)
         if isinstance(auth, WeniAuthContext):
-            # Prefer the mixin accessor so missing project_uuid raises 403
-            # the same way as Eliton's ``self.auth.project_uuid`` contract.
             auth_project_uuid = str(self.auth.project_uuid)
             if path_project_uuid and str(path_project_uuid) != auth_project_uuid:
                 raise PermissionDenied("Project UUID does not match authenticated scope.")

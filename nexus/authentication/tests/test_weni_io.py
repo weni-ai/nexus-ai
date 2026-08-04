@@ -27,7 +27,7 @@ class ResolveDjangoUserTests(SimpleTestCase):
     def test_maps_weni_auth_user_to_django_user(self, mock_create_use_case):
         django_user = mock.Mock(spec=User)
         django_user.email = "io@example.com"
-        mock_create_use_case.return_value.create_user.return_value = django_user
+        mock_create_use_case.return_value.get_or_create_user.return_value = django_user
 
         request = self.factory.get("/")
         request.user = WeniAuthUser(email="io@example.com")
@@ -40,7 +40,7 @@ class ResolveDjangoUserTests(SimpleTestCase):
         user = resolve_django_user(request)
 
         self.assertIs(user, django_user)
-        mock_create_use_case.return_value.create_user.assert_called_once_with("io@example.com")
+        mock_create_use_case.return_value.get_or_create_user.assert_called_once_with("io@example.com")
 
     def test_keeps_existing_django_user(self):
         existing = User(email="dash@example.com")
