@@ -45,6 +45,7 @@ def messages(request: Request, message: MessageHTTPBody):
         )
 
         if project.inline_agent_switch:
+            print(message.dict())
             logger.info("Starting Inline Agent")
             enqueue_start_inline_agents(message.dict(), user_email=message.user_email or "")
         else:
