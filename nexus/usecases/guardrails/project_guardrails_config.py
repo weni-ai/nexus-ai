@@ -8,6 +8,7 @@ import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ValidationError
 
+from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project, ProjectGuardrailsConfig
 from nexus.usecases.guardrails.bedrock_guardrail_pool import (
     BedrockGuardrailPoolError,
@@ -15,6 +16,7 @@ from nexus.usecases.guardrails.bedrock_guardrail_pool import (
 )
 
 _UNSET = object()
+_DEFAULT_BLOCKING_LANGUAGE = "pt-br"
 logger = logging.getLogger(__name__)
 
 
@@ -134,10 +136,31 @@ class ProjectGuardrailsConfigUseCase:
         return config
 
     @classmethod
+    def default_blocking_messages(cls) -> dict[str, str]:
+        messages = getattr(settings, "GUARDRAILS_DEFAULT_BLOCKING_MESSAGES", {}) or {}
+        if isinstance(messages, str):
+            return {_DEFAULT_BLOCKING_LANGUAGE: messages}
+        return {str(key): str(value) for key, value in messages.items() if value is not None}
+
+    @classmethod
+    def resolve_default_blocking_message(cls, project_uuid: str | None = None) -> str:
+        """
+        Resolve platform default blocking message by project language (Connect),
+        """
+        messages = cls.default_blocking_messages()
+        language = _DEFAULT_BLOCKING_LANGUAGE
+        if project_uuid:
+            try:
+                language = ConnectRESTClient().get_project_language(str(project_uuid))
+            except Exception:
+                language = _DEFAULT_BLOCKING_LANGUAGE
+        return messages.get(language) or messages.get(_DEFAULT_BLOCKING_LANGUAGE) or ""
+
+    @classmethod
     def effective_blocking_message(cls, config: ProjectGuardrailsConfig) -> tuple[str, bool]:
         if config.blocking_message is not None and config.blocking_message.strip():
             return config.blocking_message, True
-        return settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE, False
+        return cls.resolve_default_blocking_message(str(config.project_id)), False
 
     @classmethod
     def has_blocked_category(cls, category_states: dict[str, bool]) -> bool:
@@ -154,7 +177,7 @@ class ProjectGuardrailsConfigUseCase:
 
         effective_message = blocking_message
         if effective_message is None or not effective_message.strip():
-            effective_message = settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
+            effective_message = cls.resolve_default_blocking_message()
 
         if not effective_message or not effective_message.strip():
             raise ValidationError({"blocking_message": "Blocking message is required when any category is blocked."})
@@ -278,7 +301,7 @@ class ProjectGuardrailsConfigUseCase:
             return None
 
         # Option A: ignore Bedrock canned outputs; use project effective message.
-        return runtime_config.get("blocking_message") or settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
+        return runtime_config.get("blocking_message") or cls.resolve_default_blocking_message()
 
     @classmethod
     def update_config(
