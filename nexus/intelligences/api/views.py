@@ -1613,9 +1613,7 @@ class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
                     filename=filename,
                 )
 
-            user = request.user if hasattr(request.user, "pk") else None
-            if user is None and user_email:
-                user, _ = User.objects.get_or_create(email=user_email)
+            user = request.user if getattr(request.user, "pk", None) else None
 
             event_manager.notify(event="contentbase_link_activity", action_type="D", content_base_link=link, user=user)
 
