@@ -71,8 +71,14 @@ class CacheService:
         """Get all project data in one cache operation (composite key)."""
         composite_key = f"project:{project_uuid}:all"
         cached = self.cache_repository.get(composite_key)
-        if cached and self._is_valid_guardrails_payload(cached.get("guardrails")):
-            return cached
+        if cached:
+            if self._is_valid_guardrails_payload(cached.get("guardrails")):
+                return cached
+
+            if "guardrails" in fetch_funcs:
+                cached["guardrails"] = self._fetch_and_cache_guardrails(project_uuid, fetch_funcs["guardrails"])
+                self.cache_repository.set(composite_key, cached, self.PROJECT_DATA_TTL)
+                return cached
 
         # Cache miss - fetch all data
         # Support both "project" and "data" keys for backward compatibility
@@ -133,6 +139,12 @@ class CacheService:
         """Reject legacy cache entries missing the ApplyGuardrail runtime schema."""
         return isinstance(payload, dict) and "has_blocked_category" in payload
 
+    def _fetch_and_cache_guardrails(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Dict:
+        data = fetch_func(project_uuid)
+        cache_key = self._get_cache_key(project_uuid, "guardrails")
+        self.cache_repository.set(cache_key, data, self.GUARDRAILS_TTL)
+        return data
+
     def get_guardrails_config(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Dict:
         """Get guardrails configuration from cache or fetch and cache."""
         cache_key = self._get_cache_key(project_uuid, "guardrails")
@@ -140,9 +152,7 @@ class CacheService:
         if cached and self._is_valid_guardrails_payload(cached):
             return cached
 
-        data = fetch_func(project_uuid)
-        self.cache_repository.set(cache_key, data, self.GUARDRAILS_TTL)
-        return data
+        return self._fetch_and_cache_guardrails(project_uuid, fetch_func)
 
     def get_inline_agent_config(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Optional[Dict]:
         """Get inline agent configuration from cache or fetch and cache."""
