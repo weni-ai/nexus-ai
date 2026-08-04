@@ -1548,7 +1548,7 @@ class ProjectModelProvidersView(APIView):
 
         if project.is_live_desk_copilot and project.manager_agent_id != provider.manager_agent_id:
             return Response(
-                data={"error": ManagerChangeNotAllowedForLiveDeskCopilot.default_message},
+                data={"error": ManagerChangeNotAllowedForLiveDeskCopilot().message},
                 status=403,
             )
 
@@ -1578,7 +1578,7 @@ class ProjectModelProvidersView(APIView):
 
         if project.is_live_desk_copilot:
             return Response(
-                data={"error": ManagerChangeNotAllowedForLiveDeskCopilot.default_message},
+                data={"error": ManagerChangeNotAllowedForLiveDeskCopilot().message},
                 status=403,
             )
 
