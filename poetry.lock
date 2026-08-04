@@ -8700,14 +8700,14 @@ files = [
 
 [[package]]
 name = "weni-commons"
-version = "1.3.3a1"
+version = "1.4.2a1"
 description = "Weni's common utilities for Python backends"
 optional = false
-python-versions = "<4.0,>=3.8"
+python-versions = ">=3.8,<4.0"
 groups = ["main"]
 files = [
-    {file = "weni_commons-1.3.3a1-py3-none-any.whl", hash = "sha256:f61ee82251f880eac137fc5955396022643942034e00ad8042050227203d7bc0"},
-    {file = "weni_commons-1.3.3a1.tar.gz", hash = "sha256:7cfa4368fc703a6afc5f87ec8d3f3f9a87ff3110b78647e70d352c1b637f9c66"},
+    {file = "weni_commons-1.4.2a1-py3-none-any.whl", hash = "sha256:b2f27e0f3fe87ace6272049397e1bed14363d0a00e38928da12f0eb8fdf8772e"},
+    {file = "weni_commons-1.4.2a1.tar.gz", hash = "sha256:885d62ba642e9a2a1942139d793f0879e27f06c3b1085bbf0e608214f401ad8a"},
 ]
 
 [package.dependencies]
@@ -8716,6 +8716,8 @@ celery = ">=5.0.0,<6.0"
 django = ">=3.2.22,<6.0"
 django-redis = ">=4.0.0,<=6.0"
 djangorestframework = ">=3.12.0,<4.0"
+mozilla-django-oidc = ">=2.0.0,<5.0"
+pyjwt = ">=2.8.0,<3.0"
 requests = ">=2.25.0"
 weni-eda = "0.3.0"
 weni-feature-flags = ">=2.2.0,<3.0.0"
@@ -9405,4 +9407,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "c0efd203a6dc12881382a4d711bde09a35e276bd476811b44fb3f71b28bff0ed"
+content-hash = "201d9071626c3177e1d877d5a93cabf91987f629d002f7982a55e3794f635bc8"
