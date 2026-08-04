@@ -33,6 +33,7 @@ class DeleteIntelligenceUseCase:
             user=user,
             entity_name=intelligence_name,
             action="DELETE",
+            action_model="Intelligence",
         )
         return True
 

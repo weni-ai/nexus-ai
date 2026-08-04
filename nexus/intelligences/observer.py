@@ -49,6 +49,7 @@ class IntelligenceCreateObserver(EventObserver):
             user=user,
             entity_name=intelligence.name,
             action="CREATE",
+            action_model="Intelligence",
             intelligence_activity_message=self.intelligence_activity_message,
         )
 
@@ -265,5 +266,6 @@ class ContentBaseObserver(EventObserver):
                 user=user,
                 entity_name=contentbase.title,
                 action=action_type,
+                action_model="ContentBase",
                 intelligence_activity_message=self.intelligence_activity_message,
             )
