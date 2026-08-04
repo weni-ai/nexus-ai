@@ -1522,15 +1522,19 @@ class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
                 link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
                 created_links.append(link_serializer)
 
-    # TODO - Refactor this view to have only one searializer and no dependencies
-    def post(self, request, project_uuid):
-        project_uuid = self.get_scoped_project_uuid(project_uuid)
+    def _resolve_user_email_and_internal(self, request):
         user_email = self.user_email or getattr(request.user, "email", None)
-        if not user_email:
-            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
         is_internal = self.is_internal or (
             hasattr(request.user, "has_perm") and request.user.has_perm("users.can_communicate_internally")
         )
+        return user_email, is_internal
+
+    # TODO - Refactor this view to have only one searializer and no dependencies
+    def post(self, request, project_uuid):
+        project_uuid = self.get_scoped_project_uuid(project_uuid)
+        user_email, is_internal = self._resolve_user_email_and_internal(request)
+        if not user_email:
+            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         use_case = intelligences.RetrieveContentBaseUseCase()
         content_base = use_case.get_default_by_project(project_uuid, user_email, is_superuser=is_internal)
@@ -1574,12 +1578,9 @@ class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
 
     def delete(self, request, project_uuid):
         project_uuid = self.get_scoped_project_uuid(project_uuid)
-        user_email = self.user_email or getattr(request.user, "email", None)
+        user_email, is_internal = self._resolve_user_email_and_internal(request)
         if not user_email:
             return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
-        is_internal = self.is_internal or (
-            hasattr(request.user, "has_perm") and request.user.has_perm("users.can_communicate_internally")
-        )
 
         use_case = intelligences.RetrieveContentBaseUseCase()
         content_base = use_case.get_default_by_project(project_uuid, user_email, is_superuser=is_internal)
