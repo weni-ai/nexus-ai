@@ -1,6 +1,7 @@
 import json
 import logging
-from typing import Optional, Tuple
+import re
+from typing import Optional, Tuple, Union
 
 import pendulum
 from weni.eda.connection import EDAConnection
@@ -22,6 +23,20 @@ ACTION_TYPE_TO_ACTION = {
     "ADD": Action.ADD,
 }
 
+ACTION_MODEL_TO_ENTITY = {
+    "Flow": Entity.FLOW,
+    "ContentBase": Entity.CONTENT_BASE,
+    "ContentBaseAgent": Entity.CONTENT_BASE_AGENT,
+    "ContentBaseFile": Entity.CONTENT_BASE_FILE,
+    "ContentBaseInstruction": Entity.CONTENT_BASE_INSTRUCTION,
+    "ContentBaseLink": Entity.CONTENT_BASE_LINK,
+    "ContentBaseText": Entity.CONTENT_BASE_TEXT,
+    "Intelligence": Entity.INTELLIGENCE,
+    "LLM": Entity.LLM,
+    "Project": Entity.PROJECT,
+    "brain_on": Entity.PROJECT,
+}
+
 
 def _resolve_action(action: str) -> Action:
     resolved = ACTION_TYPE_TO_ACTION.get(action)
@@ -32,6 +47,36 @@ def _resolve_action(action: str) -> Action:
     except ValueError:
         logger.warning("Unknown change-history action %r, defaulting to UPDATE", action)
         return Action.UPDATE
+
+
+def _pascal_to_screaming_snake(name: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).upper()
+
+
+def _resolve_entity(action_model: Optional[Union[str, Entity]]) -> Entity:
+    if isinstance(action_model, Entity):
+        return action_model
+    if not action_model:
+        logger.warning("Missing change-history entity, defaulting to PROJECT")
+        return Entity.PROJECT
+
+    mapped = ACTION_MODEL_TO_ENTITY.get(action_model)
+    if mapped is not None:
+        return mapped
+
+    try:
+        return Entity(action_model)
+    except ValueError:
+        pass
+
+    try:
+        return Entity(_pascal_to_screaming_snake(action_model))
+    except ValueError:
+        logger.warning(
+            "Unknown change-history entity %r, defaulting to PROJECT",
+            action_model,
+        )
+        return Entity.PROJECT
 
 
 def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str], Optional[str]]:
@@ -52,6 +97,7 @@ def notify_change(
     user_email: str,
     date: pendulum.DateTime,
     action: str,
+    entity: Optional[Union[str, Entity]] = None,
     object_id: Optional[str] = None,
     object_name: Optional[str] = None,
     old_value: Optional[str] = None,
@@ -61,7 +107,8 @@ def notify_change(
     """
     Publish change history via weni-commons Notifier (Amazon MQ).
 
-    object_name carries the concrete Nexus model/resource name.
+    `entity` is the object type being changed (ContentBase, Intelligence, …).
+    `object_name` is the concrete resource name when available.
     """
     if not project_uuid:
         logger.warning("Skipping change-history AMQ publish: missing project_uuid")
@@ -73,7 +120,7 @@ def notify_change(
             user_email=user_email,
             date=date,
             action=_resolve_action(action),
-            entity=Entity.USER,
+            entity=_resolve_entity(entity),
             module=Module.NEXUS,
             object_id=object_id,
             object_name=object_name,
@@ -95,6 +142,7 @@ def publish_recent_activity_to_amq(*, recent_activity: RecentActivities) -> None
         user_email=recent_activity.created_by.email,
         date=pendulum.instance(recent_activity.created_at),
         action=recent_activity.action_type,
+        entity=recent_activity.action_model,
         object_id=str(recent_activity.uuid),
         object_name=recent_activity.action_model,
         old_value=old_value,
@@ -122,6 +170,7 @@ def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
             user_email=dto.user.email,
             date=now,
             action=dto.action,
+            entity=dto.action_model,
             object_name=dto.entity_name,
         )
 
@@ -132,6 +181,7 @@ def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool)
         user_email=user,
         date=pendulum.now("UTC"),
         action="UPDATE",
+        entity="brain_on",
         object_id=project_uuid,
         object_name="brain_on",
         old_value=str(not brain_on),

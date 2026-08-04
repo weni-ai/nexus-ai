@@ -29,7 +29,7 @@ class RecentActivityAmqTestCase(TestCase):
 
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAConnection.clear_connection")
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
-    def test_notify_change_uses_entity_user_and_module_nexus(self, mock_notifier, mock_clear_connection):
+    def test_notify_change_maps_brain_on_to_project_entity(self, mock_notifier, mock_clear_connection):
         date = pendulum.datetime(2026, 5, 20, 11, 15, 0, tz="UTC")
 
         notify_change(
@@ -37,6 +37,7 @@ class RecentActivityAmqTestCase(TestCase):
             user_email=self.project.created_by.email,
             date=date,
             action="UPDATE",
+            entity="brain_on",
             object_id=str(self.project.uuid),
             object_name="brain_on",
             old_value="False",
@@ -50,12 +51,29 @@ class RecentActivityAmqTestCase(TestCase):
         self.assertEqual(kwargs["user_email"], self.project.created_by.email)
         self.assertEqual(kwargs["date"], date)
         self.assertEqual(kwargs["action"], Action.UPDATE)
-        self.assertEqual(kwargs["entity"], Entity.USER)
+        self.assertEqual(kwargs["entity"], Entity.PROJECT)
         self.assertEqual(kwargs["module"], Module.NEXUS)
         self.assertEqual(kwargs["object_id"], str(self.project.uuid))
         self.assertEqual(kwargs["object_name"], "brain_on")
         self.assertEqual(kwargs["old_value"], "False")
         self.assertEqual(kwargs["new_value"], "True")
+
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAConnection.clear_connection")
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
+    def test_notify_change_maps_content_base_entity(self, mock_notifier, mock_clear_connection):
+        notify_change(
+            project_uuid=str(self.project.uuid),
+            user_email=self.project.created_by.email,
+            date=pendulum.now("UTC"),
+            action="C",
+            entity="ContentBase",
+            object_name="ContentBase",
+        )
+
+        kwargs = mock_notifier.call_args.kwargs
+        self.assertEqual(kwargs["entity"], Entity.CONTENT_BASE)
+        self.assertEqual(kwargs["module"], Module.NEXUS)
+        mock_clear_connection.assert_called_once()
 
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
     def test_notify_change_skips_when_project_uuid_missing(self, mock_notifier):
@@ -64,6 +82,7 @@ class RecentActivityAmqTestCase(TestCase):
             user_email=self.project.created_by.email,
             date=pendulum.now("UTC"),
             action="UPDATE",
+            entity="Project",
         )
         mock_notifier.assert_not_called()
 
@@ -85,6 +104,7 @@ class RecentActivityAmqTestCase(TestCase):
         self.assertEqual(kwargs["project_uuid"], str(self.project.uuid))
         self.assertEqual(kwargs["user_email"], self.project.created_by.email)
         self.assertEqual(kwargs["action"], "U")
+        self.assertEqual(kwargs["entity"], "ContentBase")
         self.assertEqual(kwargs["object_name"], "ContentBase")
         self.assertEqual(kwargs["object_id"], str(recent_activity.uuid))
         self.assertEqual(kwargs["old_value"], "a")
@@ -97,6 +117,7 @@ class RecentActivityAmqTestCase(TestCase):
             user=self.project.created_by,
             entity_name="My Intelligence",
             action="DELETE",
+            action_model="Intelligence",
         )
 
         publish_external_recent_activity_to_amq(dto)
@@ -104,6 +125,7 @@ class RecentActivityAmqTestCase(TestCase):
         self.assertEqual(mock_notify_change.call_count, self.project.org.projects.count())
         kwargs = mock_notify_change.call_args.kwargs
         self.assertEqual(kwargs["project_uuid"], str(self.project.uuid))
+        self.assertEqual(kwargs["entity"], "Intelligence")
         self.assertEqual(kwargs["object_name"], "My Intelligence")
 
     @patch("nexus.event_domain.recent_activity.create.publish_recent_activity_to_amq")
@@ -123,3 +145,10 @@ class RecentActivityAmqTestCase(TestCase):
 
     def test_notifier_exchange_matches_contract(self):
         self.assertEqual(Notifier.EXCHANGE, "change-history.topic")
+
+    def test_new_nexus_entities_exist_in_weni_commons(self):
+        self.assertEqual(Entity.CONTENT_BASE.value, "CONTENT_BASE")
+        self.assertEqual(Entity.INTELLIGENCE.value, "INTELLIGENCE")
+        self.assertEqual(Entity.LLM.value, "LLM")
+        self.assertEqual(Entity.PROJECT.value, "PROJECT")
+        self.assertEqual(Entity.FLOW.value, "FLOW")

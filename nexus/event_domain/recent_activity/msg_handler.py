@@ -10,6 +10,7 @@ def recent_activity_message(
     user: User,
     entity_name: str,
     action: str,
+    action_model: str = "Intelligence",
     intelligence_activity_message=intelligence_activity_message,
 ):  # pragma: no cover
     action_type_mapping = {
@@ -26,6 +27,7 @@ def recent_activity_message(
         user=user,
         entity_name=entity_name,
         action=action,
+        action_model=action_model,
     )
     intelligence_activity_message(msg_dto)
     publish_external_recent_activity_to_amq(msg_dto)
