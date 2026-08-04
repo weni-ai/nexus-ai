@@ -109,7 +109,7 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         with self.assertRaises(ValidationError):
             self.use_case.validate_category_states({"unknown_slug": True})
 
-    @override_settings(GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="")
+    @override_settings(GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={})
     def test_validate_blocking_message_requires_message_when_blocked(self):
         states = self.use_case.build_default_category_states(blocked=True)
 
@@ -129,6 +129,53 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
         self.assertFalse(is_custom)
         self.assertTrue(message)
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ConnectRESTClient")
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "EN default",
+            "pt-br": "PT default",
+            "es": "ES default",
+        }
+    )
+    def test_effective_blocking_message_uses_project_language(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.return_value = "pt-br"
+        project = ProjectFactory()
+        config = ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            blocking_message=None,
+            initialized_as_new_project=True,
+        )
+
+        message, is_custom = self.use_case.effective_blocking_message(config)
+
+        self.assertFalse(is_custom)
+        self.assertEqual(message, "PT default")
+        mock_connect_cls.return_value.get_project_language.assert_called_once_with(str(project.uuid))
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ConnectRESTClient")
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "EN default",
+            "pt-br": "PT default",
+            "es": "ES default",
+        }
+    )
+    def test_effective_blocking_message_falls_back_to_pt_br(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.return_value = "fr-fr"
+        project = ProjectFactory()
+        config = ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            blocking_message=None,
+            initialized_as_new_project=True,
+        )
+
+        message, is_custom = self.use_case.effective_blocking_message(config)
+
+        self.assertFalse(is_custom)
+        self.assertEqual(message, "PT default")
 
     def test_effective_blocking_message_uses_custom_value(self):
         project = ProjectFactory()
@@ -291,7 +338,11 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     @override_settings(
         AWS_BEDROCK_REGION_NAME="us-east-1",
-        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "Default refusal",
+            "pt-br": "Default refusal",
+            "es": "Default refusal",
+        },
     )
     def test_apply_input_guardrail_skips_when_no_blocked_categories(self):
         client = MagicMock()
@@ -310,7 +361,11 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     @override_settings(
         AWS_BEDROCK_REGION_NAME="us-east-1",
-        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "Default refusal",
+            "pt-br": "Default refusal",
+            "es": "Default refusal",
+        },
     )
     def test_apply_input_guardrail_intervene_returns_project_message(self):
         client = MagicMock()
@@ -333,7 +388,11 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     @override_settings(
         AWS_BEDROCK_REGION_NAME="us-east-1",
-        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "Default refusal",
+            "pt-br": "Default refusal",
+            "es": "Default refusal",
+        },
     )
     def test_apply_input_guardrail_fail_open_on_bedrock_error(self):
         from botocore.exceptions import ClientError
