@@ -207,6 +207,10 @@ def generate_env():
         "INVOKE_AGENTS_RATE_LIMIT": "2500/m",
         "RATIONALE_IMPROVEMENT_INSTRUCTIONS": "",
         "SUBSEQUENT_RATIONALE_INSTRUCTIONS": "",
+        "PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION": (
+            "Before executing ANY tool or calling an agent, send the user a short feedback message "
+            "explaining what you're about to do, so they know the request is being processed."
+        ),
         "COMPLEXITY_LAYER_LAMBDA": "lambda-complexity-layer",
         "AWS_COMPONENTS_FUNCTION_ARN": "",
         "FORMATTER_AGENT_MODEL": "gpt-4.1-mini",
@@ -257,6 +261,7 @@ def generate_env():
         "SUPERVISOR_SERVICE_AVAILABLE_PROJECTS": "",
         "SUPERVISOR_SERVICE_AVAILABLE": "False",
         "REPORT_RECIPIENT_EMAILS": "",
+        "VTEX_SUPPORT_EMAIL": "",
         "CSRF_TRUSTED_ORIGINS": "",
         "MULTI_AGENTS_CAN_ACCESS": "",
         "SKILL_FILE_SIZE_LIMIT": "50",
@@ -266,6 +271,10 @@ def generate_env():
         "PROJECTS_WITH_LARGE_DATASOURCE": "",
         "MODELS_WITH_REASONING": "",
         "INSTRUCTION_CLASSIFY_NAME": "",
+        "AI_RESOLUTION_CRITERIA_VALIDATION_NAME": (
+            "arn:aws:lambda:us-east-1:005047304657:function:lambda-validator-resolution-metric-custom"
+        ),
+        "AI_RESOLUTION_BASE_CRITERIA": "[]",
         "WA_PHONE_NUMBER": "",
         "WA_ACCESS_TOKEN": "",
         "GATEWAY_VERIFICATION_TOKEN": "",

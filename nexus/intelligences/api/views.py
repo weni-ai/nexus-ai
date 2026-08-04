@@ -24,6 +24,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.weni_io import HybridIOIdentityPermission, HybridIOInternalPermission, WeniIOAuthViewMixin
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
 from nexus.intelligences.models import (
@@ -39,7 +40,7 @@ from nexus.intelligences.models import (
 from nexus.internals.conversations import ConversationsRESTClient
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, InlineContentBaseTextCursorPagination, SupervisorPagination
-from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
+from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
@@ -72,6 +73,7 @@ from nexus.usecases.intelligences.exceptions import (
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.usecases.intelligences.instructions import build_initial_retail_instruction_payload
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -1494,59 +1496,61 @@ class RouterContentBaseViewSet(views.APIView):
         return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
 
 
-class RouterRetailViewSet(views.APIView):
-    def _create_links(self, links: list, user: User, content_base: ContentBase, project: Project) -> list:
+class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
+    permission_classes = [HybridIOIdentityPermission, HybridIOInternalPermission]
+
+    def _create_links(self, links: list, user_email: str, content_base: ContentBase, project: Project) -> list:
         created_links = []
         if links:
             for link in links:
                 link_serializer = ContentBaseLinkSerializer(data={"link": link})
                 link_serializer.is_valid(raise_exception=True)
                 link_dto = intelligences.ContentBaseLinkDTO(
-                    link=link, user_email=user.email, content_base_uuid=str(content_base.uuid)
+                    link=link, user_email=user_email, content_base_uuid=str(content_base.uuid)
                 )
                 content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
 
                 if project.indexer_database == Project.BEDROCK:
                     bedrock_send_link.delay(
-                        link=link, user_email=user.email, content_base_link_uuid=str(content_base_link.uuid)
+                        link=link, user_email=user_email, content_base_link_uuid=str(content_base_link.uuid)
                     )
                 else:
                     send_link.delay(
-                        link=link, user_email=user.email, content_base_link_uuid=str(content_base_link.uuid)
+                        link=link, user_email=user_email, content_base_link_uuid=str(content_base_link.uuid)
                     )
 
                 link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
                 created_links.append(link_serializer)
 
+        return created_links
+
+    def _resolve_user_email_and_internal(self, request):
+        user_email = self.user_email or getattr(request.user, "email", None)
+        is_internal = self.is_internal or (
+            hasattr(request.user, "has_perm") and request.user.has_perm("users.can_communicate_internally")
+        )
+        return user_email, is_internal
+
     # TODO - Refactor this view to have only one searializer and no dependencies
     def post(self, request, project_uuid):
-        user: User = request.user
-        module_permission = user.has_perm("users.can_communicate_internally")
-
-        if not module_permission:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        project_uuid = self.get_scoped_project_uuid(project_uuid)
+        user_email, is_internal = self._resolve_user_email_and_internal(request)
+        if not user_email:
+            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         use_case = intelligences.RetrieveContentBaseUseCase()
-        content_base = use_case.get_default_by_project(project_uuid, user.email, is_superuser=module_permission)
+        content_base = use_case.get_default_by_project(project_uuid, user_email, is_superuser=is_internal)
         links: list = request.data.get("links")
 
         project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
 
-        created_links = self._create_links(links, user, content_base, project)
+        created_links = self._create_links(links, user_email, content_base, project)
 
         # ContentBasePersonalization
 
         agent_data = request.data.get("agent")
 
-        instructions_objects = []
-        if not content_base.instructions.exists():
-            default_instructions: list = settings.DEFAULT_RETAIL_INSTRUCTIONS
-            for instruction in default_instructions:
-                instructions_objects.append(
-                    {
-                        "instruction": instruction,
-                    }
-                )
+        instructions_objects = build_initial_retail_instruction_payload(content_base, request.data.get("instructions"))
 
         agent = {"agent": agent_data, "instructions": instructions_objects}
         request.data["instructions"] = instructions_objects
@@ -1575,14 +1579,13 @@ class RouterRetailViewSet(views.APIView):
         return Response(response, status=200)
 
     def delete(self, request, project_uuid):
-        user: User = request.user
-        module_permission = user.has_perm("users.can_communicate_internally")
-
-        if not module_permission:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        project_uuid = self.get_scoped_project_uuid(project_uuid)
+        user_email, is_internal = self._resolve_user_email_and_internal(request)
+        if not user_email:
+            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         use_case = intelligences.RetrieveContentBaseUseCase()
-        content_base = use_case.get_default_by_project(project_uuid, user.email, is_superuser=module_permission)
+        content_base = use_case.get_default_by_project(project_uuid, user_email, is_superuser=is_internal)
         content_base_uuid: str = content_base.uuid
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
@@ -1609,6 +1612,8 @@ class RouterRetailViewSet(views.APIView):
                     content_base_uuid=str(content_base_uuid),
                     filename=filename,
                 )
+
+            user = request.user if getattr(request.user, "pk", None) else None
 
             event_manager.notify(event="contentbase_link_activity", action_type="D", content_base_link=link, user=user)
 
@@ -1679,10 +1684,8 @@ class LLMDefaultViewset(views.APIView):
         return Response(data=LLMConfigSerializer(updated_llm).data, status=200)
 
 
-class ContentBasePersonalizationViewSet(ModelViewSet):
+class ContentBasePersonalizationViewSet(WeniIOAuthViewMixin, ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
-    authentication_classes = AUTHENTICATION_CLASSES
-    permission_classes = [ExternalTokenPermission | ProjectPermission | InternalCommunicationPermission]
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
@@ -1693,7 +1696,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
         return intelligences.get_default_content_base_by_project(project_uuid)
 
     def list(self, request, *args, **kwargs):
-        project_uuid = kwargs.get("project_uuid")
+        project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
         content_base = self._get_content_base(project_uuid)
         data = ContentBasePersonalizationSerializer(
             content_base, context={"request": request, "project_uuid": project_uuid}
@@ -1702,7 +1705,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         try:
-            project_uuid = kwargs.get("project_uuid")
+            project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
             content_base = self._get_content_base(project_uuid)
 
             context = {"request": request, "project_uuid": project_uuid}
@@ -1727,7 +1730,10 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instruction_id = request.query_params.get("id")
-        project_uuid = kwargs.get("project_uuid")
+        if not instruction_id:
+            return Response({"error": "id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
         content_base = self._get_content_base(project_uuid)
 
         ids = [instruction_id]
@@ -1791,14 +1797,12 @@ class UploadFileView(views.APIView):
         return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)
 
 
-class CommerceHasAgentBuilder(views.APIView):
-    permission_classes = [InternalCommunicationPermission]
+class CommerceHasAgentBuilder(WeniIOAuthViewMixin, views.APIView):
+    permission_classes = [HybridIOIdentityPermission, HybridIOInternalPermission]
 
     def get(self, request):
-        project_uuid = request.query_params.get("project_uuid", None)
-
-        if not project_uuid:
-            return Response({"Error": "The project_uuid is required!"}, status=status.HTTP_400_BAD_REQUEST)
+        # project_uuid may arrive as query param (legacy) or from JWT/Keycloak auth context.
+        project_uuid = self.get_scoped_project_uuid(request.query_params.get("project_uuid"))
 
         content_base = get_default_content_base_by_project(project_uuid=project_uuid)
         agent = content_base.agent
@@ -1843,8 +1847,8 @@ class CommerceHasAgentBuilder(views.APIView):
 
 class TopicsViewSet(ModelViewSet):
     serializer_class = TopicsSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-    authentication_classes = []  # Disable default authentication
     lookup_field = "uuid"
 
     def get_queryset(self, *args, **kwargs):
@@ -1929,8 +1933,8 @@ class TopicsViewSet(ModelViewSet):
 
 class SubTopicsViewSet(ModelViewSet):
     serializer_class = SubTopicsSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-    authentication_classes = []  # Disable default authentication
     lookup_field = "uuid"
 
     def get_queryset(self, *args, **kwargs):
@@ -2082,8 +2086,10 @@ class InstructionsClassificationAPIView(APIView):
         operation_id="instruction_classify",
         summary="Classify instruction",
         description=(
-            "Classifies an instruction based on the project's existing content base instructions. "
-            "Returns suggested categories and an improvement suggestion."
+            "Classifies an instruction based on the project description, available categories, "
+            "and existing content base instructions. Returns classification, suggested category, "
+            "and an improvement suggestion. When revalidating during edit, send id to "
+            "exclude that instruction from duplicate comparison."
         ),
         request=InstructionClassificationRequestSerializer,
         parameters=[
@@ -2115,7 +2121,7 @@ class InstructionsClassificationAPIView(APIView):
 
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
-            project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            _project, content_base, _ = get_project_and_content_base_data(project_uuid)
             agent = content_base.agent
 
             name = agent.name if agent and agent.name else "Agent"
@@ -2123,25 +2129,43 @@ class InstructionsClassificationAPIView(APIView):
             goal = agent.goal if agent and agent.goal else "Provide excellent customer support"
             adjective = agent.personality if agent and agent.personality else "friendly"
 
-            instructions = []
-            for instruction_obj in content_base.instructions.all():
-                instructions.append({"instruction": instruction_obj.instruction, "type": "custom"})
+            existing_instruction_id = serializer.validated_data.get("id")
+            instructions_qs = content_base.instructions.all()
+            if existing_instruction_id is not None:
+                if not instructions_qs.filter(id=existing_instruction_id).exists():
+                    return Response({"error": "Instruction not found"}, status=status.HTTP_404_NOT_FOUND)
+                instructions_qs = instructions_qs.exclude(id=existing_instruction_id)
+
+            instructions = [
+                {"instruction": instruction_obj.instruction, "type": "custom"} for instruction_obj in instructions_qs
+            ]
 
             from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 
             lambda_usecase = LambdaUseCase()
+            instructions_categories = serializer.validated_data.get("instructions_categories", [])
+            project_description = content_base.intelligence.description or ""
 
-            classification, suggestion = lambda_usecase.instruction_classify(
+            classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
                 name=name,
                 occupation=occupation,
                 goal=goal,
                 adjective=adjective,
                 instructions=instructions,
                 instruction_to_classify=instruction,
+                instructions_categories=instructions_categories,
                 language=language,
+                project_description=project_description,
             )
 
-            return Response({"classification": classification, "suggestion": suggestion}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "classification": classification,
+                    "suggested_category": suggested_category,
+                    "suggestion": suggestion,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             sentry_sdk.capture_exception(e)

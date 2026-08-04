@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 from weni.feature_flags.services import FeatureFlagsService
 
+from nexus.feature_flags.permissions import build_feature_flag_attributes
 from nexus.feature_flags.serializers import FeatureFlagsQueryParamsSerializer
 from nexus.projects.api.permissions import ProjectPermission
 
@@ -20,10 +21,7 @@ class FeatureFlagsViewSet(GenericViewSet):
         query_params.is_valid(raise_exception=True)
 
         project = query_params.validated_data["project"]
-        attributes = {
-            "userEmail": request.user.email,
-            "projectUUID": str(project.uuid),
-        }
+        attributes = build_feature_flag_attributes(request, project)
 
         active_features = self.service.get_active_feature_flags_for_attributes(
             attributes=attributes,

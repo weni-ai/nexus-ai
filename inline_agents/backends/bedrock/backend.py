@@ -18,6 +18,10 @@ from nexus.projects.websockets.consumers import (
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.handler import PostMessageHandler
+from router.traces_observers.rationale.channel_hint import (
+    channel_hint_from_contact_urn,
+    supports_progressive_feedback,
+)
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from .adapter import BedrockDataLakeEventAdapter, BedrockTeamAdapter
@@ -110,7 +114,7 @@ class BedrockBackend(InlineAgentsBackend):
             sentry_sdk.capture_exception(e)
             return None
 
-    def invoke_agents(
+    def invoke_agents(  # noqa: C901
         self,
         team: dict,
         input_text: str,
@@ -138,7 +142,24 @@ class BedrockBackend(InlineAgentsBackend):
         **kwargs,
     ):
         skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)
+        channel_type = kwargs.pop("channel_type", "")
         supervisor = self.supervisor_repository.get_supervisor(project=project, foundation_model=foundation_model)
+
+        progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
+            contact_urn,
+            channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+        )
+        if rationale_switch and not progressive_feedback_enabled:
+            logger.info(
+                "[ProgressiveFeedback] Disabled for non-webchat channel project_uuid=%s "
+                "channel_from_urn=%s contact_urn=%s channel_type=%s",
+                project_uuid,
+                channel_hint_from_contact_urn(contact_urn),
+                contact_urn,
+                channel_type or None,
+            )
 
         # Set dependencies
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
@@ -293,13 +314,14 @@ class BedrockBackend(InlineAgentsBackend):
                     send_message_callback=None,
                     preview=preview,
                     preview_websocket=preview_websocket,
-                    rationale_switch=rationale_switch,
+                    rationale_switch=progressive_feedback_enabled,
                     language=language,
                     user_email=user_email,
                     session_id=session_id,
                     msg_external_id=msg_external_id,
                     turn_off_rationale=turn_off_rationale,
                     channel_uuid=channel_uuid,
+                    channel_type=channel_type,
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:

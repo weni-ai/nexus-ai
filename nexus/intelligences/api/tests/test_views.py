@@ -385,7 +385,8 @@ class TestContentBasePersonalizationViewSet(TestCase):
         from nexus.intelligences.models import ContentBaseInstruction
 
         self.instruction_1 = ContentBaseInstruction.objects.create(
-            content_base=actual_content_base, instruction="Test instruction"
+            content_base=actual_content_base,
+            instruction="Test instruction",
         )
 
         self.team = Team.objects.create(
@@ -432,6 +433,8 @@ class TestContentBasePersonalizationViewSet(TestCase):
         self.assertIsNotNone(team_data)
         self.assertEqual(team_data["human_support"], True)
         self.assertEqual(team_data["human_support_prompt"], "Test human support prompt")
+        self.assertIn("instructions", content)
+        self.assertEqual(content["instructions"][0]["instruction"], "Test instruction")
 
     def test_get_personalization_without_team(self):
         # Delete existing team
@@ -479,13 +482,20 @@ class TestContentBasePersonalizationViewSet(TestCase):
         self.assertIsNotNone(team_data)
         self.assertEqual(team_data["human_support"], True)
         self.assertEqual(team_data["human_support_prompt"], "Test human support prompt")
+        self.assertIn("instructions", content)
+        self.assertEqual(content["instructions"][0]["instruction"], "Test instruction")
 
     def test_update_personalization(self):
         url_update = f"{self.url}/"
 
         data = {
             "agent": {"name": "Doris Update", "role": "Sales", "personality": "Creative", "goal": "Sell"},
-            "instructions": [{"id": self.instruction_1.id, "instruction": "Be friendly"}],
+            "instructions": [
+                {
+                    "id": self.instruction_1.id,
+                    "instruction": "Be friendly",
+                }
+            ],
         }
         request = self.factory.put(url_update, data=data, format="json")
         force_authenticate(request, user=self.user)
@@ -497,6 +507,10 @@ class TestContentBasePersonalizationViewSet(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 200)
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(content["instructions"][0]["instruction"], "Be friendly")
 
     def test_delete_personalization(self):
         url_update = f"{self.url}/?id={self.instruction_1.id}"
@@ -590,6 +604,32 @@ class TestRetailRouterViewset(APITestCase):
         self.assertEqual(instructions[1]["instruction"], "Dont change the subject")
 
     @mock.patch("django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS", ["Try to use emojis", "Dont change the subject"])
+    def test_with_request_instructions(self):
+        data = {
+            "agent": {
+                "name": "test",
+                "role": "Doubt analyst",
+                "personality": "Friendly",
+                "goal": "Answer user questions",
+            },
+            "instructions": ["Use a formal tone", "Always mention promotions"],
+        }
+
+        request = self.factory.post(self.url, data=data, format="json")
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+
+        response_json = json.loads(response.content)
+        instructions = response_json.get("personalization").get("instructions")
+
+        self.assertEqual(len(instructions), 2)
+        self.assertEqual(instructions[0]["instruction"], "Use a formal tone")
+        self.assertEqual(instructions[1]["instruction"], "Always mention promotions")
+
+    @mock.patch("django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS", ["Try to use emojis", "Dont change the subject"])
     def test_without_links(self):
         data = {
             "agent": {
@@ -611,7 +651,7 @@ class TestRetailRouterViewset(APITestCase):
         instructions = response_json.get("personalization").get("instructions")
 
         self.assertEqual(len(instructions), 2)
-        self.assertEqual(response_json.get("links"), None)
+        self.assertEqual(response_json.get("links"), [])
 
 
 class TestTopicsViewSet(TestCase):

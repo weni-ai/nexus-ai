@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -515,6 +516,7 @@ AWS_BEDROCK_BUCKET_NAME = env.str("AWS_BEDROCK_BUCKET_NAME")
 AWS_BEDROCK_ACCESS_KEY = env.str("AWS_BEDROCK_ACCESS_KEY")
 AWS_BEDROCK_SECRET_KEY = env.str("AWS_BEDROCK_SECRET_KEY")
 AWS_BEDROCK_REGION_NAME = env.str("AWS_BEDROCK_REGION_NAME")
+AWS_BEDROCK_INLINE_TRACES_REGION = env.str("AWS_BEDROCK_INLINE_TRACES_REGION", default="")
 AWS_BEDROCK_MODEL_ID = env.str("AWS_BEDROCK_MODEL_ID")
 USE_BEDROCK_WENIGPT = env.bool("USE_BEDROCK_WENIGPT", True)
 AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS = env.int("AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS", 3600)
@@ -615,6 +617,7 @@ SUPERVISOR_SERVICE_AVAILABLE = env.bool("SUPERVISOR_SERVICE_AVAILABLE", False)
 SUPERVISOR_SERVICE_AVAILABLE_PROJECTS = env.list("SUPERVISOR_SERVICE_AVAILABLE_PROJECTS", [])
 
 REPORT_RECIPIENT_EMAILS = env.list("REPORT_RECIPIENT_EMAILS", [])
+VTEX_SUPPORT_EMAIL = env.str("VTEX_SUPPORT_EMAIL", default="")
 OFFICIAL_SMART_AGENT_EDITORS = env.list("OFFICIAL_SMART_AGENT_EDITORS", default=[])
 
 envvar_EMAIL_HOST = env.str("EMAIL_HOST")
@@ -647,11 +650,18 @@ SKILL_FILE_SIZE_LIMIT = env.int("SKILL_FILE_SIZE_LIMIT", 50)
 
 RATIONALE_IMPROVEMENT_INSTRUCTIONS = env.str("RATIONALE_IMPROVEMENT_INSTRUCTIONS", "")
 SUBSEQUENT_RATIONALE_INSTRUCTIONS = env.str("SUBSEQUENT_RATIONALE_INSTRUCTIONS", "")
+PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION = env.str(
+    "PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION",
+    default=(
+        "Before executing ANY tool or calling an agent, send the user a short feedback message "
+        "explaining what you're about to do, so they know the request is being processed."
+    ),
+)
 
 START_INLINE_AGENTS_ACK_LATE = env.bool("START_INLINE_AGENTS_ACK_LATE", False)
 ENABLE_LOGFIRE_OPENAI_AGENTS = env.bool("ENABLE_LOGFIRE_OPENAI_AGENTS", False)
 
-JWT_PUBLIC_KEY_PATH = BASE_DIR / "nexus" / "authentication" / "jwt_keys" / "public_key.pem"
+JWT_PUBLIC_KEY_PATH = BASE_DIR / "nexus" / "authentication" / "jwt_keys" / "public_key.perm"
 JWT_SECRET_KEY = env.str("JWT_SECRET_KEY")
 OPENAI_AGENTS_FOUNDATION_MODEL = env.str("OPENAI_AGENTS_FOUNDATION_MODEL", "gpt-4o-mini")
 
@@ -664,6 +674,9 @@ except FileNotFoundError:
 CONVERSATION_TOPIC_CLASSIFIER_NAME = env.str("CONVERSATION_TOPIC_CLASSIFIER_NAME")
 CONVERSATION_RESOLUTION_NAME = env.str("CONVERSATION_RESOLUTION_NAME")
 INSTRUCTION_CLASSIFY_NAME = env.str("INSTRUCTION_CLASSIFY_NAME")
+AI_RESOLUTION_CRITERIA_VALIDATION_NAME = env.str("AI_RESOLUTION_CRITERIA_VALIDATION_NAME", default="")
+_ai_resolution_base_criteria = env.str("AI_RESOLUTION_BASE_CRITERIA", default="").strip()
+AI_RESOLUTION_BASE_CRITERIA = json.loads(_ai_resolution_base_criteria) if _ai_resolution_base_criteria else []
 AGENT_UUID_CSAT = env.str("AGENT_UUID_CSAT")
 AGENT_UUID_NPS = env.str("AGENT_UUID_NPS")
 

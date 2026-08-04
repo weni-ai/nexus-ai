@@ -16,6 +16,7 @@ from django.conf import settings
 from inline_agents.backends import BackendsRegistry
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_new_pipeline_sentinel
+from inline_agents.backends.openai.message_context import extract_message_context
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.channel_ops import channel_matches_default_preview
@@ -392,6 +393,13 @@ def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_ta
     return final_message_text
 
 
+def _extract_and_apply_message_context(message_obj) -> Optional[str]:
+    """Strip `; Context:` from message text once; return context for session injection."""
+    clean_text, injected_context = extract_message_context(message_obj.text or "")
+    message_obj.text = clean_text
+    return injected_context
+
+
 def _handle_task_error(
     exc: Exception,
     task_manager: RedisTaskManager,
@@ -468,6 +476,7 @@ def _invoke_backend(
     message_conversation_log_uuid: Optional[str] = None,
     preview_websocket: bool = False,
     skip_conversation_sqs: bool = False,
+    injected_context: Optional[str] = None,
     *,
     replace_manager_pipeline_version: bool = False,
     manager_pipeline_version: Optional[str] = None,
@@ -510,6 +519,7 @@ def _invoke_backend(
             "stream_support": stream_support,
             "message_conversation_log_uuid": message_conversation_log_uuid,
             "skip_conversation_sqs": skip_conversation_sqs,
+            "injected_context": injected_context,
         }
     )
 
@@ -628,6 +638,7 @@ def start_inline_agents(  # noqa: C901
                 logger.debug(f"Message object built - has_text: {bool(message_obj.text)}")
 
                 message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
+                injected_context = _extract_and_apply_message_context(message_obj)
 
                 cached_data = CachedProjectData.from_pre_generation_data(
                     project_dict=project_dict,
@@ -682,6 +693,7 @@ def start_inline_agents(  # noqa: C901
                     message_conversation_log_uuid=message_conversation_log_uuid,
                     preview_websocket=preview_websocket,
                     skip_conversation_sqs=skip_sqs,
+                    injected_context=injected_context,
                     replace_manager_pipeline_version=True,
                     manager_pipeline_version=effective_manager_pipeline_version,
                 )

@@ -54,8 +54,9 @@ class TestFeatureFlagsViewSet(TestCase):
         self.assertEqual(response.data["active_features"], ["flag-a", "flag-b"])
         mock_get_active.assert_called_once_with(
             attributes={
-                "userEmail": self.user.email,
+                "weni_project": str(self.project.uuid),
                 "projectUUID": str(self.project.uuid),
+                "userEmail": self.user.email,
             },
         )
 
