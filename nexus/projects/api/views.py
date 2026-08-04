@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from inline_agents.backends.openai.backend import OpenAIBackend
 from nexus.agents.api.views import InternalCommunicationPermission
+from nexus.authentication.weni_io import WeniIOAuthViewMixin
 from nexus.events import notify_async
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.api.serializers import ConversationSerializer
@@ -197,9 +198,7 @@ class AgentBuilderProjectDetailsView(APIView):
         return Response(details)
 
 
-class ConversationsProxyView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
-
+class ConversationsProxyView(WeniIOAuthViewMixin, APIView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.usecase = ConversationsUsecase()
@@ -209,7 +208,7 @@ class ConversationsProxyView(APIView):
         Proxy endpoint to fetch conversations from Conversations service.
         All query parameters are forwarded directly to the Conversations service.
         """
-        project_uuid = kwargs.get("project_uuid")
+        project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
 
         if not project_uuid:
             return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -335,7 +334,17 @@ class ConversationsProxyView(APIView):
             status_code = getattr(e.response, "status_code", 500)
 
         if status_code == 404:
-            return Response({}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "count": 0,
+                    "next": None,
+                    "previous": None,
+                    "results": [],
+                    "status_summary": None,
+                    "total_count": 0,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         try:
             error_message, error_details = self.usecase.extract_error_message(e.response)

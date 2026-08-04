@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.weni_io import WeniIOAuthViewMixin
 from nexus.events import notify_async
 from nexus.inline_agents.api.mixins import OfficialAgentAssignmentMixin
 from nexus.inline_agents.api.serializers import (
@@ -48,8 +49,8 @@ from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.bedrock import (
     APM_INSTRUMENTATION_UNCHANGED,
-    APMNotConfiguredError,
     VALID_APM_INSTRUMENTATION,
+    APMNotConfiguredError,
 )
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
@@ -876,9 +877,7 @@ class ProjectActiveAgentsConfigView(APIView):
         },
     )
     def get(self, request, project_uuid):
-        integrated_agents = (
-            GetInlineAgentsUsecase().get_active_agents(project_uuid).prefetch_related("agent__versions")
-        )
+        integrated_agents = GetInlineAgentsUsecase().get_active_agents(project_uuid).prefetch_related("agent__versions")
         data = AgentConfigSerializer(integrated_agents, many=True).data
         return Response(data)
 
@@ -956,10 +955,9 @@ class ProjectCredentialsView(APIView):
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 
 
-class ActivateAgentView(APIView):
-    permission_classes = [ProjectPermission | InternalCommunicationPermission]
-
+class ActivateAgentView(WeniIOAuthViewMixin, APIView):
     def patch(self, request, project_uuid, agent_uuid):
+        project_uuid = self.get_scoped_project_uuid(project_uuid)
         active = request.data.get("active")
         if not isinstance(active, bool):
             return Response(

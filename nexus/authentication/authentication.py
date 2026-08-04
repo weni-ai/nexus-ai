@@ -32,7 +32,7 @@ class WeniOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     def create_user(self, claims):
         # Override existing create_user method in OIDCAuthenticationBackend
         email = claims.get("email")
-        return CreateUserUseCase().create_user(email)
+        return CreateUserUseCase().get_or_create_user(email)
 
     def update_user(self, user, claims):
         user.name = claims.get("name", "")

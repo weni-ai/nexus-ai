@@ -651,7 +651,7 @@ class TestRetailRouterViewset(APITestCase):
         instructions = response_json.get("personalization").get("instructions")
 
         self.assertEqual(len(instructions), 2)
-        self.assertEqual(response_json.get("links"), None)
+        self.assertEqual(response_json.get("links"), [])
 
 
 class TestTopicsViewSet(TestCase):
