@@ -868,6 +868,9 @@ class OpenAITeamAdapter(TeamAdapter):
             )
             lambda_result = response["Payload"].read().decode("utf-8")
             result = json.loads(lambda_result)
+            print("==============lambda_result================")
+            print(result)
+            print("==========================================")
 
             if "FunctionError" in response:
                 error_details = json.loads(lambda_result)

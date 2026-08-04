@@ -680,6 +680,11 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         # Emit the "tool started" trace (e.g. for preview).
         await self.tool_started(context, agent, tool)
 
+        print("==============on_tool_end================")
+        print(f"Tool name: {tool.name}")
+        print(result)
+        print("==========================================")
+
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
         tool_info = self.hooks_state.get_tool_info(tool.name)
