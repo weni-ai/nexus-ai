@@ -1522,6 +1522,8 @@ class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
                 link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
                 created_links.append(link_serializer)
 
+        return created_links
+
     def _resolve_user_email_and_internal(self, request):
         user_email = self.user_email or getattr(request.user, "email", None)
         is_internal = self.is_internal or (
