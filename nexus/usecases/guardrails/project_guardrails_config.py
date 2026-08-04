@@ -153,6 +153,12 @@ class ProjectGuardrailsConfigUseCase:
             try:
                 language = ConnectRESTClient().get_project_language(str(project_uuid))
             except Exception:
+                logger.warning(
+                    "Failed to fetch project language for %s, falling back to %s",
+                    project_uuid,
+                    _DEFAULT_BLOCKING_LANGUAGE,
+                    exc_info=True,
+                )
                 language = _DEFAULT_BLOCKING_LANGUAGE
         return messages.get(language) or messages.get(_DEFAULT_BLOCKING_LANGUAGE) or ""
 

@@ -177,6 +177,34 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertFalse(is_custom)
         self.assertEqual(message, "PT default")
 
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ConnectRESTClient")
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "EN default",
+            "pt-br": "PT default",
+            "es": "ES default",
+        }
+    )
+    def test_effective_blocking_message_logs_connect_failure(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.side_effect = RuntimeError("connect down")
+        project = ProjectFactory()
+        config = ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            blocking_message=None,
+            initialized_as_new_project=True,
+        )
+
+        with self.assertLogs(
+            "nexus.usecases.guardrails.project_guardrails_config",
+            level="WARNING",
+        ) as logs:
+            message, is_custom = self.use_case.effective_blocking_message(config)
+
+        self.assertFalse(is_custom)
+        self.assertEqual(message, "PT default")
+        self.assertTrue(any("Failed to fetch project language" in line for line in logs.output))
+
     def test_effective_blocking_message_uses_custom_value(self):
         project = ProjectFactory()
         config = ProjectGuardrailsConfig.objects.create(
