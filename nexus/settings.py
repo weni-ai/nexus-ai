@@ -753,9 +753,13 @@ GUARDRAIL_CATEGORY_CATALOG = [
     },
 ]
 
-GUARDRAILS_DEFAULT_BLOCKING_MESSAGE = env.str(
-    "GUARDRAILS_DEFAULT_BLOCKING_MESSAGE",
-    default="This message can't be processed because it may contain sensitive content.",
+GUARDRAILS_DEFAULT_BLOCKING_MESSAGES = env.json(
+    "GUARDRAILS_DEFAULT_BLOCKING_MESSAGES",
+    {
+        "en-us": "This message can't be processed because it may contain sensitive content.",
+        "pt-br": "Esta mensagem não pode ser processada porque pode conter conteúdo sensível.",
+        "es": "Este mensaje no puede procesarse porque puede contener contenido sensible.",
+    },
 )
 
 # Baseline policies applied to every pool Guardrail (Models guidance). Not project-configurable.
