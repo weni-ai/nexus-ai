@@ -25,7 +25,8 @@
 
 ## Notes
 
-- 2026-07-06: Rewritten for strict backend scope; confirmation is API contract (`409` / `confirm_disable`), not UI.
+- 2026-07-06: Rewritten for strict backend scope; confirmation was initially API contract (`409` / `confirm_disable`).
 - 2026-07-06 clarify: 5 questions resolved (admin role, new/existing default, default message, PATCH confirmation, catalog merge).
+- 2026-07-20: Confirmation moved to frontend-only (FDD modal); backend persists unblock immediately — no `confirm_disable` / `409`.
 - 2026-07-06 clarify (naming): *topic* → **guardrail category**; *topic_states* → **category_states**; backend i18n out of scope (T002 dropped).
 - 2026-07-16: Runtime redesigned — `ApplyGuardrail` in Nexus preprocess (INPUT only), one Bedrock guardrail per project, omit unblocked categories on sync, blocking message Option A (Nexus message, ignore Bedrock canned text). Replaced payload/`categories` map for Models + Lambda path.

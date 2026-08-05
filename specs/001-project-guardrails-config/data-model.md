@@ -9,8 +9,8 @@ Fixed catalog in `settings.GUARDRAIL_CATEGORY_CATALOG` — defined directly in c
 | Field | Type | Notes |
 |-------|------|-------|
 | slug | string | Stable key, e.g. `politics`, `physical_health` |
-| name | string | English display label (API response) |
-| description | string | English scope description (API response) |
+| name | string | English label in settings (Bedrock/docs; **not** returned by API) |
+| description | string | English scope in settings (Bedrock/docs; **not** returned by API) |
 | bedrock_definition | string | Denied topic definition for Bedrock sync (may equal description) |
 | bedrock_examples | string[] | Optional sample phrases for Bedrock (max 5) |
 
@@ -49,7 +49,7 @@ Fixed catalog in `settings.GUARDRAIL_CATEGORY_CATALOG` — defined directly in c
 ## State Transitions
 
 ```
-blocked --PATCH + confirm_disable--> unblocked --> Bedrock sync (omit category)
+blocked --PATCH--> unblocked --> Bedrock sync (omit category)
 unblocked --PATCH--> blocked --> Bedrock sync (include category)
 
 (no row) --first GET--> lazy init --> row [--> create/sync Bedrock when any blocked]

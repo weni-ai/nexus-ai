@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add project-level guardrails configuration to Nexus: fixed 11-**category** catalog (`GUARDRAIL_CATEGORY_CATALOG`), per-category `blocked` boolean in `category_states`, single blocking message (≤240 chars), admin-only PATCH, lazy defaults, confirmation contract (`disable_category` / `disable_all`), **one Bedrock Guardrail per project** synced with only blocked categories, **`ApplyGuardrail` on INPUT** in existing preprocess (Option A message resolution), cache invalidation. No backend i18n. No Lambda for this flow.
+Add project-level guardrails configuration to Nexus: fixed 11-**category** catalog (`GUARDRAIL_CATEGORY_CATALOG`), per-category `blocked` boolean in `category_states`, single blocking message (≤240 chars), admin-only PATCH, lazy defaults, immediate unblock (confirmation UX is frontend-only), **one Bedrock Guardrail per project** synced with only blocked categories, **`ApplyGuardrail` on INPUT** in existing preprocess (Option A message resolution), cache invalidation. No backend i18n. No Lambda for this flow.
 
 ## Technical Context
 
