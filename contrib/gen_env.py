@@ -179,6 +179,7 @@ def generate_env():
         "HC_GOLFINHO_URL": "",
         "HC_WENI_TOKEN": "",
         "PROMETHEUS_AUTH_TOKEN": "",
+        "INLINE_AGENT_LATENCY_API_TOKEN": "",
         "INLINE_AGENT_LATENCY_ENABLED": "True",
         "INLINE_AGENT_LATENCY_TARGET_MS_LOW": "15000",
         "INLINE_AGENT_LATENCY_TARGET_MS_HIGH": "20000",

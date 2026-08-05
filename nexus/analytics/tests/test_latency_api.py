@@ -1,12 +1,58 @@
-"""Tests for inline agent latency query helpers."""
+"""Tests for inline agent latency API auth and query helpers."""
 
 from datetime import date
+from unittest import mock
 from uuid import uuid4
 
-from django.test import TestCase
+import pytest
+from django.test import SimpleTestCase, TestCase, override_settings
+from rest_framework.test import APIRequestFactory
 
+from nexus.analytics.api.permissions import InlineAgentLatencyAPIPermission
 from nexus.analytics.latency_queries import build_summary, validate_date_range
 from nexus.analytics.models import InlineAgentLatencyHourly
+
+
+class InlineAgentLatencyAPIPermissionTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.permission = InlineAgentLatencyAPIPermission()
+        self.view = mock.Mock()
+
+    @override_settings(INLINE_AGENT_LATENCY_API_TOKEN="latency-secret")
+    def test_allows_fixed_service_token(self):
+        request = self.factory.get(
+            "/api/analytics/inline-agent-latency/summary/",
+            HTTP_AUTHORIZATION="Bearer latency-secret",
+        )
+        self.assertTrue(self.permission.has_permission(request, self.view))
+
+    @override_settings(INLINE_AGENT_LATENCY_API_TOKEN="latency-secret")
+    def test_denies_wrong_token(self):
+        request = self.factory.get(
+            "/api/analytics/inline-agent-latency/summary/",
+            HTTP_AUTHORIZATION="Bearer wrong",
+        )
+        self.assertFalse(self.permission.has_permission(request, self.view))
+
+    @override_settings(INLINE_AGENT_LATENCY_API_TOKEN="latency-secret")
+    def test_allows_keycloak_internal_user(self):
+        pytest.importorskip("weni_commons")
+        from weni_commons.auth import WeniAuthContext
+
+        request = self.factory.get("/api/analytics/inline-agent-latency/summary/")
+        request.auth = WeniAuthContext(
+            project_uuid=str(uuid4()),
+            user_email="staff@example.com",
+            token_type="keycloak",
+        )
+        request.user = mock.Mock(is_authenticated=True)
+
+        with mock.patch(
+            "weni_commons.auth.CanCommunicateInternally.has_permission",
+            return_value=True,
+        ):
+            self.assertTrue(self.permission.has_permission(request, self.view))
 
 
 class LatencyQueriesTestCase(TestCase):
