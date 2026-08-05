@@ -38,6 +38,7 @@ class ProjectAdmin(admin.ModelAdmin):
         "use_components",
         "use_prompt_creation_configurations",
         "exclude_previous_thinking_steps",
+        "is_live_desk_copilot",
     )
     search_fields = (
         "uuid",
@@ -70,6 +71,7 @@ class ProjectAdmin(admin.ModelAdmin):
                     "exclude_previous_thinking_steps",
                     "guardrail",
                     "bedrock_ingestion_strategy",
+                    "is_live_desk_copilot",
                     "manager_agent",
                 )
             },
