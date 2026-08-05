@@ -1,9 +1,7 @@
-from datetime import datetime, timezone
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone as django_timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -16,13 +14,10 @@ from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, Pr
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 
-@override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
 class ProjectGuardrailsConfigAPITestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.project = ProjectFactory()
-        self.project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        self.project.save(update_fields=["created_at"])
         self.user = self.project.created_by
         self.url = reverse("project-guardrails-config", kwargs={"project_uuid": str(self.project.uuid)})
 
@@ -61,10 +56,13 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         self.assertTrue(all(set(category.keys()) == {"slug", "blocked"} for category in response.data["categories"]))
         self.assertTrue(ProjectGuardrailsConfig.objects.filter(project=self.project).exists())
 
-    def test_get_lazy_init_existing_project_unblocks_all(self):
+    def test_get_keeps_backfilled_unblocked_config(self):
         existing = ProjectFactory()
-        existing.created_at = django_timezone.make_aware(datetime(2025, 1, 1))
-        existing.save(update_fields=["created_at"])
+        ProjectGuardrailsConfig.objects.create(
+            project=existing,
+            category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            initialized_as_new_project=False,
+        )
         self.client.force_authenticate(user=existing.created_by)
         url = reverse("project-guardrails-config", kwargs={"project_uuid": str(existing.uuid)})
 
@@ -77,6 +75,9 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         ProjectGuardrailsConfig.objects.filter(project=self.project).update(
             category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
 
         response = self.client.patch(
@@ -135,6 +136,9 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         ProjectGuardrailsConfig.objects.filter(project=self.project).update(
             category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
 
         response = self.client.patch(
@@ -152,6 +156,9 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
         ProjectGuardrailsConfig.objects.filter(project=self.project).update(
             category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
         self._mock_get_or_create_pool.side_effect = BedrockGuardrailPoolError("AccessDenied")
 

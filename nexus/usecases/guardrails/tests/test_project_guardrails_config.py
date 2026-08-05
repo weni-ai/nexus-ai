@@ -1,9 +1,7 @@
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase, override_settings
-from django.utils import timezone as django_timezone
 from rest_framework.request import Request
 
 from nexus.projects.api.permissions import GuardrailsConfigAdminPermission
@@ -27,36 +25,63 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
     def tearDown(self) -> None:
         self._pool_patcher.stop()
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
     def test_lazy_init_new_project_blocks_all_categories(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
 
         config = self.use_case.get_or_initialize(project)
 
         self.assertTrue(config.initialized_as_new_project)
         self.assertEqual(len(config.category_states), len(self.use_case.catalog_slugs()))
         self.assertTrue(all(config.category_states.values()))
+        self.assertIsNotNone(config.bedrock_guardrail_pool_id)
+        self.assertTrue(config.bedrock_guardrail_identifier)
+        self.assertEqual(config.bedrock_guardrail_version, "1")
+        self._mock_get_or_create_pool.assert_called_once()
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
-    def test_lazy_init_existing_project_unblocks_all_categories(self):
+    def test_lazy_init_keeps_backfilled_unblocked_config(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2025, 1, 1))
-        project.save(update_fields=["created_at"])
+        ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=False),
+            initialized_as_new_project=False,
+        )
 
         config = self.use_case.get_or_initialize(project)
 
         self.assertFalse(config.initialized_as_new_project)
         self.assertEqual(len(config.category_states), len(self.use_case.catalog_slugs()))
         self.assertFalse(any(config.category_states.values()))
+        self.assertIsNone(config.bedrock_guardrail_pool_id)
+        self._mock_get_or_create_pool.assert_not_called()
 
-    @override_settings(GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT=datetime(2026, 7, 1, tzinfo=timezone.utc))
+    def test_lazy_init_backfills_pool_when_blocked_without_assignment(self):
+        project = ProjectFactory()
+        ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            initialized_as_new_project=True,
+            bedrock_guardrail_identifier="",
+            bedrock_guardrail_version="",
+        )
+
+        config = self.use_case.get_or_initialize(project)
+
+        self.assertIsNotNone(config.bedrock_guardrail_pool_id)
+        self.assertTrue(config.bedrock_guardrail_identifier)
+        self._mock_get_or_create_pool.assert_called_once()
+
+    def test_lazy_init_pool_failure_is_fail_open(self):
+        project = ProjectFactory()
+        self._mock_get_or_create_pool.side_effect = BedrockGuardrailPoolError("aws down")
+
+        config = self.use_case.get_or_initialize(project)
+
+        self.assertTrue(all(config.category_states.values()))
+        self.assertIsNone(config.bedrock_guardrail_pool_id)
+        self.assertFalse(config.bedrock_guardrail_identifier)
+
     def test_merge_adds_new_catalog_slug_on_get(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2025, 1, 1))
-        project.save(update_fields=["created_at"])
-
         ProjectGuardrailsConfig.objects.create(
             project=project,
             category_states={"politics": True},
@@ -84,7 +109,7 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         with self.assertRaises(ValidationError):
             self.use_case.validate_category_states({"unknown_slug": True})
 
-    @override_settings(GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="")
+    @override_settings(GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={})
     def test_validate_blocking_message_requires_message_when_blocked(self):
         states = self.use_case.build_default_category_states(blocked=True)
 
@@ -105,6 +130,81 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertFalse(is_custom)
         self.assertTrue(message)
 
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ConnectRESTClient")
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "EN default",
+            "pt-br": "PT default",
+            "es": "ES default",
+        }
+    )
+    def test_effective_blocking_message_uses_project_language(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.return_value = "pt-br"
+        project = ProjectFactory()
+        config = ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            blocking_message=None,
+            initialized_as_new_project=True,
+        )
+
+        message, is_custom = self.use_case.effective_blocking_message(config)
+
+        self.assertFalse(is_custom)
+        self.assertEqual(message, "PT default")
+        mock_connect_cls.return_value.get_project_language.assert_called_once_with(str(project.uuid))
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ConnectRESTClient")
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "EN default",
+            "pt-br": "PT default",
+            "es": "ES default",
+        }
+    )
+    def test_effective_blocking_message_falls_back_to_pt_br(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.return_value = "fr-fr"
+        project = ProjectFactory()
+        config = ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            blocking_message=None,
+            initialized_as_new_project=True,
+        )
+
+        message, is_custom = self.use_case.effective_blocking_message(config)
+
+        self.assertFalse(is_custom)
+        self.assertEqual(message, "PT default")
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ConnectRESTClient")
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "EN default",
+            "pt-br": "PT default",
+            "es": "ES default",
+        }
+    )
+    def test_effective_blocking_message_logs_connect_failure(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.side_effect = RuntimeError("connect down")
+        project = ProjectFactory()
+        config = ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            blocking_message=None,
+            initialized_as_new_project=True,
+        )
+
+        with self.assertLogs(
+            "nexus.usecases.guardrails.project_guardrails_config",
+            level="WARNING",
+        ) as logs:
+            message, is_custom = self.use_case.effective_blocking_message(config)
+
+        self.assertFalse(is_custom)
+        self.assertEqual(message, "PT default")
+        self.assertTrue(any("Failed to fetch project language" in line for line in logs.output))
+
     def test_effective_blocking_message_uses_custom_value(self):
         project = ProjectFactory()
         config = ProjectGuardrailsConfig.objects.create(
@@ -121,8 +221,6 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     def test_update_unblocks_without_confirmation(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
         self.use_case.get_or_initialize(project)
 
         config = self.use_case.update_config(
@@ -134,7 +232,14 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     def test_update_message_only_leaves_category_states(self):
         project = ProjectFactory()
-        config = self.use_case.get_or_initialize(project)
+        ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            initialized_as_new_project=True,
+            bedrock_guardrail_identifier="",
+            bedrock_guardrail_version="",
+        )
+        self._mock_get_or_create_pool.reset_mock()
 
         updated = self.use_case.update_config(
             project,
@@ -142,7 +247,8 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         )
 
         self.assertEqual(updated.blocking_message, "Brand refusal")
-        self.assertEqual(updated.category_states, config.category_states)
+        self.assertTrue(all(updated.category_states.values()))
+        self.assertFalse(updated.bedrock_guardrail_identifier)
         self._mock_get_or_create_pool.assert_not_called()
 
     def test_get_runtime_config_as_dict_includes_pool_and_message(self):
@@ -171,21 +277,25 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     def test_get_runtime_config_as_dict_initializes_missing_config(self):
         project = ProjectFactory()
-        project.created_at = django_timezone.make_aware(datetime(2026, 8, 1))
-        project.save(update_fields=["created_at"])
         self.assertFalse(ProjectGuardrailsConfig.objects.filter(project=project).exists())
 
         runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
 
         self.assertTrue(ProjectGuardrailsConfig.objects.filter(project=project).exists())
         self.assertTrue(runtime["has_blocked_category"])
+        self.assertIsNotNone(runtime["guardrailIdentifier"])
+        self.assertEqual(runtime["guardrailVersion"], "1")
 
     def test_update_category_assigns_pool_identifier_and_version(self):
         project = ProjectFactory()
         self.use_case.get_or_initialize(project)
         ProjectGuardrailsConfig.objects.filter(project=project).update(
             category_states=self.use_case.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
+        self._mock_get_or_create_pool.reset_mock()
 
         config = self.use_case.update_config(project, category_states={"politics": True})
 
@@ -202,6 +312,9 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.use_case.get_or_initialize(project)
         ProjectGuardrailsConfig.objects.filter(project=project).update(
             category_states=self.use_case.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
         assigned = self.use_case.update_config(project, category_states={"politics": True})
         self.assertIsNotNone(assigned.bedrock_guardrail_pool_id)
@@ -222,6 +335,9 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
             self.use_case.get_or_initialize(project)
             ProjectGuardrailsConfig.objects.filter(project=project).update(
                 category_states=self.use_case.build_default_category_states(blocked=False),
+                bedrock_guardrail_pool=None,
+                bedrock_guardrail_identifier=None,
+                bedrock_guardrail_version=None,
             )
 
         config_a = self.use_case.update_config(project_a, category_states={"politics": True, "bias": True})
@@ -235,6 +351,9 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.use_case.get_or_initialize(project)
         ProjectGuardrailsConfig.objects.filter(project=project).update(
             category_states=self.use_case.build_default_category_states(blocked=False),
+            bedrock_guardrail_pool=None,
+            bedrock_guardrail_identifier=None,
+            bedrock_guardrail_version=None,
         )
         self._mock_get_or_create_pool.side_effect = BedrockGuardrailPoolError("AccessDenied")
 
@@ -247,7 +366,11 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     @override_settings(
         AWS_BEDROCK_REGION_NAME="us-east-1",
-        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "Default refusal",
+            "pt-br": "Default refusal",
+            "es": "Default refusal",
+        },
     )
     def test_apply_input_guardrail_skips_when_no_blocked_categories(self):
         client = MagicMock()
@@ -266,7 +389,11 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     @override_settings(
         AWS_BEDROCK_REGION_NAME="us-east-1",
-        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "Default refusal",
+            "pt-br": "Default refusal",
+            "es": "Default refusal",
+        },
     )
     def test_apply_input_guardrail_intervene_returns_project_message(self):
         client = MagicMock()
@@ -289,7 +416,11 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
 
     @override_settings(
         AWS_BEDROCK_REGION_NAME="us-east-1",
-        GUARDRAILS_DEFAULT_BLOCKING_MESSAGE="Default refusal",
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "Default refusal",
+            "pt-br": "Default refusal",
+            "es": "Default refusal",
+        },
     )
     def test_apply_input_guardrail_fail_open_on_bedrock_error(self):
         from botocore.exceptions import ClientError

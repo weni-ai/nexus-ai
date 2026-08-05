@@ -7,12 +7,16 @@ import boto3
 import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.utils import timezone
 
+from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project, ProjectGuardrailsConfig
-from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolService
+from nexus.usecases.guardrails.bedrock_guardrail_pool import (
+    BedrockGuardrailPoolError,
+    BedrockGuardrailPoolService,
+)
 
 _UNSET = object()
+_DEFAULT_BLOCKING_LANGUAGE = "pt-br"
 logger = logging.getLogger(__name__)
 
 
@@ -42,20 +46,6 @@ class ProjectGuardrailsConfigUseCase:
         return [entry["slug"] for entry in settings.GUARDRAIL_CATEGORY_CATALOG]
 
     @classmethod
-    def is_new_project(cls, project: Project) -> bool:
-        deploy_at = settings.GUARDRAILS_CONFIG_FEATURE_DEPLOY_AT
-        created_at = project.created_at
-        if timezone.is_naive(created_at):
-            created_at = timezone.make_aware(created_at, timezone.get_current_timezone())
-        if timezone.is_naive(deploy_at):
-            deploy_at = timezone.make_aware(deploy_at, timezone.get_current_timezone())
-        return created_at >= deploy_at
-
-    @classmethod
-    def default_blocked_for_project(cls, project: Project) -> bool:
-        return cls.is_new_project(project)
-
-    @classmethod
     def build_default_category_states(cls, *, blocked: bool) -> dict[str, bool]:
         return {slug: blocked for slug in cls.catalog_slugs()}
 
@@ -83,32 +73,100 @@ class ProjectGuardrailsConfigUseCase:
         return merged
 
     @classmethod
-    def get_or_initialize(cls, project: Project) -> ProjectGuardrailsConfig:
-        default_blocked = cls.default_blocked_for_project(project)
+    def get_or_initialize(cls, project: Project, *, assign_pool: bool = True) -> ProjectGuardrailsConfig:
         config, created = ProjectGuardrailsConfig.objects.get_or_create(
             project=project,
             defaults={
-                "category_states": cls.build_default_category_states(blocked=default_blocked),
+                "category_states": cls.build_default_category_states(blocked=True),
                 "blocking_message": None,
-                "initialized_as_new_project": default_blocked,
+                "initialized_as_new_project": True,
             },
         )
-        if created:
+        if not created:
+            default_blocked = config.initialized_as_new_project
+            merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
+            if merged_states != config.category_states:
+                config.category_states = merged_states
+                config.save(update_fields=["category_states", "modified_on"])
+
+        if assign_pool:
+            return cls.ensure_pool_assignment(config)
+        return config
+
+    @classmethod
+    def ensure_pool_assignment(cls, config: ProjectGuardrailsConfig) -> ProjectGuardrailsConfig:
+        """
+        Resolve and persist the Bedrock pool when categories are blocked but no
+        identifier/version is assigned yet.
+
+        Fail-open on Bedrock errors so GET / lazy init does not fail the request.
+        """
+        if not cls.has_blocked_category(config.category_states or {}):
+            return config
+        if config.bedrock_guardrail_identifier and config.bedrock_guardrail_version:
             return config
 
-        default_blocked = config.initialized_as_new_project
-        merged_states = cls.merge_category_states(config.category_states, default_blocked=default_blocked)
-        if merged_states != config.category_states:
-            config.category_states = merged_states
-            config.save(update_fields=["category_states", "modified_on"])
+        blocked_slugs = BedrockGuardrailPoolService.blocked_slugs_from_states(config.category_states)
+        combination_key = BedrockGuardrailPoolService.combination_key(blocked_slugs)
+        try:
+            resolved = BedrockGuardrailPoolService.get_or_create_pool(config.category_states)
+        except BedrockGuardrailPoolError as exc:
+            logger.exception(
+                "Failed to assign Bedrock pool on lazy init (fail-open) project_uuid=%s combination_key=%s",
+                config.project_id,
+                combination_key,
+            )
+            sentry_sdk.capture_exception(exc)
+            return config
 
+        if resolved is None:
+            return config
+
+        config.bedrock_guardrail_pool = resolved.pool
+        config.bedrock_guardrail_identifier = resolved.pool.bedrock_guardrail_identifier
+        config.bedrock_guardrail_version = resolved.pool.bedrock_guardrail_version
+        config.save(
+            update_fields=[
+                "bedrock_guardrail_pool",
+                "bedrock_guardrail_identifier",
+                "bedrock_guardrail_version",
+                "modified_on",
+            ]
+        )
         return config
+
+    @classmethod
+    def default_blocking_messages(cls) -> dict[str, str]:
+        messages = getattr(settings, "GUARDRAILS_DEFAULT_BLOCKING_MESSAGES", {}) or {}
+        if isinstance(messages, str):
+            return {_DEFAULT_BLOCKING_LANGUAGE: messages}
+        return {str(key): str(value) for key, value in messages.items() if value is not None}
+
+    @classmethod
+    def resolve_default_blocking_message(cls, project_uuid: str | None = None) -> str:
+        """
+        Resolve platform default blocking message by project language (Connect),
+        """
+        messages = cls.default_blocking_messages()
+        language = _DEFAULT_BLOCKING_LANGUAGE
+        if project_uuid:
+            try:
+                language = ConnectRESTClient().get_project_language(str(project_uuid))
+            except Exception:
+                logger.warning(
+                    "Failed to fetch project language for %s, falling back to %s",
+                    project_uuid,
+                    _DEFAULT_BLOCKING_LANGUAGE,
+                    exc_info=True,
+                )
+                language = _DEFAULT_BLOCKING_LANGUAGE
+        return messages.get(language) or messages.get(_DEFAULT_BLOCKING_LANGUAGE) or ""
 
     @classmethod
     def effective_blocking_message(cls, config: ProjectGuardrailsConfig) -> tuple[str, bool]:
         if config.blocking_message is not None and config.blocking_message.strip():
             return config.blocking_message, True
-        return settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE, False
+        return cls.resolve_default_blocking_message(str(config.project_id)), False
 
     @classmethod
     def has_blocked_category(cls, category_states: dict[str, bool]) -> bool:
@@ -125,7 +183,7 @@ class ProjectGuardrailsConfigUseCase:
 
         effective_message = blocking_message
         if effective_message is None or not effective_message.strip():
-            effective_message = settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
+            effective_message = cls.resolve_default_blocking_message()
 
         if not effective_message or not effective_message.strip():
             raise ValidationError({"blocking_message": "Blocking message is required when any category is blocked."})
@@ -249,7 +307,7 @@ class ProjectGuardrailsConfigUseCase:
             return None
 
         # Option A: ignore Bedrock canned outputs; use project effective message.
-        return runtime_config.get("blocking_message") or settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
+        return runtime_config.get("blocking_message") or cls.resolve_default_blocking_message()
 
     @classmethod
     def update_config(
@@ -259,7 +317,7 @@ class ProjectGuardrailsConfigUseCase:
         category_states: dict | None = None,
         blocking_message: str | None = _UNSET,
     ) -> ProjectGuardrailsConfig:
-        config = cls.get_or_initialize(project)
+        config = cls.get_or_initialize(project, assign_pool=False)
         previous_states = dict(config.category_states)
         next_states = dict(previous_states)
 

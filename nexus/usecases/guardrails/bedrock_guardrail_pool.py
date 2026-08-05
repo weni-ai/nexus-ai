@@ -80,7 +80,9 @@ class BedrockGuardrailPoolService:
         raw_name = f"nexus-pool-{key_digest}"
         name = re.sub(r"[^0-9a-zA-Z-_]", "-", raw_name)[:_GUARDRAIL_NAME_MAX]
 
-        default_message = settings.GUARDRAILS_DEFAULT_BLOCKING_MESSAGE
+        from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
+
+        default_message = ProjectGuardrailsConfigUseCase.resolve_default_blocking_message()
         payload: dict = {
             "name": name,
             "description": f"Nexus guardrail pool for categories: {combination_key}"[:200],
