@@ -853,6 +853,7 @@ class ProjectGuardrailsConfigView(APIView):
             config,
             writable=self._is_writable(request.user, project),
         )
+        notify_async(event="cache_invalidation:project", project=project)
         return Response(payload.as_dict(), status=status.HTTP_200_OK)
 
     @staticmethod
