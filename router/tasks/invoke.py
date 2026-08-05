@@ -36,7 +36,7 @@ from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
 from router.utils.redis_clients import get_redis_read_client
 
-from .actions_client import get_action_clients
+from .actions_client import get_action_clients, get_guardrail_block_broadcast_client
 
 logger = logging.getLogger(__name__)
 
@@ -724,12 +724,15 @@ def start_inline_agents(  # noqa: C901
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
         )
+        block_broadcast = get_guardrail_block_broadcast_client(preview=preview)
         if preview or preview_websocket:
-            return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
+            return dispatch_preview(
+                e.message, message_obj, block_broadcast, user_email, agents_backend, flows_user_email
+            )
         return dispatch(
             llm_response=e.message,
             message=message_obj,
-            direct_message=broadcast,
+            direct_message=block_broadcast,
             user_email=flows_user_email,
             full_chunks=[],
             backend=agents_backend,

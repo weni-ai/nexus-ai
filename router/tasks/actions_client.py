@@ -51,3 +51,19 @@ def get_action_clients(
 
     flow_start = FlowStartHTTPClient(os.environ.get("FLOWS_REST_ENDPOINT"), os.environ.get("FLOWS_INTERNAL_TOKEN"))
     return broadcast, flow_start
+
+
+def get_guardrail_block_broadcast_client(*, preview: bool = False):
+    """
+    Broadcast client for ApplyGuardrail early-exit replies.
+    """
+    if preview:
+        return SimulateBroadcast(
+            os.environ.get("FLOWS_REST_ENDPOINT"),
+            os.environ.get("FLOWS_INTERNAL_TOKEN"),
+            get_file_info,
+        )
+    return WhatsAppBroadcastHTTPClient(
+        os.environ.get("FLOWS_REST_ENDPOINT"),
+        os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
+    )
