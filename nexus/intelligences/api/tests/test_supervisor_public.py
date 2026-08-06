@@ -481,3 +481,29 @@ class TestSupervisorPublicAPI(TestCase):
         upstream_params = mock_call.call_args[0][1]
         self.assertEqual(upstream_params["start_date"], "2026-04-10T00:00:00Z")
         self.assertEqual(upstream_params["end_date"], "2026-04-15T23:59:59Z")
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_forwards_topics_filter_including_unclassified(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {
+            "results": [],
+            "next": None,
+            "previous": None,
+            "total_count": 2,
+            "status_summary": {"0": 0, "1": 0, "2": 0, "3": 2, "4": 0},
+        }
+
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(
+            f"{url}?start=2026-04-01T00:00:00Z&end=2026-04-20T23:59:59Z&topics=Sales,unclassified",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_call.assert_called_once()
+        upstream_params = mock_call.call_args[0][1]
+        self.assertEqual(upstream_params["topics"], "Sales,unclassified")
