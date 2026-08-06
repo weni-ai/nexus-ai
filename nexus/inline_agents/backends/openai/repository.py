@@ -117,11 +117,12 @@ class ManagerAgentRepository(SupervisorRepository):
         project_creds = self._get_project_credentials(project_uuid, supervisor_data["model_vendor"])
 
         if project_creds:
-            user_model_credentials = {
-                "api_key": project_creds.get("api_key", ""),
-                "api_base": project_creds.get("api_base", ""),
-                "api_version": project_creds.get("api_version", ""),
-            }
+            # Pass through all provider credential fields (api_key/api_base plus
+            # client-specific keys such as Whirlpool client_id/client_secret).
+            user_model_credentials = dict(project_creds)
+            user_model_credentials.setdefault("api_key", project_creds.get("api_key", ""))
+            user_model_credentials.setdefault("api_base", project_creds.get("api_base", ""))
+            user_model_credentials.setdefault("api_version", project_creds.get("api_version", ""))
         elif supervisor_data["api_key"]:
             user_model_credentials = {
                 "api_key": supervisor_data["api_key"],
