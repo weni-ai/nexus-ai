@@ -534,6 +534,9 @@ class SupervisorPublicConversationsViewV2(APIView):
             if status_param not in NEXUS_CONVERSATIONS_RESOLUTION_KEYS:
                 raise ValidationError({"status": f"Invalid status '{status_param}'"})
             params["status"] = status_param
+        topics_param = request.query_params.get("topics")
+        if topics_param is not None and topics_param.strip():
+            params["topics"] = topics_param.strip()
         if request.query_params.get("cursor"):
             params["cursor"] = request.query_params.get("cursor")
         try:
@@ -607,6 +610,15 @@ class SupervisorPublicConversationsViewV2(APIView):
                 description=(
                     "Filter by resolution status (0=Resolved, 1=Unresolved, 2=In Progress, "
                     "3=Unclassified, 4=Has Chat Room)"
+                ),
+                required=False,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(
+                name="topics",
+                description=(
+                    "Comma-separated topic names forwarded to nexus-conversations. "
+                    "Can be combined with named topics, e.g. topics=Sales,unclassified."
                 ),
                 required=False,
                 type=OpenApiTypes.STR,
