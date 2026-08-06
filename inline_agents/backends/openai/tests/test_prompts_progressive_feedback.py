@@ -76,6 +76,8 @@ class TestIsGptFoundationModel(SimpleTestCase):
         self.assertTrue(is_gpt_foundation_model("gpt-4o"))
         self.assertTrue(is_gpt_foundation_model("GPT-4.1-mini"))
         self.assertTrue(is_gpt_foundation_model(" gpt-5 "))
+        self.assertTrue(is_gpt_foundation_model("azure/gpt-4o"))
+        self.assertTrue(is_gpt_foundation_model("ft:gpt-4o-mini:org:name:id"))
 
     def test_rejects_non_gpt_models(self):
         self.assertFalse(is_gpt_foundation_model(""))

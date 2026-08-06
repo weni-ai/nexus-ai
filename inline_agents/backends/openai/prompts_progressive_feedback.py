@@ -22,7 +22,7 @@ CORE_IDENTITY_MARKERS = ("<core_identity>", "## Core Identity")
 def is_gpt_foundation_model(model: str | None) -> bool:
     if not model:
         return False
-    return model.strip().lower().startswith("gpt")
+    return "gpt" in model.strip().lower()
 
 
 def get_progressive_feedback_orchestration_instruction() -> str:
