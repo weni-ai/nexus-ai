@@ -308,21 +308,6 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
         injected_context = kwargs.pop("injected_context", None)
         rationale_switch = rationale_switch_cached
-        progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
-            contact_urn,
-            channel_type,
-            preview=preview,
-            preview_websocket=preview_websocket,
-        )
-        if rationale_switch and not progressive_feedback_enabled:
-            logger.info(
-                "[ProgressiveFeedback] Disabled for non-webchat channel project_uuid=%s "
-                "channel_from_urn=%s contact_urn=%s channel_type=%s",
-                project_uuid,
-                channel_hint_from_contact_urn(contact_urn),
-                contact_urn,
-                channel_type or None,
-            )
         if manager_pipeline_version is not None:
             logger.debug(
                 "[OpenAIBackend] manager_pipeline_version=%s project_uuid=%s",
@@ -347,6 +332,28 @@ class OpenAIBackend(InlineAgentsBackend):
             supervisor_agent_uuid=supervisor_agent_uuid,
             project_uuid=project_uuid,
         )
+        from inline_agents.backends.openai.prompts_progressive_feedback import is_gpt_foundation_model
+
+        progressive_feedback_enabled = (
+            rationale_switch
+            and is_gpt_foundation_model(supervisor.get("foundation_model") or "")
+            and supports_progressive_feedback(
+                contact_urn,
+                channel_type,
+                preview=preview,
+                preview_websocket=preview_websocket,
+            )
+        )
+        if rationale_switch and not progressive_feedback_enabled:
+            logger.info(
+                "[ProgressiveFeedback] Disabled project_uuid=%s channel_from_urn=%s "
+                "contact_urn=%s channel_type=%s manager_foundation_model=%r",
+                project_uuid,
+                channel_hint_from_contact_urn(contact_urn),
+                contact_urn,
+                channel_type or None,
+                supervisor.get("foundation_model"),
+            )
         if supervisor_agent_uuid:
             formatter_agent_configurations = (
                 supervisor.get("formatter_agent_configurations") or formatter_agent_configurations
