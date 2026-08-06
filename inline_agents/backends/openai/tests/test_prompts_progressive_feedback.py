@@ -5,6 +5,7 @@ from inline_agents.backends.openai.prompts_progressive_feedback import (
     DEFAULT_PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION,
     find_core_identity_marker,
     inject_progressive_feedback_instruction,
+    is_gpt_foundation_model,
     should_inject_progressive_feedback_instruction,
 )
 from router.traces_observers.rationale.channel_hint import (
@@ -70,6 +71,20 @@ class TestFindCoreIdentityMarker(SimpleTestCase):
         self.assertIsNone(find_core_identity_marker(NO_MARKER_PROMPT))
 
 
+class TestIsGptFoundationModel(SimpleTestCase):
+    def test_accepts_gpt_models(self):
+        self.assertTrue(is_gpt_foundation_model("gpt-4o"))
+        self.assertTrue(is_gpt_foundation_model("GPT-4.1-mini"))
+        self.assertTrue(is_gpt_foundation_model(" gpt-5 "))
+
+    def test_rejects_non_gpt_models(self):
+        self.assertFalse(is_gpt_foundation_model(""))
+        self.assertFalse(is_gpt_foundation_model(None))
+        self.assertFalse(is_gpt_foundation_model("claude-3-5-sonnet"))
+        self.assertFalse(is_gpt_foundation_model("o3-mini"))
+        self.assertFalse(is_gpt_foundation_model("gemini-2.0-flash"))
+
+
 class TestShouldInjectProgressiveFeedbackInstruction(SimpleTestCase):
     def test_injects_when_rationale_enabled_on_webchat(self):
         self.assertTrue(
@@ -77,6 +92,7 @@ class TestShouldInjectProgressiveFeedbackInstruction(SimpleTestCase):
                 True,
                 False,
                 contact_urn=WEBCHAT_CONTACT_URN,
+                manager_foundation_model="gpt-4o",
             )
         )
 
@@ -86,6 +102,7 @@ class TestShouldInjectProgressiveFeedbackInstruction(SimpleTestCase):
                 True,
                 False,
                 contact_urn=WHATSAPP_CONTACT_URN,
+                manager_foundation_model="gpt-4o",
             )
         )
 
@@ -95,6 +112,7 @@ class TestShouldInjectProgressiveFeedbackInstruction(SimpleTestCase):
                 False,
                 False,
                 contact_urn=WEBCHAT_CONTACT_URN,
+                manager_foundation_model="gpt-4o",
             )
         )
 
@@ -104,6 +122,17 @@ class TestShouldInjectProgressiveFeedbackInstruction(SimpleTestCase):
                 True,
                 True,
                 contact_urn=WEBCHAT_CONTACT_URN,
+                manager_foundation_model="gpt-4o",
+            )
+        )
+
+    def test_skips_when_manager_model_is_not_gpt(self):
+        self.assertFalse(
+            should_inject_progressive_feedback_instruction(
+                True,
+                False,
+                contact_urn=WEBCHAT_CONTACT_URN,
+                manager_foundation_model="claude-sonnet",
             )
         )
 
@@ -155,6 +184,7 @@ class TestGetSupervisorInstructionsProgressiveFeedback(SimpleTestCase):
             "components_instructions": "",
             "components_instructions_up": "",
             "human_support_instructions": "",
+            "manager_foundation_model": "gpt-4o",
         }
         defaults.update(overrides)
         return OpenAITeamAdapter.get_supervisor_instructions(**defaults)
@@ -211,6 +241,15 @@ class TestGetSupervisorInstructionsProgressiveFeedback(SimpleTestCase):
         result = self._call_get_supervisor_instructions(
             rationale_switch=True,
             contact_id=WHATSAPP_CONTACT_URN,
+        )
+
+        self.assertNotIn(TEST_INSTRUCTION, result)
+
+    @override_settings(PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION=TEST_INSTRUCTION)
+    def test_skips_when_manager_model_is_not_gpt(self):
+        result = self._call_get_supervisor_instructions(
+            rationale_switch=True,
+            manager_foundation_model="claude-sonnet",
         )
 
         self.assertNotIn(TEST_INSTRUCTION, result)
