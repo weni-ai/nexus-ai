@@ -173,6 +173,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 hooks=hooks,
                 model_settings=model_settings,
                 collaborator_configurations=supervisor.get("collaborator_configurations", {}),
+                model_vendor=supervisor.get("model_vendor", ""),
             )
 
             agents_as_tools.append(
@@ -315,6 +316,7 @@ class OpenAITeamAdapter(TeamAdapter):
             reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
             extra_args=supervisor_model_settings.get("manager_extra_args") or {},
+            model_vendor=supervisor.get("model_vendor", ""),
         )
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
         return {

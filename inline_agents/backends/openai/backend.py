@@ -740,16 +740,29 @@ class OpenAIBackend(InlineAgentsBackend):
         context,
         formatter_instructions: str = "",
         formatter_agent_configurations=None,
+        user_model_credentials: Optional[Dict[str, Any]] = None,
+        model_vendor: str = "",
     ):
         formatter_agent = self._create_formatter_agent(
-            supervisor_hooks, formatter_instructions, formatter_agent_configurations
+            supervisor_hooks,
+            formatter_instructions,
+            formatter_agent_configurations,
+            user_model_credentials=user_model_credentials,
+            model_vendor=model_vendor,
         )
         formatter_result = await self._run_formatter_agent(
             formatter_agent, final_response, session, context, formatter_agent_configurations
         )
         return formatter_result
 
-    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions="", formatter_agent_configurations=None):
+    def _create_formatter_agent(
+        self,
+        supervisor_hooks,
+        formatter_instructions="",
+        formatter_agent_configurations=None,
+        user_model_credentials: Optional[Dict[str, Any]] = None,
+        model_vendor: str = "",
+    ):
         def custom_tool_handler(context, tool_results):
             if tool_results:
                 first_result = tool_results[0]
@@ -785,25 +798,35 @@ class OpenAIBackend(InlineAgentsBackend):
 
         supervisor_hooks.save_components_trace = True
 
+        from inline_agents.backends.openai.agent_entities import AgentModel
+
+        resolved_model = AgentModel().get_model(
+            formatter_agent_model,
+            user_model_credentials or {},
+            model_vendor=model_vendor,
+        )
+        model_settings_kwargs: Dict[str, Any] = {
+            "tool_choice": "required",
+            "parallel_tool_calls": False,
+        }
+        if not isinstance(resolved_model, str):
+            model_settings_kwargs["include_usage"] = True
+
+        if formatter_reasoning_effort:
+            model_settings_kwargs["reasoning"] = Reasoning(
+                effort=formatter_reasoning_effort,
+                summary=formatter_reasoning_summary,
+            )
+
         formatter_agent = Agent(
             name="Response Formatter Agent",
             instructions=formatter_instructions_resolved,
-            model=formatter_agent_model,
+            model=resolved_model,
             tools=tools,
             hooks=supervisor_hooks,
             tool_use_behavior=custom_tool_handler,
-            model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
+            model_settings=ModelSettings(**model_settings_kwargs),
         )
-
-        if formatter_reasoning_effort:
-            formatter_agent.model_settings = ModelSettings(
-                tool_choice="required",
-                parallel_tool_calls=False,
-                reasoning=Reasoning(
-                    effort=formatter_reasoning_effort,
-                    summary=formatter_reasoning_summary,
-                ),
-            )
 
         return formatter_agent
 
@@ -972,6 +995,8 @@ class OpenAIBackend(InlineAgentsBackend):
                                 external_team["context"],
                                 formatter_agent_instructions,
                                 formatter_config,
+                                user_model_credentials=user_model_credentials,
+                                model_vendor=model_vendor,
                             )
                         except Exception as formatter_error:
                             logger.error(
@@ -1024,6 +1049,8 @@ class OpenAIBackend(InlineAgentsBackend):
                             external_team["context"],
                             formatter_agent_instructions,
                             formatter_config,
+                            user_model_credentials=user_model_credentials,
+                            model_vendor=model_vendor,
                         )
                         final_response = formatted_response
                     except Exception as formatter_error:

@@ -269,6 +269,66 @@ class TestManagerAgentRepositoryProjectCredentials(TestCase):
         self.assertEqual(creds["api_key"], "proj-api-key-123")
         self.assertEqual(creds["api_base"], "https://proj.example.com")
 
+    def test_passes_through_whirlpool_oauth_credentials(self):
+        whirlpool_manager = _create_manager(model_vendor="whirlpool", name="Whirlpool Manager")
+        whirlpool_provider = ModelProvider.objects.create(
+            model_vendor="whirlpool",
+            label="Whirlpool",
+            credentials=[
+                {"id": "client_id", "label": "Client ID", "type": "PASSWORD"},
+                {"id": "client_secret", "label": "Client secret", "type": "PASSWORD"},
+                {"id": "token_url", "label": "OAuth token URL", "type": "TEXT"},
+                {"id": "generate_content_url", "label": "generateContent URL", "type": "TEXT"},
+            ],
+            manager_agent=whirlpool_manager,
+        )
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=whirlpool_provider,
+            credentials=[
+                {
+                    "id": "client_id",
+                    "type": "PASSWORD",
+                    "label": "Client ID",
+                    "value": encrypt_value("whirlpool-client-id"),
+                },
+                {
+                    "id": "client_secret",
+                    "type": "PASSWORD",
+                    "label": "Client secret",
+                    "value": encrypt_value("whirlpool-client-secret"),
+                },
+                {
+                    "id": "token_url",
+                    "type": "TEXT",
+                    "label": "OAuth token URL",
+                    "value": "https://api-dev.whirlpool.com/oauth2/v1/token",
+                },
+                {
+                    "id": "generate_content_url",
+                    "type": "TEXT",
+                    "label": "generateContent URL",
+                    "value": "https://api-dev.whirlpool.com/d2c/cxplatform/v1/ai/generateContent",
+                },
+            ],
+            is_active=True,
+        )
+
+        repo = ManagerAgentRepository()
+        result = repo.get_supervisor(
+            supervisor_agent_uuid=str(whirlpool_manager.uuid),
+            project_uuid=str(self.project.uuid),
+        )
+
+        creds = result["user_model_credentials"]
+        self.assertEqual(creds["client_id"], "whirlpool-client-id")
+        self.assertEqual(creds["client_secret"], "whirlpool-client-secret")
+        self.assertEqual(creds["token_url"], "https://api-dev.whirlpool.com/oauth2/v1/token")
+        self.assertEqual(
+            creds["generate_content_url"],
+            "https://api-dev.whirlpool.com/d2c/cxplatform/v1/ai/generateContent",
+        )
+
     def test_falls_back_to_manager_credentials_when_inactive(self):
         self.manager.api_key = "manager-key"
         self.manager.api_base = "https://manager.example.com"

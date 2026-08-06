@@ -1,15 +1,17 @@
 import ast
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 import boto3
 from agents import Agent, ModelSettings, RunContextWrapper, function_tool
 from agents.agent import FunctionToolResult, ToolsToFinalOutputResult
 from agents.extensions.models.litellm_model import LitellmModel
+from agents.models.interface import Model
 from django.conf import settings
 from openai.types.shared import Reasoning
 
+from inline_agents.backends.openai.custom_providers import resolve_custom_model
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
@@ -117,7 +119,17 @@ def resolve_inline_openai_tool_use(
 
 
 class AgentModel:
-    def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
+    def get_model(
+        self,
+        model: str,
+        user_model_credentials: Dict[str, Any] | None = None,
+        model_vendor: str = "",
+    ) -> Union[Model, LitellmModel, str]:
+        credentials = user_model_credentials or {}
+        custom = resolve_custom_model(model, credentials, model_vendor=model_vendor)
+        if custom is not None:
+            return custom
+
         if "litellm" in model:
             cleaned_model = model.replace("litellm/", "")
             kwargs = {
@@ -127,10 +139,10 @@ class AgentModel:
             if "vertex" in model:
                 return LitellmModel(**kwargs)
 
-            if user_model_credentials.get("api_key"):
-                kwargs["api_key"] = user_model_credentials.get("api_key")
-            if user_model_credentials.get("api_base"):
-                kwargs["base_url"] = user_model_credentials.get("api_base")
+            if credentials.get("api_key"):
+                kwargs["api_key"] = credentials.get("api_key")
+            if credentials.get("api_base"):
+                kwargs["base_url"] = credentials.get("api_base")
 
             return LitellmModel(**kwargs)
         return model
@@ -169,15 +181,16 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
         model_settings: Dict[str, Any],
         collaborator_configurations: Dict[str, Any],
         model_has_reasoning: bool = False,
+        model_vendor: str = "",
     ):
         if collaborator_configurations.get("override_collaborators_foundation_model"):
             model_name = collaborator_configurations.get("collaborators_foundation_model")
         else:
             model_name = foundation_model
 
-        model = self.get_model(model_name, user_model_credentials)
+        model = self.get_model(model_name, user_model_credentials, model_vendor=model_vendor)
         model_settings_kw = dict(model_settings)
-        if isinstance(model, LitellmModel):
+        if isinstance(model, Model):
             model_settings_kw["include_usage"] = True
         super().__init__(
             name=name,
@@ -212,10 +225,11 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         reasoning_summary: str = "",
         parallel_tool_calls: bool = False,
         extra_args: dict | None = None,
+        model_vendor: str = "",
     ):
         tools.extend(self.function_tools())
 
-        model = self.get_model(model, user_model_credentials)
+        model = self.get_model(model, user_model_credentials, model_vendor=model_vendor)
 
         model_settings_kwargs: Dict[str, Any] = {
             "parallel_tool_calls": parallel_tool_calls,
@@ -223,7 +237,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         }
         if max_tokens is not None:
             model_settings_kwargs["max_tokens"] = max_tokens
-        if isinstance(model, LitellmModel):
+        if isinstance(model, Model):
             model_settings_kwargs["include_usage"] = True
 
         if model_has_reasoning and reasoning_effort:
