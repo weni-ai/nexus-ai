@@ -260,6 +260,7 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            manager_foundation_model=supervisor.get("foundation_model") or "",
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -429,6 +430,7 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            manager_foundation_model=supervisor.get("foundation_model") or "",
         )
 
         for agent in agents:
@@ -1110,6 +1112,7 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_type: str = "",
         preview: bool = False,
         preview_websocket: bool = False,
+        manager_foundation_model: str = "",
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1181,6 +1184,7 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            manager_foundation_model=manager_foundation_model,
         ):
             progressive_feedback_instruction = get_progressive_feedback_orchestration_instruction()
             if progressive_feedback_instruction:
@@ -1198,6 +1202,7 @@ class OpenAITeamAdapter(TeamAdapter):
                     turn_off_rationale=turn_off_rationale,
                     injected=True,
                     instruction_preview=progressive_feedback_instruction[:120],
+                    manager_foundation_model=manager_foundation_model,
                 )
             else:
                 log_progressive_feedback_orchestration_decision(
@@ -1209,6 +1214,7 @@ class OpenAITeamAdapter(TeamAdapter):
                     rationale_switch=rationale_switch,
                     turn_off_rationale=turn_off_rationale,
                     injected=False,
+                    manager_foundation_model=manager_foundation_model,
                 )
         else:
             log_progressive_feedback_orchestration_decision(
@@ -1220,6 +1226,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 rationale_switch=rationale_switch,
                 turn_off_rationale=turn_off_rationale,
                 injected=False,
+                manager_foundation_model=manager_foundation_model,
             )
 
         return rendered_content
