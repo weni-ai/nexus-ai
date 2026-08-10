@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
+import sentry_sdk
 from django.conf import settings
 from django.db import IntegrityError, transaction
 
@@ -225,8 +226,9 @@ def record_turn_latency(
                     router_received_at=router_dt,
                     sample_reason=sample_reason,
                 )
-    except Exception:
+    except Exception as exc:
         logger.exception(
             "Failed to persist inline agent latency",
             extra={"project_uuid": project_uuid, "turn_id": turn_id, "task_id": task_id},
         )
+        sentry_sdk.capture_exception(exc)

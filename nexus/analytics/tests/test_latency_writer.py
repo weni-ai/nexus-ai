@@ -126,3 +126,26 @@ class LatencyWriterIntegrationTestCase(TestCase):
         existing_row.refresh_from_db()
         self.assertEqual(existing_row.turn_count, 2)
         self.assertEqual(existing_row.sum_ms, 3000)
+
+    @patch("nexus.analytics.latency_writer.sentry_sdk.capture_exception")
+    @patch("nexus.analytics.latency_writer.random.random", return_value=0.99)
+    def test_persistence_error_is_reported_to_sentry(self, _mock_random, mock_capture_exception):
+        project_uuid = str(uuid4())
+        with patch.object(
+            InlineAgentLatencyHourly.objects,
+            "select_for_update",
+            side_effect=RuntimeError("relation does not exist"),
+        ):
+            record_turn_latency(
+                project_uuid=project_uuid,
+                status="success",
+                total_seconds=1.0,
+                phase_seconds={},
+                correlation=TurnCorrelation(contact_urn="telegram:4"),
+                task_id="celery-4",
+                turn_id="turn-4",
+                finished_at=datetime(2026, 7, 16, 19, 0, 0, tzinfo=timezone.utc),
+            )
+
+        mock_capture_exception.assert_called_once()
+        self.assertIsInstance(mock_capture_exception.call_args.args[0], RuntimeError)
