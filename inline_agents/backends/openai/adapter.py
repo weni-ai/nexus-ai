@@ -22,6 +22,17 @@ from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
+from inline_agents.backends.openai.prompts_progressive_feedback import (
+    get_progressive_feedback_orchestration_instruction,
+    inject_progressive_feedback_instruction,
+    log_progressive_feedback_orchestration_decision,
+    should_inject_progressive_feedback_instruction,
+)
+from inline_agents.backends.openai.prompts_prompt_injection_filter import (
+    get_prompt_injection_filter_block,
+    inject_prompt_injection_filter,
+    should_inject_prompt_injection_filter,
+)
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentConstant,
@@ -1167,13 +1178,6 @@ class OpenAITeamAdapter(TeamAdapter):
 
         rendered_content = template.render(context_object)
 
-        from inline_agents.backends.openai.prompts_progressive_feedback import (
-            get_progressive_feedback_orchestration_instruction,
-            inject_progressive_feedback_instruction,
-            log_progressive_feedback_orchestration_decision,
-            should_inject_progressive_feedback_instruction,
-        )
-
         if should_inject_progressive_feedback_instruction(
             rationale_switch,
             turn_off_rationale,
@@ -1221,12 +1225,6 @@ class OpenAITeamAdapter(TeamAdapter):
                 turn_off_rationale=turn_off_rationale,
                 injected=False,
             )
-
-        from inline_agents.backends.openai.prompts_prompt_injection_filter import (
-            get_prompt_injection_filter_block,
-            inject_prompt_injection_filter,
-            should_inject_prompt_injection_filter,
-        )
 
         if should_inject_prompt_injection_filter(prompt_injection_filter_enabled):
             rendered_content = inject_prompt_injection_filter(
