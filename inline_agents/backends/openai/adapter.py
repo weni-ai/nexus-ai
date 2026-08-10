@@ -22,6 +22,17 @@ from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
+from inline_agents.backends.openai.prompts_progressive_feedback import (
+    get_progressive_feedback_orchestration_instruction,
+    inject_progressive_feedback_instruction,
+    log_progressive_feedback_orchestration_decision,
+    should_inject_progressive_feedback_instruction,
+)
+from inline_agents.backends.openai.prompts_prompt_injection_filter import (
+    get_prompt_injection_filter_block,
+    inject_prompt_injection_filter,
+    should_inject_prompt_injection_filter,
+)
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentConstant,
@@ -223,6 +234,7 @@ class OpenAITeamAdapter(TeamAdapter):
         skip_conversation_sqs: bool = False,
         manager_pipeline_version: Optional[str] = None,
         channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -261,6 +273,7 @@ class OpenAITeamAdapter(TeamAdapter):
             preview=preview,
             preview_websocket=preview_websocket,
             manager_foundation_model=supervisor.get("foundation_model") or "",
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -373,6 +386,7 @@ class OpenAITeamAdapter(TeamAdapter):
         use_components: bool = False,
         skip_conversation_sqs: bool = False,
         channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
         # Cached data parameters (optional, used to avoid database queries)
         content_base_uuid: str = None,
         business_rules: str = None,
@@ -431,6 +445,7 @@ class OpenAITeamAdapter(TeamAdapter):
             preview=preview,
             preview_websocket=preview_websocket,
             manager_foundation_model=supervisor.get("foundation_model") or "",
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         for agent in agents:
@@ -1113,6 +1128,7 @@ class OpenAITeamAdapter(TeamAdapter):
         preview: bool = False,
         preview_websocket: bool = False,
         manager_foundation_model: str = "",
+        prompt_injection_filter_enabled: bool = False,
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1170,13 +1186,6 @@ class OpenAITeamAdapter(TeamAdapter):
 
         rendered_content = template.render(context_object)
 
-        from inline_agents.backends.openai.prompts_progressive_feedback import (
-            get_progressive_feedback_orchestration_instruction,
-            inject_progressive_feedback_instruction,
-            log_progressive_feedback_orchestration_decision,
-            should_inject_progressive_feedback_instruction,
-        )
-
         if should_inject_progressive_feedback_instruction(
             rationale_switch,
             turn_off_rationale,
@@ -1227,6 +1236,12 @@ class OpenAITeamAdapter(TeamAdapter):
                 turn_off_rationale=turn_off_rationale,
                 injected=False,
                 manager_foundation_model=manager_foundation_model,
+            )
+
+        if should_inject_prompt_injection_filter(prompt_injection_filter_enabled):
+            rendered_content = inject_prompt_injection_filter(
+                rendered_content,
+                get_prompt_injection_filter_block(),
             )
 
         return rendered_content

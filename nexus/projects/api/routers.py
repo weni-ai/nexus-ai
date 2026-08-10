@@ -18,6 +18,7 @@ from .views import (
     OpenSupportTicketView,
     ProjectGuardrailsConfigView,
     ProjectPromptCreationConfigurationsViewset,
+    ProjectPromptInjectionFilterView,
     ProjectUpdateViewset,
 )
 
@@ -54,6 +55,11 @@ urlpatterns = [
         "<project_uuid>/guardrails-config/",
         ProjectGuardrailsConfigView.as_view(),
         name="project-guardrails-config",
+    ),
+    path(
+        "<project_uuid>/prompt-injection-filter/",
+        ProjectPromptInjectionFilterView.as_view(),
+        name="project-prompt-injection-filter",
     ),
     path(
         "<project_uuid>/improvements/open-support-ticket/",

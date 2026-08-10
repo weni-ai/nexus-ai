@@ -258,6 +258,7 @@ class ProjectGuardrailsConfig(models.Model):
     project = models.OneToOneField(Project, on_delete=models.CASCADE, related_name="guardrails_config")
     category_states = models.JSONField(default=dict)
     blocking_message = models.TextField(null=True, blank=True)
+    prompt_injection_filter_enabled = models.BooleanField(default=False)
     bedrock_guardrail_pool = models.ForeignKey(
         BedrockGuardrailPool,
         on_delete=models.SET_NULL,

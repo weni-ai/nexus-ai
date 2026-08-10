@@ -237,7 +237,7 @@ class ProjectGuardrailsConfigUseCase:
     @classmethod
     def get_runtime_config_as_dict(cls, project_uuid: str) -> dict:
         """
-        Cache-friendly runtime payload for ApplyGuardrail preprocess.
+        Cache-friendly runtime payload for ApplyGuardrail preprocess and soft filters.
 
         Lazy-initializes config so new-project defaults can apply without requiring
         a prior visit to the guardrails config API.
@@ -250,6 +250,7 @@ class ProjectGuardrailsConfigUseCase:
                 "guardrailVersion": None,
                 "blocking_message": None,
                 "has_blocked_category": False,
+                "prompt_injection_filter_enabled": False,
             }
 
         config = cls.get_or_initialize(project)
@@ -259,6 +260,7 @@ class ProjectGuardrailsConfigUseCase:
             "guardrailVersion": config.bedrock_guardrail_version or None,
             "blocking_message": message,
             "has_blocked_category": cls.has_blocked_category(config.category_states or {}),
+            "prompt_injection_filter_enabled": bool(config.prompt_injection_filter_enabled),
         }
 
     @classmethod
@@ -377,4 +379,20 @@ class ProjectGuardrailsConfigUseCase:
                 update_fields.append("blocking_message")
             config.save(update_fields=update_fields)
 
+        return config
+
+    @classmethod
+    def get_prompt_injection_filter_enabled(cls, project: Project) -> bool:
+        config = cls.get_or_initialize(project, assign_pool=False)
+        return bool(config.prompt_injection_filter_enabled)
+
+    @classmethod
+    def set_prompt_injection_filter_enabled(cls, project: Project, *, enabled: bool) -> ProjectGuardrailsConfig:
+        """Soft manager prompt filter only — never touches Bedrock pools."""
+        config = cls.get_or_initialize(project, assign_pool=False)
+        enabled = bool(enabled)
+        if bool(config.prompt_injection_filter_enabled) == enabled:
+            return config
+        config.prompt_injection_filter_enabled = enabled
+        config.save(update_fields=["prompt_injection_filter_enabled", "modified_on"])
         return config
