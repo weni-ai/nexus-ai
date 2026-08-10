@@ -1,12 +1,12 @@
 import logging
-from datetime import timedelta
 
 from django.contrib import admin
 from django.db.models import JSONField
-from django.utils import timezone
 
 from nexus.admin_widgets import PrettyJSONWidget
+from nexus.projects.exceptions import ProjectApiTokenNameAlreadyExists
 from nexus.projects.models import Project, ProjectApiToken
+from nexus.usecases.projects.project_api_token import ProjectApiTokenUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -115,23 +115,20 @@ class ProjectAdmin(admin.ModelAdmin):
     def generate_api_token(self, request, queryset):
         from django.contrib import messages
 
-        from nexus.projects.models import ProjectApiToken
-
         created = 0
+        use_case = ProjectApiTokenUseCase()
         for project in queryset:
-            token, salt, token_hash = ProjectApiToken.generate_token_pair()
-            api_token = ProjectApiToken.objects.create(
+            api_token, plaintext_token = use_case.create_token(
                 project=project,
-                name=f"Auto {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                salt=salt,
-                token_hash=token_hash,
                 created_by=request.user,
-                expires_at=timezone.now() + timedelta(days=365),
             )
             messages.add_message(
                 request,
                 messages.INFO,
-                f"Project {project.name}: token generated '{api_token.name}': {token}. Expires in 1 year.",
+                (
+                    f"Project {project.name}: token generated '{api_token.name}': "
+                    f"{plaintext_token}. Expires in 1 year."
+                ),
             )
             created += 1
 
@@ -167,21 +164,42 @@ class ProjectApiTokenAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change:
-            from nexus.projects.models import ProjectApiToken
-
-            token, salt, token_hash = ProjectApiToken.generate_token_pair()
-            obj.salt = salt
-            obj.token_hash = token_hash
-            obj.created_by = request.user
-            if not obj.expires_at:
-                obj.expires_at = timezone.now() + timedelta(days=365)
-            super().save_model(request, obj, form, change)
             from django.contrib import messages
+
+            use_case = ProjectApiTokenUseCase()
+            try:
+                api_token, plaintext_token = use_case.create_token(
+                    project=obj.project,
+                    name=obj.name,
+                    scope=obj.scope,
+                    created_by=request.user,
+                    expires_at=obj.expires_at,
+                    enabled=obj.enabled,
+                )
+            except ProjectApiTokenNameAlreadyExists:
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    f"A token named '{obj.name}' already exists for this project.",
+                )
+                return
+
+            obj.pk = api_token.pk
+            obj.salt = api_token.salt
+            obj.token_hash = api_token.token_hash
+            obj.created_by = api_token.created_by
+            obj.expires_at = api_token.expires_at
+            obj.enabled = api_token.enabled
+            obj.created_at = api_token.created_at
+            obj.scope = api_token.scope
 
             messages.add_message(
                 request,
                 messages.INFO,
-                f"Token gerado para '{obj.name}': {token}. Guarde-o com segurança; não será mostrado novamente.",
+                (
+                    f"Token gerado para '{api_token.name}': {plaintext_token}. "
+                    "Guarde-o com segurança; não será mostrado novamente."
+                ),
             )
         else:
             super().save_model(request, obj, form, change)

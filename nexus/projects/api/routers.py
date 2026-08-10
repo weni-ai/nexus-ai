@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .project_api_token_views import ProjectApiTokenCreateView
 from .resolution_criteria_views import (
     AIResolutionCriteriaDetailView,
     AIResolutionCriteriaListCreateView,
@@ -29,6 +30,11 @@ urlpatterns = [
     ),
     path("<project_uuid>/agents-backend", AgentsBackendView.as_view(), name="agents-backend"),
     path("<project_uuid>/human-support", EnableHumanSupportView.as_view(), name="enable-human-support"),
+    path(
+        "<project_uuid>/api-tokens/",
+        ProjectApiTokenCreateView.as_view(),
+        name="project-api-token-create",
+    ),
     path(
         "<project_uuid>/ai-resolution-criteria/",
         AIResolutionCriteriaListCreateView.as_view(),
