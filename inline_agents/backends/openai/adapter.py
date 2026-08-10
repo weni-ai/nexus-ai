@@ -222,6 +222,7 @@ class OpenAITeamAdapter(TeamAdapter):
         skip_conversation_sqs: bool = False,
         manager_pipeline_version: Optional[str] = None,
         channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -259,6 +260,7 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -370,6 +372,7 @@ class OpenAITeamAdapter(TeamAdapter):
         use_components: bool = False,
         skip_conversation_sqs: bool = False,
         channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
         # Cached data parameters (optional, used to avoid database queries)
         content_base_uuid: str = None,
         business_rules: str = None,
@@ -427,6 +430,7 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         for agent in agents:
@@ -1105,6 +1109,7 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_type: str = "",
         preview: bool = False,
         preview_websocket: bool = False,
+        prompt_injection_filter_enabled: bool = False,
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1215,6 +1220,18 @@ class OpenAITeamAdapter(TeamAdapter):
                 rationale_switch=rationale_switch,
                 turn_off_rationale=turn_off_rationale,
                 injected=False,
+            )
+
+        from inline_agents.backends.openai.prompts_prompt_injection_filter import (
+            get_prompt_injection_filter_block,
+            inject_prompt_injection_filter,
+            should_inject_prompt_injection_filter,
+        )
+
+        if should_inject_prompt_injection_filter(prompt_injection_filter_enabled):
+            rendered_content = inject_prompt_injection_filter(
+                rendered_content,
+                get_prompt_injection_filter_block(),
             )
 
         return rendered_content

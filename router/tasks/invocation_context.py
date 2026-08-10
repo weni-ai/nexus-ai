@@ -83,6 +83,9 @@ class CachedProjectData:
             "agent_data": self.agent_data,
             "formatter_agent_configurations": self.formatter_agent_configurations,
             "guardrails_config": self.guardrails_config,
+            "prompt_injection_filter_enabled": bool(
+                (self.guardrails_config or {}).get("prompt_injection_filter_enabled", False)
+            ),
             "default_instructions_for_collaborators": (
                 self.inline_agent_config_dict.get("default_instructions_for_collaborators")
                 if self.inline_agent_config_dict

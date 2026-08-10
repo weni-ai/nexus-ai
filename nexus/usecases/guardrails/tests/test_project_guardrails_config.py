@@ -269,11 +269,26 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertEqual(runtime["guardrailIdentifier"], config.bedrock_guardrail_identifier)
         self.assertEqual(runtime["guardrailVersion"], "1")
         self.assertEqual(runtime["blocking_message"], "Custom runtime message")
+        self.assertFalse(runtime["prompt_injection_filter_enabled"])
+
+    def test_update_prompt_injection_filter_does_not_call_bedrock_pool(self):
+        project = ProjectFactory()
+        self.use_case.get_or_initialize(project)
+        self._mock_get_or_create_pool.reset_mock()
+
+        updated = self.use_case.set_prompt_injection_filter_enabled(project, enabled=True)
+
+        self.assertTrue(updated.prompt_injection_filter_enabled)
+        self.assertTrue(self.use_case.get_prompt_injection_filter_enabled(project))
+        self._mock_get_or_create_pool.assert_not_called()
+        runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
+        self.assertTrue(runtime["prompt_injection_filter_enabled"])
 
     def test_get_runtime_config_as_dict_missing_project_skips_gate(self):
         runtime = self.use_case.get_runtime_config_as_dict("00000000-0000-0000-0000-000000000000")
         self.assertFalse(runtime["has_blocked_category"])
         self.assertIsNone(runtime["guardrailIdentifier"])
+        self.assertFalse(runtime["prompt_injection_filter_enabled"])
 
     def test_get_runtime_config_as_dict_initializes_missing_config(self):
         project = ProjectFactory()

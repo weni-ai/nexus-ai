@@ -17,7 +17,11 @@ from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication.weni_io import WeniIOAuthViewMixin
 from nexus.events import notify_async
 from nexus.projects.api.permissions import GuardrailsConfigAdminPermission, ProjectPermission
-from nexus.projects.api.serializers import ConversationSerializer, GuardrailsConfigUpdateSerializer
+from nexus.projects.api.serializers import (
+    ConversationSerializer,
+    GuardrailsConfigUpdateSerializer,
+    PromptInjectionFilterUpdateSerializer,
+)
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project, ProjectAuth
 from nexus.projects.permissions import get_user_auth, is_admin
@@ -878,6 +882,47 @@ class ProjectGuardrailsConfigView(APIView):
         if hasattr(exc, "messages"):
             return {"detail": list(exc.messages)}
         return {"detail": [str(exc)]}
+
+
+class ProjectPromptInjectionFilterView(APIView):
+    """Soft prompt-injection filter (manager system prompt)."""
+
+    permission_classes = [IsAuthenticated, GuardrailsConfigAdminPermission]
+
+    def get(self, request, project_uuid):
+        project = ProjectGuardrailsConfigView._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        enabled = ProjectGuardrailsConfigUseCase.get_prompt_injection_filter_enabled(project)
+        return Response(
+            {
+                "enabled": enabled,
+                "writable": ProjectGuardrailsConfigView._is_writable(request.user, project),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, project_uuid):
+        project = ProjectGuardrailsConfigView._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PromptInjectionFilterUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        config = ProjectGuardrailsConfigUseCase.set_prompt_injection_filter_enabled(
+            project,
+            enabled=serializer.validated_data["enabled"],
+        )
+        notify_async(event="cache_invalidation:project", project=project)
+        return Response(
+            {
+                "enabled": bool(config.prompt_injection_filter_enabled),
+                "writable": ProjectGuardrailsConfigView._is_writable(request.user, project),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class OpenSupportTicketView(APIView):
