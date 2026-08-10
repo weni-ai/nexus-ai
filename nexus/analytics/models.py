@@ -53,6 +53,32 @@ class InlineAgentTurnOutlier(models.Model):
     schema_version = models.PositiveSmallIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def to_api_dict(self) -> dict:
+        from nexus.analytics.latency_conversation_lookup import build_conversation_lookup
+
+        return {
+            "id": str(self.id),
+            "turn_finished_at": self.turn_finished_at.isoformat().replace("+00:00", "Z"),
+            "contact_urn": self.contact_urn,
+            "turn_id": self.turn_id,
+            "message_conversation_log_uuid": str(self.message_conversation_log_uuid)
+            if self.message_conversation_log_uuid
+            else None,
+            "channel_type": self.channel_type,
+            "celery_task_id": self.celery_task_id,
+            "status": self.status,
+            "total_ms": self.total_ms,
+            "boundaries_ms": self.boundaries_ms,
+            "phase_ms": self.phase_ms,
+            "sample_reason": self.sample_reason,
+            "conversation_lookup": build_conversation_lookup(
+                project_uuid=str(self.project_uuid),
+                contact_urn=self.contact_urn,
+                turn_finished_at=self.turn_finished_at,
+                turn_id=self.turn_id,
+            ),
+        }
+
     class Meta:
         db_table = "inline_agent_turn_outlier"
         indexes = [

@@ -5,7 +5,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from nexus.analytics.api.permissions import InlineAgentLatencyAPIPermission
-from nexus.analytics.latency_conversation_lookup import build_conversation_lookup
 from nexus.analytics.latency_queries import (
     build_summary,
     build_timeseries,
@@ -104,30 +103,5 @@ class InlineAgentLatencyOutliersView(_InlineAgentLatencyAPIView):
             execution_path=params["execution_path"],
             limit=limit,
         )
-        results = []
-        for row in rows:
-            results.append(
-                {
-                    "id": str(row.id),
-                    "turn_finished_at": row.turn_finished_at.isoformat().replace("+00:00", "Z"),
-                    "contact_urn": row.contact_urn,
-                    "turn_id": row.turn_id,
-                    "message_conversation_log_uuid": str(row.message_conversation_log_uuid)
-                    if row.message_conversation_log_uuid
-                    else None,
-                    "channel_type": row.channel_type,
-                    "celery_task_id": row.celery_task_id,
-                    "status": row.status,
-                    "total_ms": row.total_ms,
-                    "boundaries_ms": row.boundaries_ms,
-                    "phase_ms": row.phase_ms,
-                    "sample_reason": row.sample_reason,
-                    "conversation_lookup": build_conversation_lookup(
-                        project_uuid=str(row.project_uuid),
-                        contact_urn=row.contact_urn,
-                        turn_finished_at=row.turn_finished_at,
-                        turn_id=row.turn_id,
-                    ),
-                }
-            )
+        results = [row.to_api_dict() for row in rows]
         return Response({"results": results, "count": len(results)})
