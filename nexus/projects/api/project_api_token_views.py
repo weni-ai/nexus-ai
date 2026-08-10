@@ -62,7 +62,7 @@ class ProjectApiTokenCreateView(APIView):
                 project_uuid=project_uuid,
                 name=serializer.validated_data.get("name"),
                 scope=serializer.validated_data.get("scope"),
-                created_by=request.user if getattr(request.user, "is_authenticated", False) else None,
+                created_by=request.user,
             )
             payload = use_case.serialize_created_token(api_token, plaintext_token)
             return Response(payload, status=status.HTTP_201_CREATED)
