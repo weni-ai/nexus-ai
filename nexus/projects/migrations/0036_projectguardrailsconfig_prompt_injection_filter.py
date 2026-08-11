@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("projects", "0034_project_is_live_desk_copilot"),
+        ("projects", "0035_backfill_prompt_injection_filter_existing_false"),
     ]
 
     operations = [

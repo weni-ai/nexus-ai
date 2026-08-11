@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("projects", "0033_backfill_projectguardrailsconfig_unblocked"),
+        ("projects", "0036_projectguardrailsconfig_prompt_injection_filter"),
     ]
 
     operations = [
