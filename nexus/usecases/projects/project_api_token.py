@@ -1,5 +1,7 @@
 from datetime import timedelta
+from uuid import UUID, uuid4
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -43,7 +45,9 @@ class ProjectApiTokenUseCase:
                     enabled=enabled,
                 )
         except IntegrityError as exc:
-            raise ProjectApiTokenNameAlreadyExists() from exc
+            if self._is_duplicate_name_error(exc):
+                raise ProjectApiTokenNameAlreadyExists() from exc
+            raise
 
         return api_token, plaintext_token
 
@@ -61,10 +65,26 @@ class ProjectApiTokenUseCase:
     def _resolve_project(self, *, project: Project | None, project_uuid: str | None) -> Project:
         if project is not None:
             return project
-        if project_uuid:
+        if not project_uuid:
+            raise ProjectDoesNotExist("Project is required to create an API token")
+
+        try:
+            UUID(str(project_uuid))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ProjectDoesNotExist(f"Project with uuid `{project_uuid}` does not exists!") from exc
+
+        try:
             return get_project_by_uuid(project_uuid)
-        raise ProjectDoesNotExist("Project is required to create an API token")
+        except (DjangoValidationError, ValueError, TypeError) as exc:
+            raise ProjectDoesNotExist(f"Project with uuid `{project_uuid}` does not exists!") from exc
 
     @staticmethod
     def _default_name() -> str:
-        return f"Auto {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        return f"Auto {timezone.now().strftime('%Y-%m-%d %H:%M:%S')} {uuid4().hex[:8]}"
+
+    @staticmethod
+    def _is_duplicate_name_error(exc: IntegrityError) -> bool:
+        message = str(exc).lower()
+        if "unique" in message or "duplicate" in message:
+            return True
+        return "projectapitoken" in message and "name" in message

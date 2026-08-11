@@ -116,13 +116,24 @@ class ProjectAdmin(admin.ModelAdmin):
     def generate_api_token(self, request, queryset):
         from django.contrib import messages
 
+        from nexus.projects.exceptions import ProjectApiTokenNameAlreadyExists
+
         created = 0
         use_case = ProjectApiTokenUseCase()
         for project in queryset:
-            api_token, plaintext_token = use_case.create_token(
-                project=project,
-                created_by=request.user,
-            )
+            try:
+                api_token, plaintext_token = use_case.create_token(
+                    project=project,
+                    created_by=request.user,
+                )
+            except ProjectApiTokenNameAlreadyExists as exc:
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    f"Project {project.name}: {exc.message}",
+                )
+                continue
+
             messages.add_message(
                 request,
                 messages.INFO,
