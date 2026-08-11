@@ -182,6 +182,7 @@ class TestCachedProjectDataEdgeCases(TestCase):
             "agent_data",
             "formatter_agent_configurations",
             "guardrails_config",
+            "prompt_injection_filter_enabled",
             "default_instructions_for_collaborators",
         ]
 
@@ -208,5 +209,6 @@ class TestCachedProjectDataEdgeCases(TestCase):
 
         self.assertFalse(kwargs.get("use_components", True))
         self.assertFalse(kwargs.get("rationale_switch", True))
+        self.assertFalse(kwargs.get("prompt_injection_filter_enabled", True))
         self.assertEqual(kwargs.get("conversation_turns_to_include"), 10)
         self.assertTrue(kwargs.get("exclude_previous_thinking_steps", False))
