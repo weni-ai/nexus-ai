@@ -108,6 +108,22 @@ class TestProjectApiTokenCreateView(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_create_token_invalid_project_uuid_returns_404(self):
+        invalid_uuid = "not-a-uuid"
+        request = self.factory.post(
+            f"/api/{invalid_uuid}/api-tokens/",
+            {"name": "bad-uuid"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        self._mock_ext_permission.return_value = True
+        self._mock_ext_permission.side_effect = None
+
+        response = ProjectApiTokenCreateView.as_view()(request, project_uuid=invalid_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["error"], "Project not found")
+
     def test_create_token_forbidden_without_permission(self):
         self._mock_ext_permission.side_effect = None
         self._mock_ext_permission.return_value = False

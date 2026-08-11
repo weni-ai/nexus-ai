@@ -70,10 +70,29 @@ class TestProjectApiTokenUseCase(TestCase):
         self.assertNotIn("token_hash", payload)
         self.assertNotIn("salt", payload)
 
-    def test_integrity_error_is_mapped_to_domain_exception(self):
+    def test_integrity_error_duplicate_is_mapped_to_domain_exception(self):
         with mock.patch(
             "nexus.usecases.projects.project_api_token.ProjectApiToken.objects.create",
-            side_effect=IntegrityError("duplicate"),
+            side_effect=IntegrityError("UNIQUE constraint failed: project_id, name"),
         ):
             with self.assertRaises(ProjectApiTokenNameAlreadyExists):
                 self.use_case.create_token(project=self.project, name="boom")
+
+    def test_unrelated_integrity_error_is_re_raised(self):
+        with mock.patch(
+            "nexus.usecases.projects.project_api_token.ProjectApiToken.objects.create",
+            side_effect=IntegrityError("NOT NULL constraint failed: some_other_column"),
+        ):
+            with self.assertRaises(IntegrityError):
+                self.use_case.create_token(project=self.project, name="boom")
+
+    def test_invalid_project_uuid_raises_project_does_not_exist(self):
+        with self.assertRaises(ProjectDoesNotExist):
+            self.use_case.create_token(project_uuid="not-a-uuid", name="x")
+
+    def test_default_names_are_unique_within_same_second(self):
+        first, _ = self.use_case.create_token(project=self.project, created_by=self.user)
+        second, _ = self.use_case.create_token(project=self.project, created_by=self.user)
+        self.assertNotEqual(first.name, second.name)
+        self.assertTrue(first.name.startswith("Auto "))
+        self.assertTrue(second.name.startswith("Auto "))
