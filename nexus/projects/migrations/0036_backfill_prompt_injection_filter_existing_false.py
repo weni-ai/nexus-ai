@@ -71,7 +71,7 @@ def backwards_noop(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0034_project_is_live_desk_copilot"),
+        ("projects", "0035_projectguardrailsconfig_prompt_injection_filter"),
     ]
 
     operations = [
