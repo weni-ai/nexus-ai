@@ -80,6 +80,7 @@ class ProjectGuardrailsConfigUseCase:
                 "category_states": cls.build_default_category_states(blocked=True),
                 "blocking_message": None,
                 "initialized_as_new_project": True,
+                "prompt_injection_filter_enabled": True,
             },
         )
         if not created:

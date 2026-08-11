@@ -42,13 +42,29 @@ class ProjectPromptInjectionFilterAPITestCase(TestCase):
         self._pool_patcher.stop()
         self._patcher.stop()
 
-    def test_get_defaults_to_disabled(self):
+    def test_get_defaults_to_enabled_for_new_project(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["enabled"])
+        self.assertTrue(response.data["writable"])
+        self.assertTrue(ProjectGuardrailsConfig.objects.filter(project=self.project).exists())
+        config = ProjectGuardrailsConfig.objects.get(project=self.project)
+        self.assertTrue(config.prompt_injection_filter_enabled)
+        self.assertTrue(config.initialized_as_new_project)
+
+    def test_get_keeps_disabled_for_backfilled_existing_project(self):
+        ProjectGuardrailsConfig.objects.create(
+            project=self.project,
+            category_states=ProjectGuardrailsConfigUseCase.build_default_category_states(blocked=False),
+            initialized_as_new_project=False,
+            prompt_injection_filter_enabled=False,
+        )
+
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["enabled"])
-        self.assertTrue(response.data["writable"])
-        self.assertTrue(ProjectGuardrailsConfig.objects.filter(project=self.project).exists())
 
     def test_patch_enables_without_bedrock_pool(self):
         ProjectGuardrailsConfigUseCase.get_or_initialize(self.project)
