@@ -63,6 +63,24 @@ class TestCreateProjectInlineContentBaseText(TestCase):
         content_base = get_default_content_base_by_project(str(project.uuid))
         self.assertEqual(ContentBaseText.objects.filter(content_base=content_base).count(), 0)
 
+    def test_create_project_enables_rationale_switch_by_default(self):
+        org = OrgFactory()
+        user = org.created_by
+        project_dto = ProjectCreationDTO(
+            uuid=uuid4().hex,
+            name="rationale_default_on",
+            org_uuid=org.uuid,
+            is_template=False,
+            template_type_uuid=None,
+            brain_on=False,
+            authorizations=[],
+            inline_agent_switch=True,
+        )
+        project = ProjectsUseCase(event_manager_notify=mock_event_manager_notify).create_project(
+            project_dto=project_dto, user_email=user.email
+        )
+        self.assertTrue(project.rationale_switch)
+
 
 @skip("temporarily skipped: team provisioning differs per backend; stabilizing")
 class TestCreateProject(TestCase):
