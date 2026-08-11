@@ -307,6 +307,8 @@ class OpenAIBackend(InlineAgentsBackend):
         manager_pipeline_version = kwargs.pop("manager_pipeline_version", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
         injected_context = kwargs.pop("injected_context", None)
+        prompt_injection_filter_enabled = bool(kwargs.pop("prompt_injection_filter_enabled", False))
+        kwargs.pop("guardrails_config", None)
         rationale_switch = rationale_switch_cached
         if manager_pipeline_version is not None:
             logger.debug(
@@ -470,6 +472,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 skip_conversation_sqs=skip_conversation_sqs,
                 manager_pipeline_version=manager_pipeline_version,
                 channel_type=channel_type,
+                prompt_injection_filter_enabled=prompt_injection_filter_enabled,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -507,6 +510,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 use_components=use_components_cached,
                 skip_conversation_sqs=skip_conversation_sqs,
                 channel_type=channel_type,
+                prompt_injection_filter_enabled=prompt_injection_filter_enabled,
             )
 
         client = self._get_client()
