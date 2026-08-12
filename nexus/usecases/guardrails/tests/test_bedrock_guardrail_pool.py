@@ -104,35 +104,28 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
         self.assertEqual(payload["sensitiveInformationPolicyConfig"]["piiEntitiesConfig"][0]["type"], "EMAIL")
 
     @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={"en-us": "Blocked.", "pt-br": "Blocked.", "es": "Blocked."},
         GUARDRAILS_BEDROCK_CONTENT_FILTERS=[],
         GUARDRAILS_BEDROCK_PII_ENTITIES=[],
     )
-    def test_build_update_guardrail_payload_disables_residual_baselines(self):
-        payload = BedrockGuardrailPoolService.build_update_guardrail_payload(
-            guardrail_identifier="gr-1",
-            name="nexus-pool-abc",
-            blocked_input_messaging="Blocked.",
-            blocked_outputs_messaging="Blocked.",
+    def test_build_create_guardrail_payload_accepts_name_suffix(self):
+        payload = BedrockGuardrailPoolService.build_create_guardrail_payload(
+            combination_key="politics",
             blocked_slugs=["politics"],
+            name_suffix="abc12345",
         )
-        self.assertEqual(payload["guardrailIdentifier"], "gr-1")
-        self.assertTrue(payload["contentPolicyConfig"]["filtersConfig"])
-        self.assertTrue(
-            all(item["inputStrength"] == "NONE" for item in payload["contentPolicyConfig"]["filtersConfig"]),
-        )
-        self.assertEqual(payload["sensitiveInformationPolicyConfig"]["piiEntitiesConfig"], [])
-        self.assertEqual(payload["topicPolicyConfig"]["topicsConfig"][0]["name"], "politics")
+        self.assertIn("abc12345", payload["name"])
 
     @override_settings(
         GUARDRAILS_BEDROCK_CONTENT_FILTERS=[],
         GUARDRAILS_BEDROCK_PII_ENTITIES=[],
     )
-    def test_sync_pool_policies_updates_publishes_and_propagates(self):
+    def test_recreate_pool_creates_repoints_and_deletes_old(self):
         pool = BedrockGuardrailPool.objects.create(
             combination_key="politics",
             category_slugs=["politics"],
-            bedrock_guardrail_identifier="gr-politics",
-            bedrock_guardrail_version="1",
+            bedrock_guardrail_identifier="gr-old",
+            bedrock_guardrail_version="DRAFT",
         )
         project = ProjectFactory()
         ProjectGuardrailsConfig.objects.create(
@@ -144,33 +137,26 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
         )
 
         client = MagicMock()
-        client.get_guardrail.return_value = {
-            "name": "nexus-pool-old",
-            "description": "old",
-            "blockedInputMessaging": "Blocked.",
-            "blockedOutputsMessaging": "Blocked.",
-        }
-        client.update_guardrail.return_value = {"version": "DRAFT"}
-        client.create_guardrail_version.return_value = {"version": "2"}
+        client.create_guardrail.return_value = {"guardrailId": "gr-new", "version": "DRAFT"}
+        client.delete_guardrail.return_value = {}
 
         with patch.object(
             BedrockGuardrailPoolService,
             "_invalidate_guardrails_cache_for_pool",
         ) as mock_invalidate:
-            version = BedrockGuardrailPoolService.sync_pool_policies(pool, client=client)
+            version = BedrockGuardrailPoolService.recreate_pool(pool, client=client)
 
-        self.assertEqual(version, "2")
+        self.assertEqual(version, "DRAFT")
+        client.create_guardrail.assert_called_once()
+        create_kwargs = client.create_guardrail.call_args.kwargs
+        self.assertNotIn("contentPolicyConfig", create_kwargs)
+        self.assertNotIn("sensitiveInformationPolicyConfig", create_kwargs)
+        client.delete_guardrail.assert_called_once_with(guardrailIdentifier="gr-old")
         mock_invalidate.assert_called_once()
-        client.get_guardrail.assert_called_once()
-        client.update_guardrail.assert_called_once()
-        update_kwargs = client.update_guardrail.call_args.kwargs
-        self.assertEqual(
-            update_kwargs["contentPolicyConfig"]["filtersConfig"][0]["inputStrength"],
-            "NONE",
-        )
-        self.assertEqual(update_kwargs["sensitiveInformationPolicyConfig"]["piiEntitiesConfig"], [])
-        client.create_guardrail_version.assert_called_once()
+
         pool.refresh_from_db()
-        self.assertEqual(pool.bedrock_guardrail_version, "2")
+        self.assertEqual(pool.bedrock_guardrail_identifier, "gr-new")
+        self.assertEqual(pool.bedrock_guardrail_version, "DRAFT")
         config = ProjectGuardrailsConfig.objects.get(project=project)
-        self.assertEqual(config.bedrock_guardrail_version, "2")
+        self.assertEqual(config.bedrock_guardrail_identifier, "gr-new")
+        self.assertEqual(config.bedrock_guardrail_version, "DRAFT")
