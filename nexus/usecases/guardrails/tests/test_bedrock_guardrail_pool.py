@@ -120,7 +120,10 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
         self.assertTrue(
             all(item["inputStrength"] == "NONE" for item in payload["contentPolicyConfig"]["filtersConfig"]),
         )
-        self.assertEqual(payload["sensitiveInformationPolicyConfig"]["piiEntitiesConfig"], [])
+        pii = payload["sensitiveInformationPolicyConfig"]["piiEntitiesConfig"]
+        self.assertTrue(pii)
+        self.assertTrue(all(item["action"] == "NONE" for item in pii))
+        self.assertNotIn("regexesConfig", payload["sensitiveInformationPolicyConfig"])
         self.assertEqual(payload["topicPolicyConfig"]["topicsConfig"][0]["name"], "politics")
 
     @override_settings(
@@ -149,6 +152,12 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
             "description": "old",
             "blockedInputMessaging": "Blocked.",
             "blockedOutputsMessaging": "Blocked.",
+            "sensitiveInformationPolicy": {
+                "piiEntities": [
+                    {"type": "EMAIL", "action": "BLOCK"},
+                    {"type": "PHONE", "action": "BLOCK"},
+                ],
+            },
         }
         client.update_guardrail.return_value = {"version": "DRAFT"}
         client.create_guardrail_version.return_value = {"version": "2"}
@@ -168,7 +177,10 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
             update_kwargs["contentPolicyConfig"]["filtersConfig"][0]["inputStrength"],
             "NONE",
         )
-        self.assertEqual(update_kwargs["sensitiveInformationPolicyConfig"]["piiEntitiesConfig"], [])
+        pii = update_kwargs["sensitiveInformationPolicyConfig"]["piiEntitiesConfig"]
+        self.assertEqual([item["type"] for item in pii], ["EMAIL", "PHONE"])
+        self.assertTrue(all(item["action"] == "NONE" for item in pii))
+        self.assertNotIn("regexesConfig", update_kwargs["sensitiveInformationPolicyConfig"])
         client.create_guardrail_version.assert_called_once()
         pool.refresh_from_db()
         self.assertEqual(pool.bedrock_guardrail_version, "2")
