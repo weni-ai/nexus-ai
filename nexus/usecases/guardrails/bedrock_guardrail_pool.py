@@ -10,7 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 from django.db import transaction
 
-from nexus.projects.models import BedrockGuardrailPool
+from nexus.projects.models import BedrockGuardrailPool, ProjectGuardrailsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,15 @@ _TOPIC_DEFINITION_MAX = 200
 _TOPIC_EXAMPLE_MAX = 100
 _TOPIC_EXAMPLES_MAX = 5
 _GUARDRAIL_NAME_MAX = 50
+
+_CONTENT_FILTER_TYPES_TO_DISABLE = (
+    "SEXUAL",
+    "VIOLENCE",
+    "HATE",
+    "INSULTS",
+    "MISCONDUCT",
+    "PROMPT_ATTACK",
+)
 
 
 class BedrockGuardrailPoolError(Exception):
@@ -75,6 +84,50 @@ class BedrockGuardrailPoolService:
         return topics
 
     @classmethod
+    def _content_filters_from_settings(cls) -> list[dict]:
+        return list(getattr(settings, "GUARDRAILS_BEDROCK_CONTENT_FILTERS", None) or [])
+
+    @classmethod
+    def _pii_entities_from_settings(cls) -> list[dict]:
+        return list(getattr(settings, "GUARDRAILS_BEDROCK_PII_ENTITIES", None) or [])
+
+    @classmethod
+    def _disabled_content_filters(cls) -> list[dict]:
+        filters: list[dict] = []
+        for filter_type in _CONTENT_FILTER_TYPES_TO_DISABLE:
+            entry = {
+                "type": filter_type,
+                "inputStrength": "NONE",
+                "outputStrength": "NONE",
+            }
+            filters.append(entry)
+        return filters
+
+    @classmethod
+    def _apply_optional_policy_configs(cls, payload: dict, *, for_update: bool = False) -> None:
+        """
+        Attach content/PII policies from settings when configured.
+
+        On create: omit empty policies so Bedrock does not enable them.
+        On update: when settings are empty, explicitly disable residual content
+        filters and clear PII entities so existing misconfigured pools are fixed.
+        """
+        content_filters = cls._content_filters_from_settings()
+        if content_filters:
+            payload["contentPolicyConfig"] = {"filtersConfig": content_filters}
+        elif for_update:
+            payload["contentPolicyConfig"] = {"filtersConfig": cls._disabled_content_filters()}
+
+        pii_entities = cls._pii_entities_from_settings()
+        if pii_entities:
+            payload["sensitiveInformationPolicyConfig"] = {"piiEntitiesConfig": pii_entities}
+        elif for_update:
+            payload["sensitiveInformationPolicyConfig"] = {
+                "piiEntitiesConfig": [],
+                "regexesConfig": [],
+            }
+
+    @classmethod
     def build_create_guardrail_payload(cls, *, combination_key: str, blocked_slugs: list[str]) -> dict:
         key_digest = hashlib.sha256(combination_key.encode("utf-8")).hexdigest()[:12]
         raw_name = f"nexus-pool-{key_digest}"
@@ -88,13 +141,36 @@ class BedrockGuardrailPoolService:
             "description": f"Nexus guardrail pool for categories: {combination_key}"[:200],
             "blockedInputMessaging": default_message,
             "blockedOutputsMessaging": default_message,
-            "contentPolicyConfig": {
-                "filtersConfig": list(settings.GUARDRAILS_BEDROCK_CONTENT_FILTERS),
-            },
-            "sensitiveInformationPolicyConfig": {
-                "piiEntitiesConfig": list(settings.GUARDRAILS_BEDROCK_PII_ENTITIES),
-            },
         }
+        cls._apply_optional_policy_configs(payload, for_update=False)
+
+        topics = cls.build_topics_config(blocked_slugs)
+        if topics:
+            payload["topicPolicyConfig"] = {"topicsConfig": topics}
+
+        return payload
+
+    @classmethod
+    def build_update_guardrail_payload(
+        cls,
+        *,
+        guardrail_identifier: str,
+        name: str,
+        blocked_input_messaging: str,
+        blocked_outputs_messaging: str,
+        blocked_slugs: list[str],
+        description: str | None = None,
+    ) -> dict:
+        payload: dict = {
+            "guardrailIdentifier": guardrail_identifier,
+            "name": name,
+            "blockedInputMessaging": blocked_input_messaging,
+            "blockedOutputsMessaging": blocked_outputs_messaging,
+        }
+        if description:
+            payload["description"] = description[:200]
+
+        cls._apply_optional_policy_configs(payload, for_update=True)
 
         topics = cls.build_topics_config(blocked_slugs)
         if topics:
@@ -119,6 +195,127 @@ class BedrockGuardrailPoolService:
         if not identifier:
             raise BedrockGuardrailPoolError("Bedrock CreateGuardrail returned no guardrailId")
         return str(identifier), str(version)
+
+    @classmethod
+    def get_bedrock_guardrail(cls, client, guardrail_identifier: str) -> dict:
+        try:
+            return client.get_guardrail(guardrailIdentifier=guardrail_identifier)
+        except (ClientError, BotoCoreError) as exc:
+            logger.exception("Failed to get Bedrock Guardrail %s", guardrail_identifier)
+            raise BedrockGuardrailPoolError(str(exc)) from exc
+
+    @classmethod
+    def update_bedrock_guardrail(cls, client, payload: dict) -> str:
+        try:
+            response = client.update_guardrail(**payload)
+        except (ClientError, BotoCoreError) as exc:
+            logger.exception(
+                "Failed to update Bedrock Guardrail %s",
+                payload.get("guardrailIdentifier"),
+            )
+            raise BedrockGuardrailPoolError(str(exc)) from exc
+        return str(response.get("version") or "DRAFT")
+
+    @classmethod
+    def create_bedrock_guardrail_version(cls, client, guardrail_identifier: str, *, description: str) -> str:
+        try:
+            response = client.create_guardrail_version(
+                guardrailIdentifier=guardrail_identifier,
+                description=description[:200],
+            )
+        except (ClientError, BotoCoreError) as exc:
+            logger.exception("Failed to publish Bedrock Guardrail version for %s", guardrail_identifier)
+            raise BedrockGuardrailPoolError(str(exc)) from exc
+
+        version = response.get("version")
+        if not version:
+            raise BedrockGuardrailPoolError("Bedrock CreateGuardrailVersion returned no version")
+        return str(version)
+
+    @classmethod
+    def _propagate_pool_version(cls, pool: BedrockGuardrailPool, version: str) -> int:
+        pool.bedrock_guardrail_version = version
+        pool.save(update_fields=["bedrock_guardrail_version", "modified_on"])
+        configs = ProjectGuardrailsConfig.objects.filter(bedrock_guardrail_pool=pool).select_related("project")
+        updated = configs.update(
+            bedrock_guardrail_identifier=pool.bedrock_guardrail_identifier,
+            bedrock_guardrail_version=version,
+        )
+        cls._invalidate_guardrails_cache_for_pool(pool)
+        return updated
+
+    @classmethod
+    def _invalidate_guardrails_cache_for_pool(cls, pool: BedrockGuardrailPool) -> None:
+        """Drop cached ApplyGuardrail identifiers so runtime picks up the new version."""
+        project_uuids = (
+            ProjectGuardrailsConfig.objects.filter(bedrock_guardrail_pool=pool)
+            .values_list("project__uuid", flat=True)
+            .distinct()
+        )
+        if not project_uuids:
+            return
+        try:
+            from router.services.cache_service import CacheService
+
+            cache_service = CacheService()
+            for project_uuid in project_uuids:
+                if project_uuid:
+                    cache_service.invalidate_guardrails_cache(str(project_uuid))
+        except Exception:
+            logger.exception(
+                "Failed to invalidate guardrails cache after pool sync combination_key=%s",
+                pool.combination_key,
+            )
+
+    @classmethod
+    def sync_pool_policies(cls, pool: BedrockGuardrailPool, *, client=None, publish_version: bool = True) -> str:
+        """
+        Align an existing Bedrock pool with current settings (topics + optional baselines).
+
+        Clears residual content filters / PII when settings lists are empty, keeps
+        Denied Topics for the pool combination, and publishes a new version so
+        ApplyGuardrail picks up the change.
+        """
+        bedrock = client or cls.get_bedrock_client()
+        identifier = pool.bedrock_guardrail_identifier
+        current = cls.get_bedrock_guardrail(bedrock, identifier)
+
+        blocked_slugs = list(pool.category_slugs or [])
+        if not blocked_slugs and pool.combination_key:
+            blocked_slugs = [slug for slug in pool.combination_key.split("|") if slug]
+
+        payload = cls.build_update_guardrail_payload(
+            guardrail_identifier=identifier,
+            name=str(current.get("name") or f"nexus-pool-{pool.pk}")[:_GUARDRAIL_NAME_MAX],
+            blocked_input_messaging=str(current.get("blockedInputMessaging") or "Blocked."),
+            blocked_outputs_messaging=str(current.get("blockedOutputsMessaging") or "Blocked."),
+            blocked_slugs=blocked_slugs,
+            description=current.get("description"),
+        )
+        cls.update_bedrock_guardrail(bedrock, payload)
+
+        if publish_version:
+            version = cls.create_bedrock_guardrail_version(
+                bedrock,
+                identifier,
+                description=f"Sync pool policies for {pool.combination_key}",
+            )
+        else:
+            version = "DRAFT"
+
+        with transaction.atomic():
+            cls._propagate_pool_version(pool, version)
+        return version
+
+    @classmethod
+    def sync_all_pool_policies(cls, *, client=None, publish_version: bool = True) -> list[tuple[str, str]]:
+        """Sync every registered pool. Returns list of (combination_key, new_version)."""
+        bedrock = client or cls.get_bedrock_client()
+        results: list[tuple[str, str]] = []
+        for pool in BedrockGuardrailPool.objects.order_by("id"):
+            version = cls.sync_pool_policies(pool, client=bedrock, publish_version=publish_version)
+            results.append((pool.combination_key, version))
+        return results
 
     @classmethod
     def get_or_create_pool(
