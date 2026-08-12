@@ -9,14 +9,14 @@ from .consumers.integrated_feature import (
     UpdateIntegratedFeatureConsumer,
 )
 from .consumers.project_auth_consumer import ProjectAuthConsumer
-from .consumers.project_consumer import ProjectConsumer
+from .consumers.project_consumer import OldProjectConsumer
 from .consumers.project_update_consumer import ProjectUpdateConsumer
 
 
 def handle_consumers(channel: Channel) -> None:
     # Queue must be created in RabbitMQ and bound to exchange channel-events.topic with routing key wwc-create.
     channel.basic_consume("nexus-ai.channel.wwc-create", callback=ChannelWwcConsumer().handle)
-    channel.basic_consume("nexus-ai.projects", callback=ProjectConsumer().handle)
+    channel.basic_consume("nexus-ai.projects", callback=OldProjectConsumer().handle)
     # Queue must be created in RabbitMQ and bound to exchange update-projects.topic with routing key "".
     channel.basic_consume("nexus-ai.update-projects", callback=ProjectUpdateConsumer().handle)
     channel.basic_consume("recent-activity.nexus", callback=FlowConsumer().handle)
