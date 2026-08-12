@@ -153,8 +153,9 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
         client.update_guardrail.return_value = {"version": "DRAFT"}
         client.create_guardrail_version.return_value = {"version": "2"}
 
-        with patch(
-            "nexus.usecases.guardrails.bedrock_guardrail_pool.BedrockGuardrailPoolService._invalidate_guardrails_cache_for_pool",
+        with patch.object(
+            BedrockGuardrailPoolService,
+            "_invalidate_guardrails_cache_for_pool",
         ) as mock_invalidate:
             version = BedrockGuardrailPoolService.sync_pool_policies(pool, client=client)
 
