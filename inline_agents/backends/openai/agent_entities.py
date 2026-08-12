@@ -128,10 +128,12 @@ def resolve_agent_model(model: str, user_model_credentials: Dict[str, Any] | Non
     if "vertex" in model:
         return LitellmModel(**kwargs)
 
-    if credentials.get("api_key"):
-        kwargs["api_key"] = credentials.get("api_key")
-    if credentials.get("api_base"):
-        kwargs["base_url"] = credentials.get("api_base")
+    api_key = credentials.get("api_key")
+    if api_key:
+        kwargs["api_key"] = api_key
+    api_base = credentials.get("api_base")
+    if api_base:
+        kwargs["base_url"] = api_base
 
     return LitellmModel(**kwargs)
 
