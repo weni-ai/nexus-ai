@@ -116,24 +116,29 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
+def resolve_litellm_model(model: str, user_model_credentials: Dict[str, Any] | None) -> LitellmModel | str:
+    """Resolve a model name into LitellmModel when prefixed with litellm/, else return as-is."""
+    if not model or "litellm" not in model:
+        return model
+
+    credentials = user_model_credentials or {}
+    cleaned_model = model.replace("litellm/", "")
+    kwargs: Dict[str, Any] = {"model": cleaned_model}
+
+    if "vertex" in model:
+        return LitellmModel(**kwargs)
+
+    if credentials.get("api_key"):
+        kwargs["api_key"] = credentials.get("api_key")
+    if credentials.get("api_base"):
+        kwargs["base_url"] = credentials.get("api_base")
+
+    return LitellmModel(**kwargs)
+
+
 class AgentModel:
     def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
-        if "litellm" in model:
-            cleaned_model = model.replace("litellm/", "")
-            kwargs = {
-                "model": cleaned_model,
-            }
-
-            if "vertex" in model:
-                return LitellmModel(**kwargs)
-
-            if user_model_credentials.get("api_key"):
-                kwargs["api_key"] = user_model_credentials.get("api_key")
-            if user_model_credentials.get("api_base"):
-                kwargs["base_url"] = user_model_credentials.get("api_base")
-
-            return LitellmModel(**kwargs)
-        return model
+        return resolve_litellm_model(model, user_model_credentials)
 
     def custom_tool_handler(
         self, context: RunContextWrapper[Any], tool_results: List[FunctionToolResult]
