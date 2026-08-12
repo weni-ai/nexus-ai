@@ -19,7 +19,7 @@ from openai.types.shared import Reasoning
 
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
-from inline_agents.backends.openai.agent_entities import resolve_litellm_model
+from inline_agents.backends.openai.agent_entities import resolve_agent_model
 from inline_agents.backends.openai.components_response_merge import merge_streaming_components_response
 from inline_agents.backends.openai.components_tools import get_component_tools as get_component_tools_module
 from inline_agents.backends.openai.entities import FinalResponse
@@ -802,7 +802,7 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor_hooks.save_components_trace = True
 
         credentials = user_model_credentials or {}
-        resolved_model = resolve_litellm_model(formatter_agent_model, credentials)
+        resolved_model = resolve_agent_model(formatter_agent_model, credentials)
 
         model_settings_kwargs: Dict[str, Any] = {
             "tool_choice": "required",

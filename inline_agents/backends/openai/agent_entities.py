@@ -116,8 +116,8 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
-def resolve_litellm_model(model: str, user_model_credentials: Dict[str, Any] | None) -> LitellmModel | str:
-    """Resolve a model name into LitellmModel when prefixed with litellm/, else return as-is."""
+def resolve_agent_model(model: str, user_model_credentials: Dict[str, Any] | None) -> LitellmModel | str:
+    """Return LitellmModel when model is litellm-prefixed; otherwise return the model string unchanged."""
     if not model or "litellm" not in model:
         return model
 
@@ -137,9 +137,6 @@ def resolve_litellm_model(model: str, user_model_credentials: Dict[str, Any] | N
 
 
 class AgentModel:
-    def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
-        return resolve_litellm_model(model, user_model_credentials)
-
     def custom_tool_handler(
         self, context: RunContextWrapper[Any], tool_results: List[FunctionToolResult]
     ) -> ToolsToFinalOutputResult:
@@ -180,7 +177,7 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
         else:
             model_name = foundation_model
 
-        model = self.get_model(model_name, user_model_credentials)
+        model = resolve_agent_model(model_name, user_model_credentials)
         model_settings_kw = dict(model_settings)
         if isinstance(model, LitellmModel):
             model_settings_kw["include_usage"] = True
@@ -220,7 +217,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
     ):
         tools.extend(self.function_tools())
 
-        model = self.get_model(model, user_model_credentials)
+        model = resolve_agent_model(model, user_model_credentials)
 
         model_settings_kwargs: Dict[str, Any] = {
             "parallel_tool_calls": parallel_tool_calls,
