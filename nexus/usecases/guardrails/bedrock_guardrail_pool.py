@@ -30,14 +30,6 @@ _CONTENT_FILTER_TYPES_TO_DISABLE = (
     "PROMPT_ATTACK",
 )
 
-# PII types. Bedrock rejects empty
-_PII_ENTITY_TYPES_TO_DISABLE = (
-    "EMAIL",
-    "PHONE",
-    "CREDIT_DEBIT_CARD_NUMBER",
-    "ADDRESS",
-)
-
 
 class BedrockGuardrailPoolError(Exception):
     """Raised when pool resolve/create against Bedrock fails."""
@@ -112,62 +104,13 @@ class BedrockGuardrailPoolService:
         return filters
 
     @classmethod
-    def _disabled_pii_entities(cls, existing_types: list[str] | None = None) -> list[dict]:
-        """
-        Build a non-empty piiEntitiesConfig that turns PII filtering off.
-
-        UpdateGuardrail requires min length 1 for piiEntitiesConfig when the
-        sensitiveInformationPolicyConfig object is sent; empty lists are rejected.
-        """
-        types = [t for t in (existing_types or []) if t]
-        if not types:
-            types = list(_PII_ENTITY_TYPES_TO_DISABLE)
-        # Preserve order, drop duplicates.
-        seen: set[str] = set()
-        ordered: list[str] = []
-        for entity_type in types:
-            if entity_type not in seen:
-                seen.add(entity_type)
-                ordered.append(entity_type)
-        return [
-            {
-                "type": entity_type,
-                "action": "NONE",
-                "inputAction": "NONE",
-                "outputAction": "NONE",
-                "inputEnabled": False,
-                "outputEnabled": False,
-            }
-            for entity_type in ordered
-        ]
-
-    @classmethod
-    def _pii_types_from_guardrail(cls, guardrail: dict | None) -> list[str]:
-        if not guardrail:
-            return []
-        policy = guardrail.get("sensitiveInformationPolicy") or {}
-        entities = policy.get("piiEntities") or []
-        types: list[str] = []
-        for entry in entities:
-            entity_type = entry.get("type") if isinstance(entry, dict) else None
-            if entity_type:
-                types.append(str(entity_type))
-        return types
-
-    @classmethod
-    def _apply_optional_policy_configs(
-        cls,
-        payload: dict,
-        *,
-        for_update: bool = False,
-        existing_pii_types: list[str] | None = None,
-    ) -> None:
+    def _apply_optional_policy_configs(cls, payload: dict, *, for_update: bool = False) -> None:
         """
         Attach content/PII policies from settings when configured.
 
         On create: omit empty policies so Bedrock does not enable them.
         On update: when settings are empty, explicitly disable residual content
-        filters and disable PII entities (action NONE; never send empty lists).
+        filters and clear PII entities so existing misconfigured pools are fixed.
         """
         content_filters = cls._content_filters_from_settings()
         if content_filters:
@@ -180,7 +123,8 @@ class BedrockGuardrailPoolService:
             payload["sensitiveInformationPolicyConfig"] = {"piiEntitiesConfig": pii_entities}
         elif for_update:
             payload["sensitiveInformationPolicyConfig"] = {
-                "piiEntitiesConfig": cls._disabled_pii_entities(existing_pii_types),
+                "piiEntitiesConfig": [],
+                "regexesConfig": [],
             }
 
     @classmethod
@@ -216,7 +160,6 @@ class BedrockGuardrailPoolService:
         blocked_outputs_messaging: str,
         blocked_slugs: list[str],
         description: str | None = None,
-        existing_pii_types: list[str] | None = None,
     ) -> dict:
         payload: dict = {
             "guardrailIdentifier": guardrail_identifier,
@@ -227,11 +170,7 @@ class BedrockGuardrailPoolService:
         if description:
             payload["description"] = description[:200]
 
-        cls._apply_optional_policy_configs(
-            payload,
-            for_update=True,
-            existing_pii_types=existing_pii_types,
-        )
+        cls._apply_optional_policy_configs(payload, for_update=True)
 
         topics = cls.build_topics_config(blocked_slugs)
         if topics:
@@ -352,7 +291,6 @@ class BedrockGuardrailPoolService:
             blocked_outputs_messaging=str(current.get("blockedOutputsMessaging") or "Blocked."),
             blocked_slugs=blocked_slugs,
             description=current.get("description"),
-            existing_pii_types=cls._pii_types_from_guardrail(current),
         )
         cls.update_bedrock_guardrail(bedrock, payload)
 
