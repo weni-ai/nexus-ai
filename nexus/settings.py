@@ -782,22 +782,9 @@ GUARDRAILS_DEFAULT_BLOCKING_MESSAGES = env.json(
     },
 )
 
-# Baseline policies applied to every pool Guardrail (Models guidance). Not project-configurable.
-GUARDRAILS_BEDROCK_CONTENT_FILTERS = [
-    {"type": "SEXUAL", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "VIOLENCE", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "HATE", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "MISCONDUCT", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "PROMPT_ATTACK", "inputStrength": "HIGH", "outputStrength": "NONE"},
-    {"type": "INSULTS", "inputStrength": "MEDIUM", "outputStrength": "MEDIUM"},
-]
+GUARDRAILS_BEDROCK_CONTENT_FILTERS = []
 
-GUARDRAILS_BEDROCK_PII_ENTITIES = [
-    {"type": "EMAIL", "action": "BLOCK"},
-    {"type": "PHONE", "action": "BLOCK"},
-    {"type": "CREDIT_DEBIT_CARD_NUMBER", "action": "BLOCK"},
-    {"type": "ADDRESS", "action": "ANONYMIZE"},
-]
+GUARDRAILS_BEDROCK_PII_ENTITIES = []
 
 GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT = env.str("GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT", default="")
 
