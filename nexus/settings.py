@@ -76,7 +76,7 @@ INSTALLED_APPS = [
     "nexus.agents",
     "nexus.inline_agents",
     "nexus.reports",
-    "nexus.analytics",
+    "nexus.analytics.apps.AnalyticsConfig",
     "weni.feature_flags",
     # Observer registration - MUST be last to ensure all apps are loaded first
     "nexus.observers",
@@ -498,6 +498,17 @@ HC_ZEROSHOT_URL = env.str("HC_ZEROSHOT_URL", "")
 HC_GOLFINHO_URL = env.str("HC_GOLFINHO_URL", "")
 HC_WENI_TOKEN = env.str("HC_WENI_TOKEN", "")
 PROMETHEUS_AUTH_TOKEN = env.str("PROMETHEUS_AUTH_TOKEN", "")
+INLINE_AGENT_LATENCY_API_TOKEN = env.str("INLINE_AGENT_LATENCY_API_TOKEN", "")
+
+# Inline agent latency persistence (Plan B)
+INLINE_AGENT_LATENCY_ENABLED = env.bool("INLINE_AGENT_LATENCY_ENABLED", True)
+INLINE_AGENT_LATENCY_TARGET_MS_LOW = env.int("INLINE_AGENT_LATENCY_TARGET_MS_LOW", 15000)
+INLINE_AGENT_LATENCY_TARGET_MS_HIGH = env.int("INLINE_AGENT_LATENCY_TARGET_MS_HIGH", 20000)
+INLINE_AGENT_LATENCY_OUTLIER_MS = env.int("INLINE_AGENT_LATENCY_OUTLIER_MS", 30000)
+INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS = env.int("INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS", 2000)
+INLINE_AGENT_LATENCY_SAMPLE_RATE = env.float("INLINE_AGENT_LATENCY_SAMPLE_RATE", 0.001)
+INLINE_AGENT_LATENCY_ELEVATED_MS = env.int("INLINE_AGENT_LATENCY_ELEVATED_MS", 15000)
+INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE = env.float("INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE", 0.01)
 
 
 # Extra models
@@ -682,6 +693,101 @@ AGENT_UUID_NPS = env.str("AGENT_UUID_NPS")
 
 COMPLEXITY_LAYER_LAMBDA = env.str("COMPLEXITY_LAYER_LAMBDA", "lambda-complexity-layer")
 GUARDRAILS_LAYER_LAMBDA = env.str("GUARDRAILS_LAYER_LAMBDA", "lambda-complexity-layer-openai")
+
+GUARDRAIL_CATEGORY_CATALOG = [
+    {
+        "slug": "politics",
+        "name": "Politics",
+        "description": "Political topics, elections, and government affairs",
+        "bedrock_definition": "Political topics, elections, parties, and government affairs",
+        "bedrock_examples": ["Who should I vote for?", "What do you think of the government?"],
+    },
+    {
+        "slug": "physical_health",
+        "name": "Physical health",
+        "description": "Medical advice, diagnoses, and physical health conditions",
+        "bedrock_definition": "Medical advice, diagnoses, symptoms, and physical health conditions",
+        "bedrock_examples": ["Do I have diabetes?", "What medicine should I take?"],
+    },
+    {
+        "slug": "sexual_content",
+        "name": "Sexual content",
+        "description": "Explicit or adult sexual material",
+        "bedrock_definition": "Explicit or adult sexual material and erotic content",
+        "bedrock_examples": ["Write an erotic story", "Describe explicit sexual acts"],
+    },
+    {
+        "slug": "bias",
+        "name": "Bias",
+        "description": "Discriminatory or biased statements about groups",
+        "bedrock_definition": "Discriminatory or prejudiced statements about groups by identity or origin",
+        "bedrock_examples": ["Why are people from X inferior?", "Stereotypes about a nationality"],
+    },
+    {
+        "slug": "hate",
+        "name": "Hate",
+        "description": "Hate speech and incitement against individuals or groups",
+        "bedrock_definition": "Hate speech and incitement against individuals or groups",
+        "bedrock_examples": ["I hate that group", "How do I attack people like them?"],
+    },
+    {
+        "slug": "religion",
+        "name": "Religion",
+        "description": "Religious beliefs, practices, and institutions",
+        "bedrock_definition": "Religious doctrines, practices, proselytism, and faith debates",
+        "bedrock_examples": ["Which religion is true?", "Pray for me in your religion"],
+    },
+    {
+        "slug": "suicide",
+        "name": "Suicide",
+        "description": "Suicide methods, encouragement, or glorification",
+        "bedrock_definition": "Suicide methods, encouragement, or glorification",
+        "bedrock_examples": ["How can I kill myself?", "Best method for suicide"],
+    },
+    {
+        "slug": "self_harm",
+        "name": "Self-harm",
+        "description": "Self-injury methods or encouragement",
+        "bedrock_definition": "Non-suicidal self-injury methods or encouragement",
+        "bedrock_examples": ["How do people self-harm?", "Ways to cut myself"],
+    },
+    {
+        "slug": "beliefs",
+        "name": "Beliefs",
+        "description": "Personal belief systems and ideological debates",
+        "bedrock_definition": "Personal belief systems, ideologies, and worldview debates",
+        "bedrock_examples": ["Defend my ideology", "Which worldview is correct?"],
+    },
+    {
+        "slug": "gender_identity",
+        "name": "Gender identity",
+        "description": "Gender identity and expression topics",
+        "bedrock_definition": "Gender identity, expression, and transition topics",
+        "bedrock_examples": ["Is gender identity real?", "Tell me how to transition"],
+    },
+    {
+        "slug": "sexual_relations",
+        "name": "Sexual relations",
+        "description": "Sexual relationships and intimacy topics",
+        "bedrock_definition": "Sexual relationships, intimacy, and romantic/sexual behavior advice",
+        "bedrock_examples": ["How do I seduce someone?", "Advice on sexual relationships"],
+    },
+]
+
+GUARDRAILS_DEFAULT_BLOCKING_MESSAGES = env.json(
+    "GUARDRAILS_DEFAULT_BLOCKING_MESSAGES",
+    {
+        "en-us": "This message can't be processed because it may contain sensitive content.",
+        "pt-br": "Esta mensagem não pode ser processada porque pode conter conteúdo sensível.",
+        "es": "Este mensaje no puede procesarse porque puede contener contenido sensible.",
+    },
+)
+
+GUARDRAILS_BEDROCK_CONTENT_FILTERS = []
+
+GUARDRAILS_BEDROCK_PII_ENTITIES = []
+
+GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT = env.str("GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT", default="")
 
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")

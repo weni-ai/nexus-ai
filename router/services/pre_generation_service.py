@@ -78,7 +78,7 @@ class PreGenerationService:
 
         try:
             from nexus.inline_agents.team.repository import ORMTeamRepository
-            from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
+            from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
             project_obj, content_base_obj, inline_agent_config_obj = get_project_and_content_base_data(project_uuid)
@@ -124,7 +124,7 @@ class PreGenerationService:
 
             guardrails_config = self.cache_service.get_guardrails_config(
                 project_uuid,
-                fetch_func=lambda uuid: GuardrailsUsecase.get_guardrail_as_dict(uuid),
+                fetch_func=lambda uuid: ProjectGuardrailsConfigUseCase.get_runtime_config_as_dict(uuid),
             )
 
             inline_agent_config = None

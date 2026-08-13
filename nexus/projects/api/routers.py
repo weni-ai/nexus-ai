@@ -15,7 +15,9 @@ from .views import (
     EnableHumanSupportView,
     FlowsDbCohortReconcileProxyView,
     OpenSupportTicketView,
+    ProjectGuardrailsConfigView,
     ProjectPromptCreationConfigurationsViewset,
+    ProjectPromptInjectionFilterView,
     ProjectUpdateViewset,
 )
 
@@ -42,6 +44,16 @@ urlpatterns = [
         "<project_uuid>/ai-resolution-criteria/<criterion_id>/",
         AIResolutionCriteriaDetailView.as_view(),
         name="ai-resolution-criterion-detail",
+    ),
+    path(
+        "<project_uuid>/guardrails-config/",
+        ProjectGuardrailsConfigView.as_view(),
+        name="project-guardrails-config",
+    ),
+    path(
+        "<project_uuid>/prompt-injection-filter/",
+        ProjectPromptInjectionFilterView.as_view(),
+        name="project-prompt-injection-filter",
     ),
     path(
         "<project_uuid>/improvements/open-support-ticket/",
