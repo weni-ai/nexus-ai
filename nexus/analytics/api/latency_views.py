@@ -1,11 +1,10 @@
 """API views for inline agent latency (Plan B)."""
 
 from django.utils.dateparse import parse_date
-from mozilla_django_oidc.contrib.drf import OIDCAuthentication
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from nexus.analytics.latency_conversation_lookup import build_conversation_lookup
+from nexus.analytics.api.permissions import InlineAgentLatencyAPIPermission
 from nexus.analytics.latency_queries import (
     build_summary,
     build_timeseries,
@@ -13,10 +12,6 @@ from nexus.analytics.latency_queries import (
     validate_date_range,
     validate_project_uuid,
 )
-from nexus.authentication.authentication import ExternalTokenAuthentication
-from nexus.users.api.authentication import UserGlobalTokenAuthentication
-
-from .views import InternalCommunicationPermission
 
 
 def _parse_latency_params(request):
@@ -51,10 +46,16 @@ def _parse_latency_params(request):
     }, None
 
 
-class InlineAgentLatencySummaryView(APIView):
-    authentication_classes = [UserGlobalTokenAuthentication, ExternalTokenAuthentication, OIDCAuthentication]
-    permission_classes = [InternalCommunicationPermission]
+class _InlineAgentLatencyAPIView(APIView):
+    permission_classes = [InlineAgentLatencyAPIPermission]
 
+    def get_authenticators(self):
+        from weni_commons.auth import WeniAuthentication
+
+        return [WeniAuthentication()]
+
+
+class InlineAgentLatencySummaryView(_InlineAgentLatencyAPIView):
     def get(self, request):
         params, error = _parse_latency_params(request)
         if error:
@@ -68,10 +69,7 @@ class InlineAgentLatencySummaryView(APIView):
         return Response(data)
 
 
-class InlineAgentLatencyTimeseriesView(APIView):
-    authentication_classes = [UserGlobalTokenAuthentication, ExternalTokenAuthentication, OIDCAuthentication]
-    permission_classes = [InternalCommunicationPermission]
-
+class InlineAgentLatencyTimeseriesView(_InlineAgentLatencyAPIView):
     def get(self, request):
         params, error = _parse_latency_params(request)
         if error:
@@ -87,10 +85,7 @@ class InlineAgentLatencyTimeseriesView(APIView):
         return Response({"results": series})
 
 
-class InlineAgentLatencyOutliersView(APIView):
-    authentication_classes = [UserGlobalTokenAuthentication, ExternalTokenAuthentication, OIDCAuthentication]
-    permission_classes = [InternalCommunicationPermission]
-
+class InlineAgentLatencyOutliersView(_InlineAgentLatencyAPIView):
     def get(self, request):
         params, error = _parse_latency_params(request)
         if error:
@@ -108,30 +103,5 @@ class InlineAgentLatencyOutliersView(APIView):
             execution_path=params["execution_path"],
             limit=limit,
         )
-        results = []
-        for row in rows:
-            results.append(
-                {
-                    "id": str(row.id),
-                    "turn_finished_at": row.turn_finished_at.isoformat().replace("+00:00", "Z"),
-                    "contact_urn": row.contact_urn,
-                    "turn_id": row.turn_id,
-                    "message_conversation_log_uuid": str(row.message_conversation_log_uuid)
-                    if row.message_conversation_log_uuid
-                    else None,
-                    "channel_type": row.channel_type,
-                    "celery_task_id": row.celery_task_id,
-                    "status": row.status,
-                    "total_ms": row.total_ms,
-                    "boundaries_ms": row.boundaries_ms,
-                    "phase_ms": row.phase_ms,
-                    "sample_reason": row.sample_reason,
-                    "conversation_lookup": build_conversation_lookup(
-                        project_uuid=str(row.project_uuid),
-                        contact_urn=row.contact_urn,
-                        turn_finished_at=row.turn_finished_at,
-                        turn_id=row.turn_id,
-                    ),
-                }
-            )
+        results = [row.to_api_dict() for row in rows]
         return Response({"results": results, "count": len(results)})

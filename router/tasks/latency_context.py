@@ -143,6 +143,10 @@ class TurnLatencyRecorder:
 
     @contextmanager
     def phase(self, name: str) -> Iterator[None]:
+        if not self.metrics_enabled:
+            yield
+            return
+
         start = time.perf_counter()
         try:
             yield

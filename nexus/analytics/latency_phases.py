@@ -42,6 +42,14 @@ def bucket_key(upper_bound: float) -> str:
     return str(int(upper_bound))
 
 
+def cumulative_bucket_key_for_threshold(upper_ms: int) -> str:
+    """Return the smallest cumulative histogram bucket key with le >= upper_ms."""
+    for le in BUCKET_UPPER_BOUNDS_MS:
+        if upper_ms <= le:
+            return bucket_key(le)
+    return bucket_key(inf)
+
+
 def empty_buckets() -> Dict[str, int]:
     return {bucket_key(le): 0 for le in BUCKET_UPPER_BOUNDS_MS}
 

@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from django.conf import settings
-from django.db.models import QuerySet, Sum
+from django.db.models import QuerySet
 
-from nexus.analytics.latency_phases import BUCKET_UPPER_BOUNDS_MS, PHASE_TOTAL, bucket_key
+from nexus.analytics.latency_phases import (
+    BUCKET_UPPER_BOUNDS_MS,
+    PHASE_TOTAL,
+    bucket_key,
+    cumulative_bucket_key_for_threshold,
+)
 from nexus.analytics.models import InlineAgentLatencyHourly, InlineAgentTurnOutlier
 
 MAX_QUERY_DAYS = 90
@@ -52,7 +57,7 @@ def _hourly_queryset(
     ).order_by("hour_ts")
 
 
-def merge_buckets(rows: QuerySet[InlineAgentLatencyHourly]) -> Dict[str, int]:
+def merge_buckets(rows: Iterable[InlineAgentLatencyHourly]) -> Dict[str, int]:
     merged: Dict[str, int] = {}
     for row in rows:
         for key, count in (row.buckets or {}).items():
@@ -80,7 +85,7 @@ def estimate_p95_ms(buckets: Dict[str, int], total_count: int) -> Optional[int]:
 def pct_at_or_below_bucket(buckets: Dict[str, int], total_count: int, upper_ms: int) -> Optional[float]:
     if total_count <= 0:
         return None
-    key = bucket_key(float(upper_ms))
+    key = cumulative_bucket_key_for_threshold(upper_ms)
     count = int(buckets.get(key, 0))
     return round(100.0 * count / total_count, 2)
 
@@ -92,13 +97,9 @@ def build_summary(
     *,
     execution_path: str = "inline_agents",
 ) -> Dict[str, Any]:
-    rows = _hourly_queryset(project_uuid, start_date, end_date, execution_path=execution_path)
-    agg = rows.aggregate(
-        turn_count=Sum("turn_count"),
-        sum_ms=Sum("sum_ms"),
-    )
-    turn_count = int(agg["turn_count"] or 0)
-    sum_ms = int(agg["sum_ms"] or 0)
+    rows = list(_hourly_queryset(project_uuid, start_date, end_date, execution_path=execution_path))
+    turn_count = sum(row.turn_count for row in rows)
+    sum_ms = sum(row.sum_ms for row in rows)
     max_ms = max((row.max_ms for row in rows), default=0)
     buckets = merge_buckets(rows)
 
@@ -123,7 +124,7 @@ def _pct_over_max_tolerable(buckets: Dict[str, int], total_count: int, outlier_m
     if total_count <= 0:
         return None
     # cumulative bucket at outlier_ms is count <= outlier_ms
-    at_or_below = int(buckets.get(bucket_key(float(outlier_ms)), 0))
+    at_or_below = int(buckets.get(cumulative_bucket_key_for_threshold(outlier_ms), 0))
     over = total_count - at_or_below
     return round(100.0 * over / total_count, 2)
 

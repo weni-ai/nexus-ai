@@ -65,6 +65,21 @@ class TurnLatencyRecorderTestCase(SimpleTestCase):
         mock_capture.assert_called_once()
         mock_record.assert_not_called()
 
+    @patch("router.tasks.latency_context.time.perf_counter")
+    def test_phase_skips_timing_when_metrics_disabled(self, mock_perf_counter):
+        recorder = TurnLatencyRecorder(
+            project_uuid="",
+            turn_id=self.turn_id,
+            task_id=self.task_id,
+            metrics_enabled=False,
+        )
+        with recorder.phase(PHASE_ORCHESTRATION):
+            pass
+
+        self.assertEqual(recorder._phase_durations, {})
+        self.assertEqual(recorder.last_completed_phase, "")
+        mock_perf_counter.assert_not_called()
+
     @patch("router.tasks.latency_context.record_turn_latency")
     def test_finish_is_idempotent(self, mock_record):
         recorder = TurnLatencyRecorder(

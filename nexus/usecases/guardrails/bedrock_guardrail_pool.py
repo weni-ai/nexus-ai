@@ -162,12 +162,10 @@ class BedrockGuardrailPoolService:
                 "modified_on",
             ]
         )
-        updated = ProjectGuardrailsConfig.objects.filter(bedrock_guardrail_pool=pool).update(
+        return ProjectGuardrailsConfig.objects.filter(bedrock_guardrail_pool=pool).update(
             bedrock_guardrail_identifier=identifier,
             bedrock_guardrail_version=version,
         )
-        cls._invalidate_guardrails_cache_for_pool(pool)
-        return updated
 
     @classmethod
     def _invalidate_guardrails_cache_for_pool(cls, pool: BedrockGuardrailPool) -> None:
@@ -216,6 +214,8 @@ class BedrockGuardrailPoolService:
 
         with transaction.atomic():
             cls._propagate_pool_assignment(pool, identifier=new_identifier, version=version)
+
+        cls._invalidate_guardrails_cache_for_pool(pool)
 
         if delete_old and old_identifier and old_identifier != new_identifier:
             try:

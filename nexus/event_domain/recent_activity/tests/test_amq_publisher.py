@@ -13,7 +13,7 @@ from nexus.event_domain.recent_activity.recent_activity_amq import (
     publish_recent_activity_to_amq,
 )
 from nexus.logs.models import RecentActivities
-from nexus.usecases.intelligences.tests.intelligence_factory import IntelligenceFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseLinkFactory, IntelligenceFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
@@ -111,6 +111,29 @@ class RecentActivityAmqTestCase(TestCase):
         self.assertEqual(kwargs["new_value"], "b")
 
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.notify_change")
+    def test_publish_recent_activity_uses_instance_display_name(self, mock_notify_change):
+        recent_activity = RecentActivities.objects.create(
+            action_model="ContentBaseLink",
+            action_type="C",
+            project=self.project,
+            created_by=self.project.created_by,
+            intelligence=self.intelligence,
+            action_details={},
+        )
+        link = ContentBaseLinkFactory(
+            link="https://test.com",
+            content_base__intelligence=self.intelligence,
+            content_base__created_by=self.project.created_by,
+        )
+
+        publish_recent_activity_to_amq(recent_activity=recent_activity, instance=link)
+
+        kwargs = mock_notify_change.call_args.kwargs
+        self.assertEqual(kwargs["entity"], "ContentBaseLink")
+        self.assertEqual(kwargs["object_name"], "https://test.com")
+        self.assertEqual(kwargs["object_id"], str(link.uuid))
+
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.notify_change")
     def test_publish_external_fans_out_per_project(self, mock_notify_change):
         dto = RecentActivitiesDTO(
             org=self.project.org,
@@ -141,7 +164,7 @@ class RecentActivityAmqTestCase(TestCase):
         recent_activity = create_recent_activity(instance=self.intelligence, dto=dto)
 
         self.assertEqual(RecentActivities.objects.count(), 1)
-        mock_publish.assert_called_once_with(recent_activity=recent_activity)
+        mock_publish.assert_called_once_with(recent_activity=recent_activity, instance=self.intelligence)
 
     def test_notifier_exchange_matches_contract(self):
         self.assertEqual(Notifier.EXCHANGE, "change-history.topic")

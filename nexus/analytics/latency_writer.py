@@ -7,9 +7,11 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
+from uuid import UUID
 
+import sentry_sdk
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from nexus.analytics.latency_phases import (
     EXECUTION_PATH_INLINE_AGENTS,
@@ -102,18 +104,24 @@ def _upsert_rollup_row(
         "execution_path": execution_path,
         "phase": phase,
     }
-    row = InlineAgentLatencyHourly.objects.select_for_update().filter(**filters).first()
-    if row is None:
-        InlineAgentLatencyHourly.objects.create(
-            **filters,
-            turn_count=1,
-            sum_ms=duration_ms,
-            max_ms=duration_ms,
-            buckets=increment_buckets({}, duration_ms),
-            error_count=1 if status == "failed" else 0,
-            blocked_count=1 if status == "blocked" else 0,
-        )
-        return
+    create_defaults = {
+        "turn_count": 1,
+        "sum_ms": duration_ms,
+        "max_ms": duration_ms,
+        "buckets": increment_buckets({}, duration_ms),
+        "error_count": 1 if status == "failed" else 0,
+        "blocked_count": 1 if status == "blocked" else 0,
+    }
+
+    try:
+        row = InlineAgentLatencyHourly.objects.select_for_update().get(**filters)
+    except InlineAgentLatencyHourly.DoesNotExist:
+        try:
+            with transaction.atomic():
+                InlineAgentLatencyHourly.objects.create(**filters, **create_defaults)
+            return
+        except IntegrityError:
+            row = InlineAgentLatencyHourly.objects.select_for_update().get(**filters)
 
     row.turn_count += 1
     row.sum_ms += duration_ms
@@ -198,8 +206,6 @@ def record_turn_latency(
                 log_uuid = None
                 if correlation.message_conversation_log_uuid:
                     try:
-                        from uuid import UUID
-
                         log_uuid = UUID(str(correlation.message_conversation_log_uuid))
                     except (ValueError, TypeError, AttributeError):
                         log_uuid = None
@@ -220,8 +226,9 @@ def record_turn_latency(
                     router_received_at=router_dt,
                     sample_reason=sample_reason,
                 )
-    except Exception:
+    except Exception as exc:
         logger.exception(
             "Failed to persist inline agent latency",
             extra={"project_uuid": project_uuid, "turn_id": turn_id, "task_id": task_id},
         )
+        sentry_sdk.capture_exception(exc)

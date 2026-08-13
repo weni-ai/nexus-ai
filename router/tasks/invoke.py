@@ -530,6 +530,8 @@ def start_inline_agents(  # noqa: C901
     task_manager = task_manager or get_task_manager()
     skip_record_finish = False
     status = TURN_STATUS_SUCCESS
+    flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+    agents_backend = "OpenAIBackend"
 
     try:
         try:
@@ -563,8 +565,6 @@ def start_inline_agents(  # noqa: C901
                     project_uuid=project_uuid,
                     stream_support=message.get("stream_support", False),
                 )
-
-                flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
                 processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(
                     message,

@@ -91,6 +91,56 @@ def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str],
     return None, json.dumps(action_details)
 
 
+# Human-readable label for change-history object_name (not the Django class name).
+_OBJECT_NAME_ATTRS_BY_MODEL = {
+    "ContentBaseLink": ("link", "name"),
+    "ContentBaseFile": ("file_name", "created_file_name"),
+    "ContentBaseText": ("title", "file_name"),
+    "ContentBaseInstruction": ("instruction", "suggested_category"),
+    "ContentBaseAgent": ("name",),
+    "ContentBase": ("title",),
+    "Intelligence": ("name",),
+    "LLM": ("model",),
+    "Flow": ("name",),
+    "Project": ("name",),
+}
+
+
+def _object_name_from_instance(instance) -> Optional[str]:
+    if instance is None:
+        return None
+
+    model_name = instance.__class__.__name__
+    for attr in _OBJECT_NAME_ATTRS_BY_MODEL.get(model_name, ("name", "title", "link", "file_name")):
+        try:
+            value = getattr(instance, attr, None)
+            if callable(value):
+                value = value()
+        except Exception:
+            continue
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            # Keep instruction labels short for the activity feed.
+            if attr == "instruction" and len(text) > 120:
+                return f"{text[:117]}..."
+            return text
+
+    return None
+
+
+def _object_id_from_instance(instance, *, fallback: str) -> str:
+    if instance is None:
+        return fallback
+    if getattr(instance, "uuid", None) is not None:
+        return str(instance.uuid)
+    pk = getattr(instance, "pk", None)
+    if pk is not None:
+        return str(pk)
+    return fallback
+
+
 def notify_change(
     *,
     project_uuid: str,
@@ -135,16 +185,18 @@ def notify_change(
         EDAConnection.clear_connection()
 
 
-def publish_recent_activity_to_amq(*, recent_activity: RecentActivities) -> None:
+def publish_recent_activity_to_amq(*, recent_activity: RecentActivities, instance=None) -> None:
     old_value, new_value = _values_from_details(recent_activity.action_details)
+    object_name = _object_name_from_instance(instance) or recent_activity.action_model
+    object_id = _object_id_from_instance(instance, fallback=str(recent_activity.uuid))
     notify_change(
         project_uuid=str(recent_activity.project.uuid),
         user_email=recent_activity.created_by.email,
         date=pendulum.instance(recent_activity.created_at),
         action=recent_activity.action_type,
         entity=recent_activity.action_model,
-        object_id=str(recent_activity.uuid),
-        object_name=recent_activity.action_model,
+        object_id=object_id,
+        object_name=object_name,
         old_value=old_value,
         new_value=new_value,
     )
