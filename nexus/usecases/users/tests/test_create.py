@@ -10,7 +10,7 @@ class TestCreateUserUseCase(TestCase):
         self.usecase = CreateUserUseCase()
         self.user_email = "test@create.com"
 
-    def test_get_by_email(self):
-        user = self.usecase.create_user(self.user_email)
+    def test_get_or_create_user(self):
+        user = self.usecase.get_or_create_user(self.user_email)
         self.assertEqual(user.email, self.user_email)
         self.assertIsInstance(user, User)

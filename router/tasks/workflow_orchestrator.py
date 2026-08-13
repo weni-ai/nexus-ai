@@ -31,12 +31,13 @@ from nexus.projects.websockets.consumers import send_preview_message_to_websocke
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.services.sqs_producer import get_conversation_events_producer
-from router.tasks.actions_client import get_action_clients
+from router.tasks.actions_client import get_action_clients, get_guardrail_block_broadcast_client
 from router.tasks.exceptions import EmptyFinalResponseException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,
+    _extract_and_apply_message_context,
     _invoke_backend,
     _invoke_is_final_debug,
     _preprocess_message_input,
@@ -197,11 +198,13 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         turn_id=ctx.turn_id,
     )
 
-    if (ctx.preview or ctx.preview_websocket) and ctx.broadcast:
+    broadcast = get_guardrail_block_broadcast_client(preview=ctx.preview)
+
+    if ctx.preview or ctx.preview_websocket:
         return dispatch_preview(
             error.message,
             message_obj,
-            ctx.broadcast,
+            broadcast,
             ctx.user_email,
             ctx.agents_backend or "unknown",
             ctx.flows_user_email,
@@ -209,7 +212,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
     return dispatch(
         llm_response=error.message,
         message=message_obj,
-        direct_message=ctx.broadcast or {},
+        direct_message=broadcast,
         user_email=ctx.flows_user_email,
         full_chunks=[],
         backend=ctx.agents_backend or "unknown",
@@ -278,7 +281,12 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     )
 
     # Preprocess message
-    processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
+    guardrails_config = ctx.cached_data.guardrails_config if ctx.cached_data else None
+    processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(
+        ctx.message,
+        ctx.agents_backend,
+        guardrails_config=guardrails_config,
+    )
     foundation_model = apply_simulation_foundation_model_override(
         ctx.simulation_channel,
         ctx.project_uuid or "",
@@ -288,6 +296,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     # Create message object
     message_obj = _create_message_object(processed_message)
+    injected_context = _extract_and_apply_message_context(message_obj)
 
     # Get backend and invoke (incoming message is saved inside backend via save_inline_message_async)
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
@@ -335,6 +344,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         preview_websocket=ctx.preview_websocket,
         skip_conversation_sqs=skip_conv_sqs,
+        injected_context=injected_context,
     )
 
     return response, skip_dispatch

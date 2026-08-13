@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.weni_io import WeniIOAuthViewMixin
 from nexus.events import notify_async
 from nexus.inline_agents.api.mixins import OfficialAgentAssignmentMixin
 from nexus.inline_agents.api.serializers import (
@@ -26,6 +27,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
     TeamRosterAgentSerializer,
 )
+from nexus.inline_agents.api.serializers.agent_config import AgentConfigSerializer
 from nexus.inline_agents.api.serializers.catalog import (
     build_row_from_project_agent,
     enrich_my_agents_row,
@@ -45,6 +47,11 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
+from nexus.usecases.inline_agents.bedrock import (
+    APM_INSTRUMENTATION_UNCHANGED,
+    VALID_APM_INSTRUMENTATION,
+    APMNotConfiguredError,
+)
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
@@ -189,8 +196,22 @@ class PushAgents(APIView):
         if "agents" not in agents or not isinstance(agents.get("agents"), dict):
             raise ValueError("agents.agents must be an object")
         project_uuid = request.data.get("project_uuid")
+        apm_instrumentation = self._parse_apm_instrumentation(request)
 
-        return files, agents, project_uuid
+        return files, agents, project_uuid, apm_instrumentation
+
+    def _parse_apm_instrumentation(self, request) -> str:
+        raw_value = request.data.get("apm_instrumentation")
+        if raw_value is None or raw_value == "":
+            return APM_INSTRUMENTATION_UNCHANGED
+
+        if raw_value not in VALID_APM_INSTRUMENTATION:
+            raise ValueError(
+                f"Invalid apm_instrumentation value: {raw_value}. "
+                f"Must be one of: {', '.join(sorted(VALID_APM_INSTRUMENTATION))}"
+            )
+
+        return raw_value
 
     def _check_can_edit_official_agent(self, agents, user_email):
         for key in agents:
@@ -210,11 +231,16 @@ class PushAgents(APIView):
         update_agent_usecase = UpdateAgentUseCase()
 
         try:
-            files, agents, project_uuid = self._validate_request(request)
+            files, agents, project_uuid, apm_instrumentation = self._validate_request(request)
             agents = agents["agents"]
         except (ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
             return Response({"error": str(e)}, status=400)
 
+        logger.info(
+            "Push agents request for project %s (apm_instrumentation=%s)",
+            project_uuid,
+            apm_instrumentation,
+        )
         logger.debug(f"Agents payload - agent_keys: {list(agents.keys()) if isinstance(agents, dict) else None}")
         logger.debug(f"Files payload - file_count: {len(files) if hasattr(files, '__len__') else None}")
 
@@ -252,10 +278,12 @@ class PushAgents(APIView):
                 existing_agent = agent_qs.exists()
                 if existing_agent:
                     logger.info(f"Updating agent - key: {key}")
-                    update_agent_usecase.update_agent(agent_qs.first(), agents[key], project, files)
+                    update_agent_usecase.update_agent(
+                        agent_qs.first(), agents[key], project, files, apm_instrumentation
+                    )
                 else:
                     logger.info(f"Creating agent - key: {key}")
-                    agent_usecase.create_agent(key, agents[key], project, files)
+                    agent_usecase.create_agent(key, agents[key], project, files, apm_instrumentation)
 
             # Fire cache invalidation event for team update (agents are part of team) (async observer)
             notify_async(
@@ -263,6 +291,8 @@ class PushAgents(APIView):
                 project_uuid=project_uuid,
             )
 
+        except APMNotConfiguredError as e:
+            return Response({"error": str(e)}, status=400)
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
 
@@ -832,6 +862,26 @@ class TeamView(APIView):
         return Response(data)
 
 
+class ProjectActiveAgentsConfigView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    @extend_schema(
+        operation_id="active_agents_config_list",
+        summary="List active integrated agents configuration",
+        description=(
+            "Returns active integrated agents for the project with name, description, "
+            "instructions, and tools derived from the latest agent version."
+        ),
+        responses={
+            200: OpenApiResponse(description="List of agent configuration objects"),
+        },
+    )
+    def get(self, request, project_uuid):
+        integrated_agents = GetInlineAgentsUsecase().get_active_agents(project_uuid).prefetch_related("agent__versions")
+        data = AgentConfigSerializer(integrated_agents, many=True).data
+        return Response(data)
+
+
 class ProjectCredentialsView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
@@ -905,10 +955,9 @@ class ProjectCredentialsView(APIView):
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 
 
-class ActivateAgentView(APIView):
-    permission_classes = [ProjectPermission | InternalCommunicationPermission]
-
+class ActivateAgentView(WeniIOAuthViewMixin, APIView):
     def patch(self, request, project_uuid, agent_uuid):
+        project_uuid = self.get_scoped_project_uuid(project_uuid)
         active = request.data.get("active")
         if not isinstance(active, bool):
             return Response(

@@ -13,6 +13,8 @@ from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.repository import ManagerAgentRepository
 from nexus.inline_agents.models import Agent, IntegratedAgent
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from router.repositories.mocks import MockCacheRepository
+from router.services.cache_service import CacheService
 
 
 class OpenAISupervisorRepositoryTestCase(TestCase):
@@ -714,6 +716,17 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
     def setUp(self):
         self.backend = OpenAIBackend()
         self.project_uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        self.cache_repo = MockCacheRepository()
+        self.cache_service = CacheService(cache_repository=self.cache_repo)
+        self.cache_service_patcher = patch(
+            "inline_agents.backends.openai.backend.CacheService",
+            return_value=self.cache_service,
+        )
+        self.cache_service_patcher.start()
+
+    def tearDown(self):
+        self.cache_service_patcher.stop()
+        self.cache_repo.clear()
 
     @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
     def test_get_default_error_message_uses_project_language(self, mock_connect_cls):
@@ -739,6 +752,46 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
         result = self.backend._get_default_error_message(self.project_uuid)
 
         self.assertEqual(result, _TEST_ERROR_MESSAGES["en-us"])
+
+    def test_get_default_error_message_uses_project_override(self):
+        project = ProjectFactory(api_error_message="Custom project error message")
+
+        result = self.backend._get_default_error_message(str(project.uuid))
+
+        self.assertEqual(result, "Custom project error message")
+
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_falls_back_when_project_override_empty(self, mock_connect_cls):
+        project = ProjectFactory(api_error_message="")
+        mock_connect_cls.return_value.get_project_language.return_value = "pt-br"
+
+        result = self.backend._get_default_error_message(str(project.uuid))
+
+        self.assertEqual(result, _TEST_ERROR_MESSAGES["pt-br"])
+
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_caches_resolved_default(self, mock_connect_cls):
+        project = ProjectFactory()
+        mock_connect_cls.return_value.get_project_language.return_value = "pt-br"
+        self.cache_repo.delete(self.cache_service._get_cache_key(str(project.uuid), "api_error_message"))
+
+        uuid = str(project.uuid)
+        result1 = self.backend._get_default_error_message(uuid)
+        result2 = self.backend._get_default_error_message(uuid)
+
+        self.assertEqual(result1, _TEST_ERROR_MESSAGES["pt-br"])
+        self.assertEqual(result2, _TEST_ERROR_MESSAGES["pt-br"])
+        mock_connect_cls.return_value.get_project_language.assert_called_once_with(uuid)
+
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_does_not_cache_missing_project(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.return_value = "en-us"
+        fake_uuid = "00000000-0000-0000-0000-000000000000"
+
+        result = self.backend._get_default_error_message(fake_uuid)
+
+        self.assertEqual(result, _TEST_ERROR_MESSAGES["en-us"])
+        self.assertIsNone(self.cache_service.get_api_error_message(fake_uuid))
 
     @patch("inline_agents.backends.openai.backend.sentry_sdk")
     @patch("inline_agents.backends.openai.backend.ConnectRESTClient")

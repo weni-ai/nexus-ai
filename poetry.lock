@@ -8699,6 +8699,30 @@ files = [
 ]
 
 [[package]]
+name = "weni-commons"
+version = "1.3.2a7"
+description = "Weni's common utilities for Python backends"
+optional = false
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+files = [
+    {file = "weni_commons-1.3.2a7-py3-none-any.whl", hash = "sha256:17238333ac8a4a18daf0d02ce78b3b6b942adb0028ecea1be98665ba55d21d2b"},
+    {file = "weni_commons-1.3.2a7.tar.gz", hash = "sha256:386c8d02c78841e9000f5584a704414c8a5bdd0a9143c6275d76d8d7402145f3"},
+]
+
+[package.dependencies]
+boto3 = ">=1.18.0,<2.0.0"
+celery = ">=5.0.0,<6.0"
+django = ">=3.2.22,<6.0"
+django-redis = ">=4.0.0,<=6.0"
+djangorestframework = ">=3.12.0,<4.0"
+mozilla-django-oidc = ">=2.0.0,<5.0"
+pyjwt = ">=2.8.0,<3.0"
+requests = ">=2.25.0"
+weni-eda = ">=0.1.2,<0.3.0"
+weni-feature-flags = ">=2.2.0,<3.0.0"
+
+[[package]]
 name = "weni-datalake-sdk"
 version = "0.2.2"
 description = "Lib to connect python/django modules to redshift"
@@ -8735,19 +8759,20 @@ amqp = ">=5.2.0,<6.0.0"
 
 [[package]]
 name = "weni-feature-flags"
-version = "2.1.2"
+version = "2.2.0"
 description = "Weni's feature flags SDK for Python backends"
 optional = false
 python-versions = "<4.0,>=3.8"
 groups = ["main"]
 files = [
-    {file = "weni_feature_flags-2.1.2-py3-none-any.whl", hash = "sha256:ce8ef0b8b0a78fa75c2399469b6deaeb4518cc4568b85111663080992536a3c4"},
-    {file = "weni_feature_flags-2.1.2.tar.gz", hash = "sha256:f38544ab5a8ec08d6257127769c2aa7dc64c709c75ffe613be82188aa29f7404"},
+    {file = "weni_feature_flags-2.2.0-py3-none-any.whl", hash = "sha256:a3d1898fa4992eca979261978d3db996973adff23a7cf98a75d5a22f73ba6b83"},
+    {file = "weni_feature_flags-2.2.0.tar.gz", hash = "sha256:145bfe816354bed204dd5efb4981cf1b4ec8df31d058740a669a8f400b8215d1"},
 ]
 
 [package.dependencies]
 celery = ">=5.0.0,<6.0"
 django = ">=3.2.22,<6.0"
+django-celery-beat = ">=2.5.0,<3.0"
 django-redis = ">=4.0.0,<=6.0"
 djangorestframework = ">=3.12.0,<4.0"
 growthbook = ">=1.0.0,<2.0"
@@ -9382,4 +9407,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "b8de4b51038f0265f29bcf7674ccc484994cb9cdcb894bb3ab560add19b40c49"
+content-hash = "c7776bef9ad44e74d5ae973dcf4321ff52ec7394dcb102f3ad2720828a2a5956"

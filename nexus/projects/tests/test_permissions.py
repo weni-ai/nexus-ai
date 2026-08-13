@@ -1,5 +1,6 @@
 from unittest import mock
 
+from django.contrib.auth.models import AnonymousUser
 from django.test.testcases import TestCase
 from rest_framework.permissions import SAFE_METHODS
 
@@ -10,12 +11,14 @@ from nexus.projects.permissions import (
     _has_project_general_permission,
     _user_email_from_authorization_payload,
     get_user_auth,
+    has_external_general_project_permission,
     is_admin,
     is_contributor,
     is_support,
 )
 from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
 from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, ProjectFactory
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 
 class TestProjectPermissions(TestCase):
@@ -143,3 +146,29 @@ class TestProjectPermissions(TestCase):
         ok, email = _check_project_authorization("Bearer t", "project-uuid", "POST")
         self.assertTrue(ok)
         self.assertEqual(email, "moderator@example.com")
+
+
+class TestHasExternalGeneralProjectPermissionFallback(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory()
+
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_anonymous_user_fallback_returns_false_instead_of_raising(self, mock_check):
+        mock_check.side_effect = ProjectAuth.DoesNotExist("denied")
+        request = mock.Mock()
+        request.headers = {"Authorization": "Bearer token"}
+        request.user = AnonymousUser()
+
+        self.assertFalse(has_external_general_project_permission(request, str(self.project.uuid), "GET"))
+
+    @mock.patch("nexus.projects.permissions.has_project_permission", return_value=True)
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_authenticated_user_fallback_uses_internal_permission(self, mock_check, mock_has_project_permission):
+        mock_check.side_effect = ProjectAuth.DoesNotExist("denied")
+        user = UserFactory()
+        request = mock.Mock()
+        request.headers = {"Authorization": "Bearer token"}
+        request.user = user
+
+        self.assertTrue(has_external_general_project_permission(request, str(self.project.uuid), "GET"))
+        mock_has_project_permission.assert_called_once_with(user, self.project, "GET")

@@ -94,9 +94,7 @@ class TestRetrieveInlineContentBaseTextUseCase(TestCase):
             created_by=self.integrated.created_by,
             is_router=True,
         )
-        self.contentbasetext = ContentBaseTextFactory(
-            content_base=self.router, created_by=self.integrated.created_by
-        )
+        self.contentbasetext = ContentBaseTextFactory(content_base=self.router, created_by=self.integrated.created_by)
         self.usecase = RetrieveContentBaseTextUseCase()
 
     def test_get_inline_contentbasetext_by_uuid(self):

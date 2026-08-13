@@ -3,12 +3,14 @@ from time import sleep
 from typing import Dict, List, Optional
 
 from botocore.exceptions import ClientError
+from django.conf import settings
 from langchain_community.document_loaders import AsyncChromiumLoader
 from langchain_community.document_transformers import Html2TextTransformer
 
 from nexus.agents.models import Agent
 from nexus.celery import app
 from nexus.intelligences.models import ContentBaseLink, ContentBaseText
+from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
@@ -16,6 +18,40 @@ from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 
 logger = logging.getLogger(__name__)
+
+DIRECT_INGEST_SUCCESS_STATUS = "INDEXED"
+DIRECT_INGEST_FAILED_STATUSES = {
+    "FAILED",
+    "METADATA_UPDATE_FAILED",
+    "METADATA_PARTIALLY_INDEXED",
+    "PARTIALLY_INDEXED",
+    "IGNORED",
+    "NOT_FOUND",
+}
+DIRECT_INGEST_IN_PROGRESS_STATUSES = {"STARTING", "PENDING", "IN_PROGRESS"}
+
+
+def _get_task_manager_content_info(task_manager, file_type: str) -> tuple[str | None, str | None]:
+    if hasattr(task_manager, "content_base_file") and task_manager.content_base_file:
+        return (
+            str(task_manager.content_base_file.content_base.uuid),
+            task_manager.content_base_file.file_name,
+        )
+    if hasattr(task_manager, "content_base_text") and task_manager.content_base_text:
+        return (
+            str(task_manager.content_base_text.content_base.uuid),
+            task_manager.content_base_text.file_name,
+        )
+    if hasattr(task_manager, "content_base_link") and task_manager.content_base_link:
+        return (
+            str(task_manager.content_base_link.content_base.uuid),
+            task_manager.content_base_link.name,
+        )
+    logger.error(
+        "🦑 BEDROCK: Could not determine content info - task_manager em estado inválido",
+        extra={"file_type": file_type, "task_manager_type": type(task_manager).__name__},
+    )
+    return None, None
 
 
 @app.task
@@ -48,16 +84,8 @@ def check_ingestion_job_status(
         try:
             task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
 
-            if hasattr(task_manager, "content_base_file") and task_manager.content_base_file:
-                content_base_uuid = str(task_manager.content_base_file.content_base.uuid)
-            elif hasattr(task_manager, "content_base_text") and task_manager.content_base_text:
-                content_base_uuid = str(task_manager.content_base_text.content_base.uuid)
-            elif hasattr(task_manager, "content_base_link") and task_manager.content_base_link:
-                content_base_uuid = str(task_manager.content_base_link.content_base.uuid)
-            else:
-                logger.error("🦑 BEDROCK: Could not determine content_base_uuid - task_manager em estado inválido")
-                logger.error(f"  Task Manager UUID: {celery_task_manager_uuid}, File Type: {file_type}")
-                logger.error(f"  Task Manager Type: {type(task_manager).__name__}")
+            content_base_uuid, _ = _get_task_manager_content_info(task_manager, file_type)
+            if not content_base_uuid:
                 return True
 
             file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
@@ -84,10 +112,245 @@ def check_ingestion_job_status(
     return True
 
 
+DIRECT_INGEST_IN_PROGRESS_STATUSES = {"STARTING", "PENDING", "IN_PROGRESS"}
+DIRECT_INGEST_MAX_POLLS = 40
+DIRECT_INGEST_POLL_WAIT_SECONDS = 30
+
+
+def _mark_direct_ingest_success(
+    task_manager_usecase: CeleryTaskManagerUseCase,
+    celery_task_manager_uuid: str,
+    file_type: str,
+    file_database: BedrockFileDatabase,
+    content_base_uuid: str,
+) -> bool:
+    file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
+    logger.info(
+        f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid " f"{content_base_uuid}, marking as success"
+    )
+    task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.status_map.get("COMPLETE"), file_type)
+    return True
+
+
+def _schedule_direct_ingest_poll(
+    celery_task_manager_uuid: str,
+    file_type: str,
+    project_uuid: str | None,
+    poll_count: int,
+    force_direct_ingest: bool = False,
+) -> None:
+    direct_ingest.delay(
+        celery_task_manager_uuid,
+        file_type=file_type,
+        project_uuid=project_uuid,
+        waiting_time=DIRECT_INGEST_POLL_WAIT_SECONDS,
+        ingest_submitted=True,
+        poll_count=poll_count,
+        force_direct_ingest=force_direct_ingest,
+    )
+
+
+@app.task
+def direct_ingest(
+    celery_task_manager_uuid: str,
+    file_type: str = "file",
+    project_uuid: str | None = None,
+    waiting_time: int = 0,
+    ingest_submitted: bool = False,
+    poll_count: int = 0,
+    force_direct_ingest: bool = False,
+):
+    if waiting_time:
+        sleep(waiting_time)
+
+    task_manager_usecase = CeleryTaskManagerUseCase()
+    task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
+    content_base_uuid, filename = _get_task_manager_content_info(task_manager, file_type)
+
+    if not content_base_uuid or not filename:
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
+        return True
+
+    if poll_count >= DIRECT_INGEST_MAX_POLLS:
+        logger.error(
+            "🦑 BEDROCK: Direct ingest polling exceeded max attempts",
+            extra={"poll_count": poll_count, "filename": filename},
+        )
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
+        return True
+
+    file_database = BedrockFileDatabase(project_uuid=project_uuid, force_direct_ingest=force_direct_ingest)
+
+    if ingest_submitted:
+        logger.info("🦑 BEDROCK: Polling direct ingest document status")
+        document_details = file_database.get_direct_ingest_document_status(content_base_uuid, filename)
+    else:
+        logger.info("🦑 BEDROCK: Submitting direct ingest document")
+        document_details = file_database.direct_ingest(content_base_uuid, filename)
+        ingest_submitted = True
+
+    doc_detail = document_details[0] if document_details else {}
+    doc_status = doc_detail.get("status")
+    doc_status_reason = doc_detail.get("statusReason")
+
+    logger.info(
+        f"🦑 BEDROCK: Direct ingest document status: {doc_status}, statusReason: {doc_status_reason}",
+        extra={
+            "doc_status": doc_status,
+            "status_reason": doc_status_reason,
+            "ingest_submitted": ingest_submitted,
+            "poll_count": poll_count,
+        },
+    )
+
+    if doc_status in DIRECT_INGEST_FAILED_STATUSES:
+        if doc_status == "IGNORED":
+            try:
+                return _mark_direct_ingest_success(
+                    task_manager_usecase,
+                    celery_task_manager_uuid,
+                    file_type,
+                    file_database,
+                    content_base_uuid,
+                )
+            except Exception as e:
+                logger.warning(f"🦑 BEDROCK: Document ignored and not searchable. Error: {e}")
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
+        return True
+
+    if doc_status in DIRECT_INGEST_IN_PROGRESS_STATUSES or doc_status is None:
+        processing_status = TaskManager.status_map.get("IN_PROGRESS")
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
+        _schedule_direct_ingest_poll(
+            celery_task_manager_uuid, file_type, project_uuid, poll_count + 1, force_direct_ingest
+        )
+        return True
+
+    if doc_status == DIRECT_INGEST_SUCCESS_STATUS:
+        try:
+            return _mark_direct_ingest_success(
+                task_manager_usecase,
+                celery_task_manager_uuid,
+                file_type,
+                file_database,
+                content_base_uuid,
+            )
+        except Exception as e:
+            logger.warning(f"🦑 BEDROCK: Document indexed but not yet searchable, will retry. Error: {e}")
+            processing_status = TaskManager.status_map.get("IN_PROGRESS")
+            task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
+            _schedule_direct_ingest_poll(
+                celery_task_manager_uuid, file_type, project_uuid, poll_count + 1, force_direct_ingest
+            )
+        return True
+
+    logger.warning(f"🦑 BEDROCK: Unknown direct ingest status: {doc_status}")
+    task_manager_usecase.update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
+    return True
+
+
+def _chunk_list(items: list, chunk_size: int):
+    for index in range(0, len(items), chunk_size):
+        yield items[index : index + chunk_size]
+
+
+@app.task
+def direct_ingest_batch_submit(
+    task_manager_uuids: List[str],
+    content_base_uuid: str,
+    filenames: List[str],
+    project_uuid: str | None = None,
+):
+    if not task_manager_uuids or not filenames:
+        return True
+
+    if len(task_manager_uuids) != len(filenames):
+        logger.error(
+            "🦑 BEDROCK: direct_ingest_batch_submit task_manager_uuids and filenames length mismatch",
+            extra={
+                "task_manager_count": len(task_manager_uuids),
+                "filename_count": len(filenames),
+            },
+        )
+        task_manager_usecase = CeleryTaskManagerUseCase()
+        for task_manager_uuid in task_manager_uuids:
+            task_manager_usecase.update_task_status(task_manager_uuid, TaskManager.STATUS_FAIL, "file")
+        return True
+
+    file_database = BedrockFileDatabase(project_uuid=project_uuid, force_direct_ingest=True)
+    chunk_size = settings.BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST
+
+    try:
+        for filename_chunk in _chunk_list(filenames, chunk_size):
+            file_database.direct_ingest_batch(content_base_uuid, filename_chunk)
+    except Exception as e:
+        logger.error("🦑 BEDROCK: Batch direct ingest submission failed", exc_info=True, extra={"error": str(e)})
+        task_manager_usecase = CeleryTaskManagerUseCase()
+        for task_manager_uuid in task_manager_uuids:
+            task_manager_usecase.update_task_status(task_manager_uuid, TaskManager.STATUS_FAIL, "file")
+        return True
+
+    for task_manager_uuid in task_manager_uuids:
+        direct_ingest.delay(
+            task_manager_uuid,
+            file_type="file",
+            project_uuid=project_uuid,
+            ingest_submitted=True,
+            poll_count=0,
+            force_direct_ingest=True,
+        )
+    return True
+
+
+@app.task
+def direct_delete(content_base_uuid: str, filename: str, project_uuid: str | None = None):
+    logger.info("🦑 BEDROCK: Direct deleting document from knowledge base")
+    file_database = BedrockFileDatabase(project_uuid=project_uuid)
+    file_database.direct_delete(content_base_uuid, filename)
+    return True
+
+
+@app.task
+def trigger_bedrock_ingestion(
+    celery_task_manager_uuid: str,
+    file_type: str = "file",
+    post_delete: bool = False,
+    project_uuid: str | None = None,
+    content_base_uuid: str | None = None,
+    filename: str | None = None,
+):
+    strategy = Project.BEDROCK_INGESTION_JOB
+    if project_uuid:
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            strategy = project.bedrock_ingestion_strategy
+        except Project.DoesNotExist:
+            logger.warning(f"🦑 BEDROCK: Project {project_uuid} not found, using default ingestion strategy")
+
+    if strategy == Project.BEDROCK_INGESTION_DIRECT:
+        if post_delete:
+            if content_base_uuid and filename:
+                return direct_delete.delay(content_base_uuid, filename, project_uuid)
+            logger.warning("🦑 BEDROCK: Direct delete missing content_base_uuid or filename, skipping")
+            return
+        return direct_ingest.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)
+
+    return start_ingestion_job(
+        celery_task_manager_uuid, file_type=file_type, post_delete=post_delete, project_uuid=project_uuid
+    )
+
+
 @app.task
 def start_ingestion_job(
     celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False, project_uuid: str | None = None
 ):
+    if not settings.BEDROCK_INGESTION_JOB_ENABLED:
+        logger.warning("🦑 BEDROCK: Ingestion job disabled via BEDROCK_INGESTION_JOB_ENABLED")
+        if post_delete or not celery_task_manager_uuid:
+            return
+        CeleryTaskManagerUseCase().update_task_status(celery_task_manager_uuid, TaskManager.STATUS_FAIL, file_type)
+        return
+
     try:
         logger.info("🦑 BEDROCK: Starting Ingestion Job")
 
@@ -152,7 +415,7 @@ def bedrock_upload_file(
     )
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
-    start_ingestion_job(str(task_manager.uuid), project_uuid=str(project.uuid))
+    trigger_bedrock_ingestion(str(task_manager.uuid), project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,
@@ -193,7 +456,7 @@ def bedrock_upload_inline_file(
     )
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
-    start_ingestion_job(str(task_manager.uuid), project_uuid=str(project.uuid))
+    trigger_bedrock_ingestion(str(task_manager.uuid), project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,
@@ -243,7 +506,7 @@ def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_tex
         file_database.delete_file_and_metadata(content_base_uuid, old_file_name)
 
     task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
-    start_ingestion_job(str(task_manager.uuid), "text", project_uuid=str(project.uuid))
+    trigger_bedrock_ingestion(str(task_manager.uuid), "text", project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,
@@ -301,7 +564,7 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
     content_base_link.save(update_fields=["name"])
 
     logger.info("🦑 BEDROCK: Link File was added")
-    start_ingestion_job(str(task_manager.uuid), "link", project_uuid=str(project.uuid))
+    trigger_bedrock_ingestion(str(task_manager.uuid), "link", project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,

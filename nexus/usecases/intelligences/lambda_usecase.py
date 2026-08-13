@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 class LambdaUseCase:
-    def __init__(self):
-        self.boto_client = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME)
+    def __init__(self, region: str = None):
+        region_name = region or settings.AWS_BEDROCK_REGION_NAME
+        self.boto_client = boto3.client("lambda", region_name=region_name)
         self.adapter = None
         self.task_manager = None
 
@@ -576,7 +577,9 @@ class LambdaUseCase:
         adjective: str,
         instructions: list,
         instruction_to_classify: str,
+        instructions_categories: list,
         language: str,
+        project_description: str,
     ):
         try:
             instructions_payload = {
@@ -586,7 +589,9 @@ class LambdaUseCase:
                 "adjective": adjective,
                 "instructions": instructions,
                 "instruction_to_classify": instruction_to_classify,
+                "instructions_categories": instructions_categories,
                 "language": language,
+                "project_description": project_description,
             }
 
             response = self.invoke_lambda(
@@ -648,6 +653,7 @@ class LambdaUseCase:
 
             classification_data = response_data.get("classifications") or response_data.get("classification", [])
             suggestion = response_data.get("suggestion")
+            suggested_category = response_data.get("suggested_category") or ""
             reason = response_data.get("reason", "")
 
             # Normalize classification data to consistent format
@@ -660,11 +666,87 @@ class LambdaUseCase:
                     if isinstance(name, str) and name.strip().lower() == "correct":
                         classification = []
 
-            return classification, suggestion
+            return classification, suggestion, suggested_category
 
         except Exception as e:
             sentry_sdk.capture_exception(e)
             raise e
+
+    def validate_resolution_criterion(self, user_rules: list[str]) -> dict:
+        from nexus.projects.exceptions import LambdaValidationFailedError
+
+        lambda_name = settings.AI_RESOLUTION_CRITERIA_VALIDATION_NAME
+        if not lambda_name:
+            logger.error("AI_RESOLUTION_CRITERIA_VALIDATION_NAME is not configured")
+            raise LambdaValidationFailedError()
+
+        payload = {"user_rules": user_rules}
+
+        try:
+            response = self.invoke_lambda(lambda_name=str(lambda_name), payload=payload)
+
+            if "FunctionError" in response:
+                error_payload = json.loads(response.get("Payload").read())
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(lambda_name),
+                        "full_error_payload": error_payload,
+                        "request_payload": payload,
+                    },
+                )
+                sentry_sdk.capture_message(
+                    f"Lambda FunctionError in validate_resolution_criterion: {error_payload}",
+                    level="error",
+                )
+                raise LambdaValidationFailedError()
+
+            raw_response = json.loads(response.get("Payload").read())
+            status_code = raw_response.get("statusCode")
+
+            body_data = raw_response
+            if "body" in raw_response:
+                body_data = raw_response.get("body")
+                if isinstance(body_data, str):
+                    body_data = json.loads(body_data)
+
+            if status_code and status_code >= 400:
+                sentry_sdk.capture_message(
+                    f"Lambda returned error status {status_code} in validate_resolution_criterion",
+                    level="error",
+                )
+                raise LambdaValidationFailedError()
+
+            valid = body_data.get("valid")
+            if valid is None:
+                valid = body_data.get("is_valid")
+            if valid is None:
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(lambda_name),
+                        "raw_response": raw_response,
+                        "parsed_body": body_data,
+                        "request_payload": payload,
+                    },
+                )
+                sentry_sdk.capture_message(
+                    "Unexpected lambda response format in validate_resolution_criterion",
+                    level="error",
+                )
+                logger.error(
+                    "Unexpected lambda response format in validate_resolution_criterion: %s",
+                    raw_response,
+                )
+                raise LambdaValidationFailedError()
+
+            return {"valid": valid, "rules": body_data.get("rules", [])}
+
+        except LambdaValidationFailedError:
+            raise
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
+            raise LambdaValidationFailedError() from exc
 
 
 @celery_app.task(bind=True)

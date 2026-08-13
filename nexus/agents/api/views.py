@@ -632,7 +632,7 @@ class ProjectCredentialsView(APIView):
 
 
 class AgentTracesView(APIView):
-    permission_classes = [ProjectPermission]
+    permission_classes = [ProjectPermission | InternalCommunicationPermission]
 
     def get(self, request):
         project_uuid = request.query_params.get("project_uuid")

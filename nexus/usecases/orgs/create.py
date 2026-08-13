@@ -10,7 +10,7 @@ class CreateOrgUseCase:
         try:
             user = users.get_by_email(user_email)
         except users.exceptions.UserDoesNotExists:
-            user = users.CreateUserUseCase().create_user(email=user_email)
+            user = users.CreateUserUseCase().get_or_create_user(email=user_email)
 
         org = Org.objects.create(uuid=org_dto.uuid, created_by=user, name=org_dto.name)
 

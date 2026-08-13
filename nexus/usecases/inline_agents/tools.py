@@ -7,7 +7,7 @@ from django.conf import settings
 from nexus.inline_agents.models import Agent, ContactField
 from nexus.internals.flows import FlowsRESTClient
 from nexus.projects.models import Project
-from nexus.usecases.inline_agents.bedrock import BedrockClient
+from nexus.usecases.inline_agents.bedrock import APM_INSTRUMENTATION_UNCHANGED, BedrockClient
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,14 @@ class ToolsUseCase:
     def __init__(self, agent_backend_client=BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
-    def create_lambda_function(self, tool: Dict, tool_file, project_uuid: str, tool_name: str) -> Dict[str, str]:
+    def create_lambda_function(
+        self,
+        tool: Dict,
+        tool_file,
+        project_uuid: str,
+        tool_name: str,
+        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
+    ) -> Dict[str, str]:
         logger.info("Creating lambda function", extra={"tool_name": tool_name})
         zip_buffer = BytesIO(tool_file.read())
         lambda_role = settings.AGENT_RESOURCE_ROLE_ARN
@@ -28,7 +35,11 @@ class ToolsUseCase:
         lambda_name = tool_name
 
         lambda_arn = self.agent_backend_client.create_lambda_function(
-            lambda_name=lambda_name, lambda_role=lambda_role, skill_handler=skill_handler, zip_buffer=zip_buffer
+            lambda_name=lambda_name,
+            lambda_role=lambda_role,
+            skill_handler=skill_handler,
+            zip_buffer=zip_buffer,
+            apm_instrumentation=apm_instrumentation,
         )
 
         return {"lambda": lambda_arn}
@@ -36,11 +47,22 @@ class ToolsUseCase:
     def delete_lambda_function(self, function_name: str):
         self.agent_backend_client.delete_lambda_function(function_name)
 
-    def update_lambda_function(self, tool: Dict, tool_file, project_uuid: str, tool_name: str) -> Dict[str, str]:
+    def update_lambda_function(
+        self,
+        tool: Dict,
+        tool_file,
+        project_uuid: str,
+        tool_name: str,
+        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
+    ) -> Dict[str, str]:
         zip_buffer = BytesIO(tool_file.read())
         lambda_name = tool_name
 
-        lambda_arn = self.agent_backend_client.update_lambda_function(lambda_name=lambda_name, zip_buffer=zip_buffer)
+        lambda_arn = self.agent_backend_client.update_lambda_function(
+            lambda_name=lambda_name,
+            zip_buffer=zip_buffer,
+            apm_instrumentation=apm_instrumentation,
+        )
 
         return lambda_arn
 
@@ -51,10 +73,11 @@ class ToolsUseCase:
         agent_tool: Dict,
         tool_file,
         tool_name: str,
+        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
     ) -> Tuple[Dict, Dict]:
         project_uuid = str(project.uuid)
         action_group_executor: Dict[str, str] = self.create_lambda_function(
-            agent_tool, tool_file, project_uuid, tool_name
+            agent_tool, tool_file, project_uuid, tool_name, apm_instrumentation=apm_instrumentation
         )
         parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
@@ -69,10 +92,18 @@ class ToolsUseCase:
         return
 
     def update_tool(
-        self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str
+        self,
+        agent: Agent,
+        project: Project,
+        agent_tool: Dict,
+        tool_file,
+        tool_name: str,
+        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
     ) -> Tuple[Dict, Dict]:
         project_uuid = str(project.uuid)
-        action_group_executor = self.update_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
+        action_group_executor = self.update_lambda_function(
+            agent_tool, tool_file, project_uuid, tool_name, apm_instrumentation=apm_instrumentation
+        )
         parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
@@ -165,7 +196,15 @@ class ToolsUseCase:
                 field.delete()
                 # flows_client.delete_project_contact_field(project_uuid, field.key)
 
-    def handle_tools(self, agent: Agent, project: Project, agent_tools: List[Dict], files: dict, project_uuid: str):
+    def handle_tools(
+        self,
+        agent: Agent,
+        project: Project,
+        agent_tools: List[Dict],
+        files: dict,
+        project_uuid: str,
+        apm_instrumentation: str = APM_INSTRUMENTATION_UNCHANGED,
+    ):
         logger.info("Handling tools for agent", extra={"agent_slug": agent.slug})
         display_skills = []
         existing_skills = []
@@ -203,14 +242,18 @@ class ToolsUseCase:
             if skill_name in skills_to_create:
                 logger.info("Creating tool", extra={"skill_name": skill_name})
                 skill_file = files[f"{agent.slug}:{agent_skill['key']}"]
-                tool, display_tool = self.create_tool(agent, project, agent_skill, skill_file, skill_name)
+                tool, display_tool = self.create_tool(
+                    agent, project, agent_skill, skill_file, skill_name, apm_instrumentation=apm_instrumentation
+                )
 
                 new_agent_tools.append(tool)
                 new_agent_display_tools.append(display_tool)
 
             elif skill_name in skills_to_update:
                 logger.info("Updating tool", extra={"skill_name": skill_name})
-                tool, display_tool = self.update_tool(agent, project, agent_skill, skill_file, skill_name)
+                tool, display_tool = self.update_tool(
+                    agent, project, agent_skill, skill_file, skill_name, apm_instrumentation=apm_instrumentation
+                )
                 new_agent_tools.append(tool)
                 new_agent_display_tools.append(display_tool)
 

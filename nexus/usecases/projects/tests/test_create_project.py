@@ -8,8 +8,8 @@ from django.test import TestCase
 from nexus.actions.models import Flow
 from nexus.agents.models import Agent
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
-from nexus.intelligences.models import ContentBaseText
 from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.intelligences.models import ContentBaseText
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 from nexus.usecases.orgs.tests.org_factory import OrgFactory

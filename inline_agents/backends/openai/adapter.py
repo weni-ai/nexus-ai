@@ -6,6 +6,7 @@ import boto3
 import pendulum
 import sentry_sdk
 from django.conf import settings
+from django.db.models import Prefetch
 from django.template import Context as TemplateContext
 from django.template import Template
 from django.utils.text import slugify
@@ -21,13 +22,26 @@ from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
+from inline_agents.backends.openai.prompts_progressive_feedback import (
+    get_progressive_feedback_orchestration_instruction,
+    inject_progressive_feedback_instruction,
+    log_progressive_feedback_orchestration_decision,
+    should_inject_progressive_feedback_instruction,
+)
+from inline_agents.backends.openai.prompts_prompt_injection_filter import (
+    get_prompt_injection_filter_block,
+    inject_prompt_injection_filter,
+    should_inject_prompt_injection_filter,
+)
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
+    AgentConstant,
     AgentCredential,
     Guardrail,
     InlineAgentsConfiguration,
     IntegratedAgent,
 )
+from nexus.usecases.inline_agents.agent_constants_sync import iter_agent_constant_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +232,8 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale: bool,
         skip_conversation_sqs: bool = False,
         manager_pipeline_version: Optional[str] = None,
+        channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -250,6 +266,12 @@ class OpenAITeamAdapter(TeamAdapter):
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
             include_streaming_merge_prompts=bool(use_components and not is_legacy_manager_pipeline),
+            rationale_switch=rationale_switch,
+            turn_off_rationale=turn_off_rationale,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -274,9 +296,7 @@ class OpenAITeamAdapter(TeamAdapter):
         json_tools = cls._get_tools(supervisor["tools"])
         if not use_components:
             component_tool_names_to_strip = all_component_tool_names(formatter_tools_descriptions)
-            json_tools = [
-                t for t in json_tools if getattr(t, "name", None) not in component_tool_names_to_strip
-            ]
+            json_tools = [t for t in json_tools if getattr(t, "name", None) not in component_tool_names_to_strip]
 
         supervisor_tools: List[Any] = list(json_tools)
         supervisor_tools.extend(agents_as_tools)
@@ -289,12 +309,8 @@ class OpenAITeamAdapter(TeamAdapter):
             legacy_component_tool_name_set = all_component_tool_names(formatter_tools_descriptions)
             streaming_merge_tool_name_set = streaming_merge_tool_names(formatter_tools_descriptions)
             names_to_strip = legacy_component_tool_name_set | streaming_merge_tool_name_set
-            supervisor_tools = [
-                t for t in supervisor_tools if getattr(t, "name", None) not in names_to_strip
-            ]
-            supervisor_tools.extend(
-                get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions)
-            )
+            supervisor_tools = [t for t in supervisor_tools if getattr(t, "name", None) not in names_to_strip]
+            supervisor_tools.extend(get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions))
 
         supervisor_agent = SupervisorEntity(
             name="manager",
@@ -366,6 +382,8 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale: bool = False,
         use_components: bool = False,
         skip_conversation_sqs: bool = False,
+        channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
         # Cached data parameters (optional, used to avoid database queries)
         content_base_uuid: str = None,
         business_rules: str = None,
@@ -418,6 +436,12 @@ class OpenAITeamAdapter(TeamAdapter):
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
             include_streaming_merge_prompts=False,
+            rationale_switch=rationale_switch,
+            turn_off_rationale=turn_off_rationale,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         for agent in agents:
@@ -583,9 +607,16 @@ class OpenAITeamAdapter(TeamAdapter):
                 f"Searching for agent with tool '{function_name}' in project '{project_uuid}'"
                 f" - function_name: {function_name}, project_uuid: {project_uuid}"
             )
-            integrated_agents = IntegratedAgent.objects.filter(
-                project__uuid=project_uuid, is_active=True
-            ).select_related("agent")
+            integrated_agents = (
+                IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+                .select_related("agent")
+                .prefetch_related(
+                    Prefetch(
+                        "agent__agentconstant_set",
+                        queryset=AgentConstant.objects.all(),
+                    )
+                )
+            )
 
             integrated_agents_count = integrated_agents.count()
             logger.debug(
@@ -661,11 +692,8 @@ class OpenAITeamAdapter(TeamAdapter):
     @classmethod
     def _prepare_agent_constants(cls, agent, integrated_agent=None):
         """Extract constants from agent configuration."""
-        constants = {}
-        if hasattr(agent, "constants") and agent.constants:
-            constants = {k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()}
+        constants = iter_agent_constant_defaults(agent)
 
-        # Inject mcp_config into constants
         if integrated_agent and integrated_agent.metadata:
             mcp_config = integrated_agent.metadata.get("mcp_config", {})
             if isinstance(mcp_config, dict):
@@ -1087,6 +1115,12 @@ class OpenAITeamAdapter(TeamAdapter):
         components_instructions_up,
         human_support_instructions,
         include_streaming_merge_prompts: bool = False,
+        rationale_switch: bool = False,
+        turn_off_rationale: bool = False,
+        channel_type: str = "",
+        preview: bool = False,
+        preview_websocket: bool = False,
+        prompt_injection_filter_enabled: bool = False,
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1143,6 +1177,60 @@ class OpenAITeamAdapter(TeamAdapter):
         context_object = TemplateContext(context_data)
 
         rendered_content = template.render(context_object)
+
+        if should_inject_progressive_feedback_instruction(
+            rationale_switch,
+            turn_off_rationale,
+            contact_urn=contact_id,
+            channel_type=channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+        ):
+            progressive_feedback_instruction = get_progressive_feedback_orchestration_instruction()
+            if progressive_feedback_instruction:
+                rendered_content = inject_progressive_feedback_instruction(
+                    rendered_content,
+                    progressive_feedback_instruction,
+                )
+                log_progressive_feedback_orchestration_decision(
+                    project_id=project_id,
+                    contact_urn=contact_id,
+                    channel_type=channel_type,
+                    preview=preview,
+                    preview_websocket=preview_websocket,
+                    rationale_switch=rationale_switch,
+                    turn_off_rationale=turn_off_rationale,
+                    injected=True,
+                    instruction_preview=progressive_feedback_instruction[:120],
+                )
+            else:
+                log_progressive_feedback_orchestration_decision(
+                    project_id=project_id,
+                    contact_urn=contact_id,
+                    channel_type=channel_type,
+                    preview=preview,
+                    preview_websocket=preview_websocket,
+                    rationale_switch=rationale_switch,
+                    turn_off_rationale=turn_off_rationale,
+                    injected=False,
+                )
+        else:
+            log_progressive_feedback_orchestration_decision(
+                project_id=project_id,
+                contact_urn=contact_id,
+                channel_type=channel_type,
+                preview=preview,
+                preview_websocket=preview_websocket,
+                rationale_switch=rationale_switch,
+                turn_off_rationale=turn_off_rationale,
+                injected=False,
+            )
+
+        if should_inject_prompt_injection_filter(prompt_injection_filter_enabled):
+            rendered_content = inject_prompt_injection_filter(
+                rendered_content,
+                get_prompt_injection_filter_block(),
+            )
 
         return rendered_content
 

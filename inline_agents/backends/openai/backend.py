@@ -33,6 +33,10 @@ from inline_agents.backends.openai.hooks import (
 )
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.legacy_formatter_pipeline import use_legacy_formatter_after_manager
+from inline_agents.backends.openai.message_context import (
+    emit_context_tool_traces,
+    inject_context_as_tool_result,
+)
 from inline_agents.backends.openai.sessions import (
     RedisSession,
     delete_openai_inline_session_keys_for_contact,
@@ -45,8 +49,14 @@ from nexus.inline_agents.backends.openai.repository import (
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.internals.connect import ConnectRESTClient
+from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.services.cache_service import CacheService
+from router.traces_observers.rationale.channel_hint import (
+    channel_hint_from_contact_urn,
+    supports_progressive_feedback,
+)
 from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
@@ -81,11 +91,33 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_default_error_message(project_uuid: str) -> str:
         fallback_language = "en-us"
         messages = getattr(settings, "DEFAULT_ERROR_MESSAGES", {})
+
+        cache_service = CacheService()
+        cached = cache_service.get_api_error_message(project_uuid)
+        if cached is not None:
+            return cached
+
+        try:
+            project = Project.objects.only("api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            project = None
+        except Exception:
+            project = None
+
+        if project is not None and project.api_error_message:
+            cache_service.set_api_error_message(project_uuid, project.api_error_message)
+            return project.api_error_message
+
         try:
             language = ConnectRESTClient().get_project_language(project_uuid)
         except Exception:
             language = fallback_language
-        return messages.get(language, messages.get(fallback_language, ""))
+        resolved = messages.get(language, messages.get(fallback_language, ""))
+
+        if project is not None:
+            cache_service.set_api_error_message(project_uuid, resolved)
+
+        return resolved
 
     def get_supervisor(
         self,
@@ -243,7 +275,7 @@ class OpenAIBackend(InlineAgentsBackend):
             sentry_sdk.capture_exception(e)
             return None
 
-    def invoke_agents(
+    def invoke_agents(  # noqa: C901
         self,
         team: list[dict],
         input_text: str,
@@ -274,7 +306,25 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
         manager_pipeline_version = kwargs.pop("manager_pipeline_version", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
+        injected_context = kwargs.pop("injected_context", None)
+        prompt_injection_filter_enabled = bool(kwargs.pop("prompt_injection_filter_enabled", False))
+        kwargs.pop("guardrails_config", None)
         rationale_switch = rationale_switch_cached
+        progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
+            contact_urn,
+            channel_type,
+            preview=preview,
+            preview_websocket=preview_websocket,
+        )
+        if rationale_switch and not progressive_feedback_enabled:
+            logger.info(
+                "[ProgressiveFeedback] Disabled for non-webchat channel project_uuid=%s "
+                "channel_from_urn=%s contact_urn=%s channel_type=%s",
+                project_uuid,
+                channel_hint_from_contact_urn(contact_urn),
+                contact_urn,
+                channel_type or None,
+            )
         if manager_pipeline_version is not None:
             logger.debug(
                 "[OpenAIBackend] manager_pipeline_version=%s project_uuid=%s",
@@ -337,7 +387,7 @@ class OpenAIBackend(InlineAgentsBackend):
             agent_name="manager",
             preview=preview,
             preview_websocket=preview_websocket,
-            rationale_switch=rationale_switch,
+            rationale_switch=progressive_feedback_enabled,
             language=language,
             user_email=user_email,
             session_id=session_id,
@@ -360,7 +410,7 @@ class OpenAIBackend(InlineAgentsBackend):
             supervisor_name="manager",
             preview=preview,
             preview_websocket=preview_websocket,
-            rationale_switch=rationale_switch,
+            rationale_switch=progressive_feedback_enabled,
             language=language,
             user_email=user_email,
             session_id=session_id,
@@ -414,6 +464,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 turn_off_rationale=turn_off_rationale,
                 skip_conversation_sqs=skip_conversation_sqs,
                 manager_pipeline_version=manager_pipeline_version,
+                channel_type=channel_type,
+                prompt_injection_filter_enabled=prompt_injection_filter_enabled,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -450,6 +502,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 auth_token=auth_token,
                 use_components=use_components_cached,
                 skip_conversation_sqs=skip_conversation_sqs,
+                channel_type=channel_type,
+                prompt_injection_filter_enabled=prompt_injection_filter_enabled,
             )
 
         client = self._get_client()
@@ -502,6 +556,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     grpc_session=grpc_session,
                     formatter_agent_configurations=formatter_agent_configurations,
                     manager_pipeline_version=manager_pipeline_version,
+                    injected_context=injected_context,
                 )
             )
 
@@ -813,6 +868,7 @@ class OpenAIBackend(InlineAgentsBackend):
         grpc_session: Optional[StreamingSession] = None,
         formatter_agent_configurations: Optional[Dict[str, Any]] = None,
         manager_pipeline_version: Optional[str] = None,
+        injected_context: Optional[str] = None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
@@ -829,6 +885,15 @@ class OpenAIBackend(InlineAgentsBackend):
                 user_model_credentials = external_team.pop("user_model_credentials", {})
                 model_vendor = external_team.pop("model_vendor", "")
                 self._set_openai_client(user_model_credentials, model_vendor)
+
+                if injected_context:
+                    await inject_context_as_tool_result(session, injected_context)
+                    await emit_context_tool_traces(
+                        supervisor_hooks.trace_handler,
+                        external_team["context"],
+                        injected_context,
+                    )
+
                 result = client.run_streamed(
                     **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
                 )

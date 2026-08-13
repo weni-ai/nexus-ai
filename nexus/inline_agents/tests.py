@@ -280,10 +280,12 @@ class MockBedrockClient:
         self.lambda_client = Mock()
         self.lambda_arn = "arn:aws:lambda:us-east-1:123456789012:function:test-agent"
 
-    def create_lambda_function(self, lambda_name, lambda_role, skill_handler, zip_buffer):
+    def create_lambda_function(
+        self, lambda_name, lambda_role, skill_handler, zip_buffer, apm_instrumentation=None
+    ):
         return self.lambda_arn
 
-    def update_lambda_function(self, lambda_name, zip_buffer):
+    def update_lambda_function(self, lambda_name, zip_buffer, apm_instrumentation=None):
         return self.lambda_arn
 
     def delete_lambda_function(self, function_name):

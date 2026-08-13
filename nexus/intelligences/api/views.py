@@ -15,6 +15,7 @@ from drf_spectacular.utils import (
     extend_schema,
 )
 from rest_framework import parsers, status, views
+from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -23,6 +24,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.weni_io import HybridIOIdentityPermission, HybridIOInternalPermission, WeniIOAuthViewMixin
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
 from nexus.intelligences.models import (
@@ -38,7 +40,7 @@ from nexus.intelligences.models import (
 from nexus.internals.conversations import ConversationsRESTClient
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, InlineContentBaseTextCursorPagination, SupervisorPagination
-from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
+from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
@@ -60,9 +62,10 @@ from nexus.task_managers.tasks import (
 from nexus.task_managers.tasks_bedrock import (
     bedrock_send_link,
     bedrock_upload_text_file,
-    start_ingestion_job,
+    trigger_bedrock_ingestion,
 )
 from nexus.usecases import intelligences
+from nexus.usecases.intelligences.batch_ingestion_progress import BatchIngestionProgressUseCase
 from nexus.usecases.intelligences.exceptions import (
     ContentBaseDoesNotExist,
     IntelligencePermissionDenied,
@@ -70,6 +73,7 @@ from nexus.usecases.intelligences.exceptions import (
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.usecases.intelligences.instructions import build_initial_retail_instruction_payload
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -83,6 +87,7 @@ from nexus.usecases.users.exceptions import UserDoesNotExists
 from nexus.users.models import User
 
 from .serializers import (
+    BatchIngestionProgressRequestSerializer,
     ContentBaseFileSerializer,
     ContentBaseLinkSerializer,
     ContentBasePersonalizationSerializer,
@@ -638,9 +643,7 @@ class InlineContentBaseTextViewset(ModelViewSet):
         try:
             user_email = request.user.email
 
-            write_serializer = InlineContentBaseTextWriteSerializer(
-                data=request.data, context={"is_create": True}
-            )
+            write_serializer = InlineContentBaseTextWriteSerializer(data=request.data, context={"is_create": True})
             write_serializer.is_valid(raise_exception=True)
 
             text = write_serializer.validated_data["text"]
@@ -753,12 +756,164 @@ class InlineContentBaseTextViewset(ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ContentBaseFileViewset(ModelViewSet):
+class BatchContentBaseFileMixin:
+    def _validate_batch_file_size(self, file):
+        if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
+            return f"File size is too large: {file.name}"
+
+    def _get_batch_upload_files(self, request):
+        files = request.FILES.getlist("files")
+        if not files:
+            single_file = request.FILES.get("file")
+            if single_file:
+                files = [single_file]
+        return files
+
+    def _handle_batch_file_upload(self, request, content_base_uuid: str, inline: bool = False):
+        from rest_framework import status as http_status
+
+        files = self._get_batch_upload_files(request)
+        if not files:
+            return Response(data={"message": "files is required"}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        max_files = settings.BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST
+        if len(files) > max_files:
+            return Response(
+                data={"message": f"A maximum of {max_files} files is allowed per request"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        for file in files:
+            size_error = self._validate_batch_file_size(file)
+            if size_error:
+                return Response(data={"message": size_error}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        user: User = request.user
+        user_email: str = user.email
+        extension_file: str = request.data.get("extension_file")
+
+        project_error = self._validate_bedrock_project_for_batch(content_base_uuid)
+        if project_error:
+            return project_error
+
+        file_manager = CeleryFileManager()
+        data, response_status = file_manager.upload_and_ingest_batch(
+            files,
+            content_base_uuid,
+            extension_file,
+            user_email,
+            inline=inline,
+        )
+        return Response(data=data, status=response_status)
+
+    def _validate_bedrock_project_for_batch(self, content_base_uuid: str):
+        from rest_framework import status as http_status
+
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+        except ObjectDoesNotExist:
+            return Response(data={"message": "Project not found"}, status=http_status.HTTP_404_NOT_FOUND)
+
+        if project.indexer_database != Project.BEDROCK:
+            return Response(
+                data={"message": "This endpoint is only available for Bedrock projects"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        return None
+
+    def _handle_batch_ingestion_progress(self, request, content_base_uuid: str):
+        from rest_framework import status as http_status
+
+        project_error = self._validate_bedrock_project_for_batch(content_base_uuid)
+        if project_error:
+            return project_error
+
+        serializer = BatchIngestionProgressRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(data=serializer.errors, status=http_status.HTTP_400_BAD_REQUEST)
+
+        file_uuids = [str(file_uuid) for file_uuid in serializer.validated_data["file_uuids"]]
+        max_files = settings.BEDROCK_DIRECT_INGEST_MAX_FILES_PER_REQUEST
+        if len(file_uuids) > max_files:
+            return Response(
+                data={"message": f"A maximum of {max_files} file UUIDs is allowed per request"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            progress = BatchIngestionProgressUseCase().get_progress(content_base_uuid, file_uuids)
+        except ContentBaseFile.DoesNotExist as e:
+            return Response(data={"message": str(e)}, status=http_status.HTTP_404_NOT_FOUND)
+
+        return Response(data=progress, status=http_status.HTTP_200_OK)
+
+
+class ContentBaseFileViewset(BatchContentBaseFileMixin, ModelViewSet):
     serializer_class = ContentBaseFileSerializer
     pagination_class = CustomCursorPagination
     parser_classes = (parsers.MultiPartParser,)
     permission_classes = [IsAuthenticated]
     lookup_url_kwarg = "contentbase_file_uuid"
+
+    @action(detail=False, methods=["post"], url_path="batch", parser_classes=[parsers.MultiPartParser])
+    def batch_create(self, request, content_base_uuid=None, **kwargs):
+        try:
+            content_base_uuid = content_base_uuid or self.kwargs.get("content_base_uuid")
+            if not content_base_uuid:
+                return Response(
+                    data={"message": "content_base_uuid is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            self.get_queryset()
+            return self._handle_batch_file_upload(request, content_base_uuid, inline=False)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while uploading the files: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="batch/progress",
+        parser_classes=[parsers.JSONParser],
+    )
+    def batch_progress(self, request, content_base_uuid=None, **kwargs):
+        try:
+            content_base_uuid = content_base_uuid or self.kwargs.get("content_base_uuid")
+            if not content_base_uuid:
+                return Response(
+                    data={"message": "content_base_uuid is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            self.get_queryset()
+            return self._handle_batch_ingestion_progress(request, content_base_uuid)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while fetching ingestion progress: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def list(self, request, *args, **kwargs):
         try:
@@ -866,10 +1021,17 @@ class ContentBaseFileViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_file.file_name
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -890,12 +1052,61 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class InlineContentBaseFileViewset(ModelViewSet):
+class InlineContentBaseFileViewset(BatchContentBaseFileMixin, ModelViewSet):
     serializer_class = ContentBaseFileSerializer
     pagination_class = CustomCursorPagination
     parser_classes = (parsers.MultiPartParser,)
     permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
     lookup_url_kwarg = "contentbase_file_uuid"
+
+    @action(detail=False, methods=["post"], url_path="batch", parser_classes=[parsers.MultiPartParser])
+    def batch_create(self, request, project_uuid=None, **kwargs):
+        try:
+            content_base = intelligences.get_by_uuid.get_default_content_base_by_project(
+                project_uuid or self.kwargs.get("project_uuid")
+            )
+            return self._handle_batch_file_upload(request, str(content_base.uuid), inline=True)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while uploading the files: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="batch/progress",
+        parser_classes=[parsers.JSONParser],
+    )
+    def batch_progress(self, request, project_uuid=None, **kwargs):
+        try:
+            content_base = intelligences.get_by_uuid.get_default_content_base_by_project(
+                project_uuid or self.kwargs.get("project_uuid")
+            )
+            return self._handle_batch_ingestion_progress(request, str(content_base.uuid))
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while fetching ingestion progress: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
@@ -971,10 +1182,17 @@ class InlineContentBaseFileViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_file.file_name
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -1057,6 +1275,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_link.name if content_base_link.name else content_base_link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1064,7 +1283,13 @@ class ContentBaseLinkViewset(ModelViewSet):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_link_activity", action_type="D", content_base_link=content_base_link, user=user
@@ -1160,6 +1385,7 @@ class InlineContentBaseLinkViewset(ModelViewSet):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = content_base_link.name if content_base_link.name else content_base_link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1167,7 +1393,13 @@ class InlineContentBaseLinkViewset(ModelViewSet):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=content_base_uuid,
+                    filename=filename,
+                )
 
             event_manager.notify(
                 event="contentbase_link_activity",
@@ -1264,59 +1496,61 @@ class RouterContentBaseViewSet(views.APIView):
         return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
 
 
-class RouterRetailViewSet(views.APIView):
-    def _create_links(self, links: list, user: User, content_base: ContentBase, project: Project) -> list:
+class RouterRetailViewSet(WeniIOAuthViewMixin, views.APIView):
+    permission_classes = [HybridIOIdentityPermission, HybridIOInternalPermission]
+
+    def _create_links(self, links: list, user_email: str, content_base: ContentBase, project: Project) -> list:
         created_links = []
         if links:
             for link in links:
                 link_serializer = ContentBaseLinkSerializer(data={"link": link})
                 link_serializer.is_valid(raise_exception=True)
                 link_dto = intelligences.ContentBaseLinkDTO(
-                    link=link, user_email=user.email, content_base_uuid=str(content_base.uuid)
+                    link=link, user_email=user_email, content_base_uuid=str(content_base.uuid)
                 )
                 content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
 
                 if project.indexer_database == Project.BEDROCK:
                     bedrock_send_link.delay(
-                        link=link, user_email=user.email, content_base_link_uuid=str(content_base_link.uuid)
+                        link=link, user_email=user_email, content_base_link_uuid=str(content_base_link.uuid)
                     )
                 else:
                     send_link.delay(
-                        link=link, user_email=user.email, content_base_link_uuid=str(content_base_link.uuid)
+                        link=link, user_email=user_email, content_base_link_uuid=str(content_base_link.uuid)
                     )
 
                 link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
                 created_links.append(link_serializer)
 
+        return created_links
+
+    def _resolve_user_email_and_internal(self, request):
+        user_email = self.user_email or getattr(request.user, "email", None)
+        is_internal = self.is_internal or (
+            hasattr(request.user, "has_perm") and request.user.has_perm("users.can_communicate_internally")
+        )
+        return user_email, is_internal
+
     # TODO - Refactor this view to have only one searializer and no dependencies
     def post(self, request, project_uuid):
-        user: User = request.user
-        module_permission = user.has_perm("users.can_communicate_internally")
-
-        if not module_permission:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        project_uuid = self.get_scoped_project_uuid(project_uuid)
+        user_email, is_internal = self._resolve_user_email_and_internal(request)
+        if not user_email:
+            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         use_case = intelligences.RetrieveContentBaseUseCase()
-        content_base = use_case.get_default_by_project(project_uuid, user.email, is_superuser=module_permission)
+        content_base = use_case.get_default_by_project(project_uuid, user_email, is_superuser=is_internal)
         links: list = request.data.get("links")
 
         project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
 
-        created_links = self._create_links(links, user, content_base, project)
+        created_links = self._create_links(links, user_email, content_base, project)
 
         # ContentBasePersonalization
 
         agent_data = request.data.get("agent")
 
-        instructions_objects = []
-        if not content_base.instructions.exists():
-            default_instructions: list = settings.DEFAULT_RETAIL_INSTRUCTIONS
-            for instruction in default_instructions:
-                instructions_objects.append(
-                    {
-                        "instruction": instruction,
-                    }
-                )
+        instructions_objects = build_initial_retail_instruction_payload(content_base, request.data.get("instructions"))
 
         agent = {"agent": agent_data, "instructions": instructions_objects}
         request.data["instructions"] = instructions_objects
@@ -1345,14 +1579,13 @@ class RouterRetailViewSet(views.APIView):
         return Response(response, status=200)
 
     def delete(self, request, project_uuid):
-        user: User = request.user
-        module_permission = user.has_perm("users.can_communicate_internally")
-
-        if not module_permission:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        project_uuid = self.get_scoped_project_uuid(project_uuid)
+        user_email, is_internal = self._resolve_user_email_and_internal(request)
+        if not user_email:
+            return Response({"error": "user_email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         use_case = intelligences.RetrieveContentBaseUseCase()
-        content_base = use_case.get_default_by_project(project_uuid, user.email, is_superuser=module_permission)
+        content_base = use_case.get_default_by_project(project_uuid, user_email, is_superuser=is_internal)
         content_base_uuid: str = content_base.uuid
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
@@ -1364,6 +1597,7 @@ class RouterRetailViewSet(views.APIView):
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
             indexer = project_use_case.get_indexer_database_by_project(project)
+            filename = link.name if link.name else link.link
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
@@ -1371,7 +1605,15 @@ class RouterRetailViewSet(views.APIView):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+                trigger_bedrock_ingestion.delay(
+                    "",
+                    post_delete=True,
+                    project_uuid=str(project.uuid),
+                    content_base_uuid=str(content_base_uuid),
+                    filename=filename,
+                )
+
+            user = request.user if getattr(request.user, "pk", None) else None
 
             event_manager.notify(event="contentbase_link_activity", action_type="D", content_base_link=link, user=user)
 
@@ -1442,10 +1684,8 @@ class LLMDefaultViewset(views.APIView):
         return Response(data=LLMConfigSerializer(updated_llm).data, status=200)
 
 
-class ContentBasePersonalizationViewSet(ModelViewSet):
+class ContentBasePersonalizationViewSet(WeniIOAuthViewMixin, ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
-    authentication_classes = AUTHENTICATION_CLASSES
-    permission_classes = [ExternalTokenPermission | ProjectPermission | InternalCommunicationPermission]
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
@@ -1456,7 +1696,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
         return intelligences.get_default_content_base_by_project(project_uuid)
 
     def list(self, request, *args, **kwargs):
-        project_uuid = kwargs.get("project_uuid")
+        project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
         content_base = self._get_content_base(project_uuid)
         data = ContentBasePersonalizationSerializer(
             content_base, context={"request": request, "project_uuid": project_uuid}
@@ -1465,7 +1705,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         try:
-            project_uuid = kwargs.get("project_uuid")
+            project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
             content_base = self._get_content_base(project_uuid)
 
             context = {"request": request, "project_uuid": project_uuid}
@@ -1490,7 +1730,10 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instruction_id = request.query_params.get("id")
-        project_uuid = kwargs.get("project_uuid")
+        if not instruction_id:
+            return Response({"error": "id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
         content_base = self._get_content_base(project_uuid)
 
         ids = [instruction_id]
@@ -1554,14 +1797,12 @@ class UploadFileView(views.APIView):
         return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)
 
 
-class CommerceHasAgentBuilder(views.APIView):
-    permission_classes = [InternalCommunicationPermission]
+class CommerceHasAgentBuilder(WeniIOAuthViewMixin, views.APIView):
+    permission_classes = [HybridIOIdentityPermission, HybridIOInternalPermission]
 
     def get(self, request):
-        project_uuid = request.query_params.get("project_uuid", None)
-
-        if not project_uuid:
-            return Response({"Error": "The project_uuid is required!"}, status=status.HTTP_400_BAD_REQUEST)
+        # project_uuid may arrive as query param (legacy) or from JWT/Keycloak auth context.
+        project_uuid = self.get_scoped_project_uuid(request.query_params.get("project_uuid"))
 
         content_base = get_default_content_base_by_project(project_uuid=project_uuid)
         agent = content_base.agent
@@ -1606,8 +1847,8 @@ class CommerceHasAgentBuilder(views.APIView):
 
 class TopicsViewSet(ModelViewSet):
     serializer_class = TopicsSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-    authentication_classes = []  # Disable default authentication
     lookup_field = "uuid"
 
     def get_queryset(self, *args, **kwargs):
@@ -1692,8 +1933,8 @@ class TopicsViewSet(ModelViewSet):
 
 class SubTopicsViewSet(ModelViewSet):
     serializer_class = SubTopicsSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-    authentication_classes = []  # Disable default authentication
     lookup_field = "uuid"
 
     def get_queryset(self, *args, **kwargs):
@@ -1845,8 +2086,10 @@ class InstructionsClassificationAPIView(APIView):
         operation_id="instruction_classify",
         summary="Classify instruction",
         description=(
-            "Classifies an instruction based on the project's existing content base instructions. "
-            "Returns suggested categories and an improvement suggestion."
+            "Classifies an instruction based on the project description, available categories, "
+            "and existing content base instructions. Returns classification, suggested category, "
+            "and an improvement suggestion. When revalidating during edit, send id to "
+            "exclude that instruction from duplicate comparison."
         ),
         request=InstructionClassificationRequestSerializer,
         parameters=[
@@ -1876,36 +2119,53 @@ class InstructionsClassificationAPIView(APIView):
             instruction = serializer.validated_data["instruction"]
             language = serializer.validated_data["language"]
 
-            user = request.user
-            name = user.name or user.email.split("@")[0]
-            occupation = getattr(user, "occupation", "Customer Service Agent")
-
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
-            project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            _project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            agent = content_base.agent
 
-            goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
-            adjective = content_base.agent.personality if content_base.agent else "friendly"
+            name = agent.name if agent and agent.name else "Agent"
+            occupation = agent.role if agent and agent.role else "Customer Service Agent"
+            goal = agent.goal if agent and agent.goal else "Provide excellent customer support"
+            adjective = agent.personality if agent and agent.personality else "friendly"
 
-            instructions = []
-            for instruction_obj in content_base.instructions.all():
-                instructions.append({"instruction": instruction_obj.instruction, "type": "custom"})
+            existing_instruction_id = serializer.validated_data.get("id")
+            instructions_qs = content_base.instructions.all()
+            if existing_instruction_id is not None:
+                if not instructions_qs.filter(id=existing_instruction_id).exists():
+                    return Response({"error": "Instruction not found"}, status=status.HTTP_404_NOT_FOUND)
+                instructions_qs = instructions_qs.exclude(id=existing_instruction_id)
+
+            instructions = [
+                {"instruction": instruction_obj.instruction, "type": "custom"} for instruction_obj in instructions_qs
+            ]
 
             from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 
             lambda_usecase = LambdaUseCase()
+            instructions_categories = serializer.validated_data.get("instructions_categories", [])
+            project_description = content_base.intelligence.description or ""
 
-            classification, suggestion = lambda_usecase.instruction_classify(
+            classification, suggestion, suggested_category = lambda_usecase.instruction_classify(
                 name=name,
                 occupation=occupation,
                 goal=goal,
                 adjective=adjective,
                 instructions=instructions,
                 instruction_to_classify=instruction,
+                instructions_categories=instructions_categories,
                 language=language,
+                project_description=project_description,
             )
 
-            return Response({"classification": classification, "suggestion": suggestion}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "classification": classification,
+                    "suggested_category": suggested_category,
+                    "suggestion": suggestion,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             sentry_sdk.capture_exception(e)

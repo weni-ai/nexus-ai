@@ -1,4 +1,5 @@
 import logging
+import smtplib
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from uuid import UUID
 
@@ -11,19 +12,36 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from inline_agents.backends.openai.backend import OpenAIBackend
 from nexus.agents.api.views import InternalCommunicationPermission
-from nexus.projects.api.permissions import ProjectPermission
-from nexus.projects.api.serializers import ConversationSerializer
+from nexus.authentication.weni_io import WeniIOAuthViewMixin
+from nexus.events import notify_async
+from nexus.projects.api.permissions import GuardrailsConfigAdminPermission, ProjectPermission
+from nexus.projects.api.serializers import (
+    ConversationSerializer,
+    GuardrailsConfigUpdateSerializer,
+    PromptInjectionFilterUpdateSerializer,
+)
 from nexus.projects.exceptions import ProjectDoesNotExist
+from nexus.projects.models import Project, ProjectAuth
+from nexus.projects.permissions import get_user_auth, is_admin
+from nexus.projects.services.improvement_support_email import SendResult, send_improvement_support_ticket
+from nexus.usecases.guardrails.bedrock_guardrail_pool import BedrockGuardrailPoolError
+from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.projects.retrieve import get_project
 from nexus.usecases.projects.update import ProjectUpdateUseCase
 
+from .improvements_serializers import OpenSupportTicketRequestSerializer
 from .serializers import ProjectSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _get_effective_api_error_message(project_uuid: str) -> str:
+    return OpenAIBackend._get_default_error_message(str(project_uuid))
 
 
 class ProjectUpdateViewset(views.APIView):
@@ -187,9 +205,7 @@ class AgentBuilderProjectDetailsView(APIView):
         return Response(details)
 
 
-class ConversationsProxyView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
-
+class ConversationsProxyView(WeniIOAuthViewMixin, APIView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.usecase = ConversationsUsecase()
@@ -199,7 +215,7 @@ class ConversationsProxyView(APIView):
         Proxy endpoint to fetch conversations from Conversations service.
         All query parameters are forwarded directly to the Conversations service.
         """
-        project_uuid = kwargs.get("project_uuid")
+        project_uuid = self.get_scoped_project_uuid(kwargs.get("project_uuid"))
 
         if not project_uuid:
             return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -325,7 +341,17 @@ class ConversationsProxyView(APIView):
             status_code = getattr(e.response, "status_code", 500)
 
         if status_code == 404:
-            return Response({}, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "count": 0,
+                    "next": None,
+                    "previous": None,
+                    "results": [],
+                    "status_summary": None,
+                    "total_count": 0,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         try:
             error_message, error_details = self.usecase.extract_error_message(e.response)
@@ -747,3 +773,193 @@ class FlowsDbCohortReconcileProxyView(APIView):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class ProjectApiErrorMessageView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            Project.objects.only("api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        return Response(data={"error_message": _get_effective_api_error_message(project_uuid)})
+
+    def patch(self, request, project_uuid):
+        try:
+            project = Project.objects.only("uuid", "api_error_message").get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        if "error_message" not in request.data:
+            return Response(data={"error": "error_message is required"}, status=400)
+
+        error_message = request.data.get("error_message")
+        if error_message is not None and not isinstance(error_message, str):
+            return Response(data={"error": "error_message must be a string"}, status=400)
+
+        normalized_message = error_message.strip() if isinstance(error_message, str) else None
+        if normalized_message == "":
+            normalized_message = None
+
+        project.api_error_message = normalized_message
+        project.save(update_fields=["api_error_message"])
+
+        notify_async(event="cache_invalidation:project", project=project)
+
+        return Response(
+            data={
+                "message": "Error message updated successfully",
+                "error_message": _get_effective_api_error_message(project_uuid),
+            }
+        )
+
+
+class ProjectGuardrailsConfigView(APIView):
+    permission_classes = [IsAuthenticated, GuardrailsConfigAdminPermission]
+
+    def get(self, request, project_uuid):
+        project = self._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        config = ProjectGuardrailsConfigUseCase.get_or_initialize(project)
+        payload = ProjectGuardrailsConfigUseCase.to_payload(
+            config,
+            writable=self._is_writable(request.user, project),
+        )
+        return Response(payload.as_dict(), status=status.HTTP_200_OK)
+
+    def patch(self, request, project_uuid):
+        project = self._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = GuardrailsConfigUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            update_kwargs = {"category_states": data.get("category_states")}
+            if "blocking_message" in data:
+                update_kwargs["blocking_message"] = data.get("blocking_message")
+            config = ProjectGuardrailsConfigUseCase.update_config(project, **update_kwargs)
+        except DjangoValidationError as exc:
+            return Response(self._format_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+        except BedrockGuardrailPoolError as exc:
+            return Response(
+                {"detail": "Could not resolve Bedrock guardrail pool.", "error": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        payload = ProjectGuardrailsConfigUseCase.to_payload(
+            config,
+            writable=self._is_writable(request.user, project),
+        )
+        notify_async(event="cache_invalidation:project", project=project)
+        return Response(payload.as_dict(), status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _get_project(project_uuid):
+        try:
+            return Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return None
+
+    @staticmethod
+    def _is_writable(user, project: Project) -> bool:
+        try:
+            auth = get_user_auth(user, project)
+            return is_admin(auth)
+        except ProjectAuth.DoesNotExist:
+            return False
+
+    @staticmethod
+    def _format_validation_error(exc: DjangoValidationError) -> dict:
+        if hasattr(exc, "message_dict"):
+            return exc.message_dict
+        if hasattr(exc, "messages"):
+            return {"detail": list(exc.messages)}
+        return {"detail": [str(exc)]}
+
+
+class ProjectPromptInjectionFilterView(APIView):
+    """Soft prompt-injection filter (manager system prompt)."""
+
+    permission_classes = [IsAuthenticated, GuardrailsConfigAdminPermission]
+
+    def get(self, request, project_uuid):
+        project = ProjectGuardrailsConfigView._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        enabled = ProjectGuardrailsConfigUseCase.get_prompt_injection_filter_enabled(project)
+        return Response(
+            {
+                "enabled": enabled,
+                "writable": ProjectGuardrailsConfigView._is_writable(request.user, project),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, project_uuid):
+        project = ProjectGuardrailsConfigView._get_project(project_uuid)
+        if project is None:
+            return Response({"detail": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PromptInjectionFilterUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        config = ProjectGuardrailsConfigUseCase.set_prompt_injection_filter_enabled(
+            project,
+            enabled=serializer.validated_data["enabled"],
+        )
+        notify_async(event="cache_invalidation:project", project=project)
+        return Response(
+            {
+                "enabled": bool(config.prompt_injection_filter_enabled),
+                "writable": ProjectGuardrailsConfigView._is_writable(request.user, project),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class OpenSupportTicketView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def post(self, request, project_uuid):
+        serializer = OpenSupportTicketRequestSerializer(
+            data=request.data,
+            context={"project_uuid": project_uuid},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        validated = serializer.validated_data
+        try:
+            result = send_improvement_support_ticket(
+                project_uuid=str(project_uuid),
+                improvement_item=validated["improvement_item"],
+                affected_conversations=validated["affected_conversations"],
+                user_email=request.user.email,
+            )
+        except ValueError as e:
+            logger.error("Improvement support ticket email misconfigured: %s", str(e))
+            return Response(
+                {"error": "Support email is not configured"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except smtplib.SMTPException as e:
+            logger.error("Failed to send improvement support ticket email: %s", str(e), exc_info=True)
+            return Response(
+                {"error": "Failed to send support ticket email"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if result is SendResult.SKIPPED:
+            return Response(
+                {"status": "skipped", "reason": "email_sending_disabled"},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response({"status": "sent"}, status=status.HTTP_200_OK)

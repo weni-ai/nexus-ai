@@ -18,6 +18,7 @@ from nexus.inline_agents.models import (
     MCP,
     Agent,
     AgentCategory,
+    AgentConstant,
     AgentCredential,
     AgentGroup,
     AgentGroupModal,
@@ -247,6 +248,50 @@ class AgentCredentialInline(admin.TabularInline):
     view_link.short_description = "Actions"
 
 
+class AgentConstantInline(admin.TabularInline):
+    model = AgentConstant.agents.through
+    extra = 0
+    can_delete = False
+    show_change_link = False
+    verbose_name = "Constant"
+    verbose_name_plural = "Constants"
+    fields = ("constant_key", "constant_label", "constant_type", "constant_is_required", "view_link")
+    readonly_fields = fields
+
+    def constant_key(self, obj):
+        return getattr(obj.agentconstant, "key", None)
+
+    def constant_label(self, obj):
+        return getattr(obj.agentconstant, "label", None)
+
+    def constant_type(self, obj):
+        return getattr(obj.agentconstant, "type", None)
+
+    def constant_is_required(self, obj):
+        return getattr(obj.agentconstant, "is_required", None)
+
+    def view_link(self, obj):
+        if getattr(obj, "agentconstant_id", None):
+            url = reverse("admin:inline_agents_agentconstant_change", args=[obj.agentconstant_id])
+            return format_html('<a href="{}" target="_blank">View</a>', url)
+        return "-"
+
+    constant_key.short_description = "Key"
+    constant_label.short_description = "Label"
+    constant_type.short_description = "Type"
+    constant_is_required.short_description = "Required"
+    view_link.short_description = "Actions"
+
+
+@admin.register(AgentConstant)
+class AgentConstantAdmin(admin.ModelAdmin):
+    list_display = ("key", "label", "type", "project", "is_required")
+    list_filter = ("type", "is_required")
+    search_fields = ("key", "label", "project__name", "project__uuid")
+    ordering = ("project__name", "key")
+    autocomplete_fields = ["project", "agents"]
+
+
 @admin.register(Version)
 class VersionAdmin(admin.ModelAdmin):
     """Admin interface for Version model - shows skills and display_skills"""
@@ -275,7 +320,7 @@ class AgentAdmin(admin.ModelAdmin):
     search_fields = ("name", "project__name", "project__uuid", "slug", "uuid")
     ordering = ("project__name",)
     autocomplete_fields = ["project", "group", "systems", "agent_type", "category", "mcps"]
-    inlines = [VersionInline, AgentCredentialInline]
+    inlines = [VersionInline, AgentCredentialInline, AgentConstantInline]
     readonly_fields = ("mcps_list",)
 
     fieldsets = (

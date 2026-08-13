@@ -10,6 +10,7 @@ import time
 from django.test import SimpleTestCase
 
 from router.repositories.mocks import MockCacheRepository
+from router.services.cache_service import CacheService
 from router.tests.mocks import MockCacheService
 
 
@@ -167,6 +168,88 @@ class CacheServiceTestCase(SimpleTestCase):
         self.cache_service.clear_workflow_cache(workflow_id)
         result = self.cache_service.get_workflow_data(workflow_id, "test_data")
         self.assertIsNone(result)
+
+
+class GuardrailsCompositeCacheTestCase(SimpleTestCase):
+    """Partial refresh of stale guardrails inside an otherwise valid composite cache."""
+
+    def setUp(self):
+        self.repository = MockCacheRepository()
+        self.cache_service = CacheService(cache_repository=self.repository)
+
+    def tearDown(self):
+        self.repository.clear()
+
+    def test_get_all_project_data_refreshes_only_stale_guardrails(self):
+        project_uuid = "test-project-uuid"
+        agents_backend = "OpenAIBackend"
+        composite_key = f"project:{project_uuid}:all"
+
+        project_data = {"uuid": project_uuid, "agents_backend": agents_backend}
+        content_base_data = {"uuid": "content-base-uuid"}
+        team_data = [{"agentName": "Agent1"}]
+        legacy_guardrails = {"guardrailIdentifier": "legacy-only"}
+        fresh_guardrails = {
+            "guardrailIdentifier": "gr-1",
+            "guardrailVersion": "1",
+            "blocking_message": "blocked",
+            "has_blocked_category": True,
+        }
+
+        self.repository.set(
+            composite_key,
+            {
+                "data": project_data,
+                "project": project_data,
+                "content_base": content_base_data,
+                "team": team_data,
+                "guardrails": legacy_guardrails,
+            },
+            ttl=3600,
+        )
+
+        fetch_counts = {"project": 0, "content_base": 0, "team": 0, "guardrails": 0}
+
+        def fetch_project(uuid):
+            fetch_counts["project"] += 1
+            return project_data.copy()
+
+        def fetch_content_base(uuid):
+            fetch_counts["content_base"] += 1
+            return content_base_data.copy()
+
+        def fetch_team(uuid, backend):
+            fetch_counts["team"] += 1
+            return team_data.copy()
+
+        def fetch_guardrails(uuid):
+            fetch_counts["guardrails"] += 1
+            return fresh_guardrails.copy()
+
+        result = self.cache_service.get_all_project_data(
+            project_uuid,
+            agents_backend,
+            {
+                "project": fetch_project,
+                "content_base": fetch_content_base,
+                "team": fetch_team,
+                "guardrails": fetch_guardrails,
+            },
+        )
+
+        self.assertEqual(result["guardrails"], fresh_guardrails)
+        self.assertEqual(result["project"], project_data)
+        self.assertEqual(result["content_base"], content_base_data)
+        self.assertEqual(result["team"], team_data)
+        self.assertEqual(fetch_counts["guardrails"], 1)
+        self.assertEqual(fetch_counts["project"], 0)
+        self.assertEqual(fetch_counts["content_base"], 0)
+        self.assertEqual(fetch_counts["team"], 0)
+        self.assertEqual(
+            self.repository.get(f"project:{project_uuid}:guardrails_v2"),
+            fresh_guardrails,
+        )
+        self.assertEqual(self.repository.get(composite_key)["guardrails"], fresh_guardrails)
 
 
 class CacheRepositoryTestCase(SimpleTestCase):

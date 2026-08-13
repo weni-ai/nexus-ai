@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 from enum import Enum
+from uuid import uuid4
 
 from django.db import models
 from django.db.models import Q
@@ -29,6 +30,14 @@ class Project(BaseModel, SoftDeleteModel):
         (BEDROCK, "Bedrock"),
     )
 
+    BEDROCK_INGESTION_JOB = "JOB"
+    BEDROCK_INGESTION_DIRECT = "DIRECT"
+
+    BEDROCK_INGESTION_STRATEGY_CHOICES = (
+        (BEDROCK_INGESTION_JOB, "Job"),
+        (BEDROCK_INGESTION_DIRECT, "Direct"),
+    )
+
     DEFAULT_BACKEND = "OpenAIBackend"
 
     name = models.CharField(max_length=255)
@@ -42,6 +51,11 @@ class Project(BaseModel, SoftDeleteModel):
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
     indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
+    bedrock_ingestion_strategy = models.CharField(
+        max_length=10,
+        choices=BEDROCK_INGESTION_STRATEGY_CHOICES,
+        default=BEDROCK_INGESTION_JOB,
+    )
     agents_backend = models.CharField(max_length=100, default=DEFAULT_BACKEND)
 
     human_support = models.BooleanField(default=False)
@@ -69,6 +83,7 @@ class Project(BaseModel, SoftDeleteModel):
     formatter_send_only_assistant_message = models.BooleanField(default=False)
     formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
     audio_orchestration_welcome_message = models.TextField(null=True, blank=True)
+    api_error_message = models.TextField(null=True, blank=True)
     manager_agent = models.ForeignKey("inline_agents.ManagerAgent", on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
@@ -195,3 +210,100 @@ class ProjectApiToken(models.Model):
         salt = secrets.token_hex(16)
         token_hash = ProjectApiToken.hash_token(token, salt)
         return token, salt, token_hash
+
+
+class ProjectAIResolutionCriterion(BaseModel, SoftDeleteModel):
+    uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="ai_resolution_criteria",
+    )
+    text = models.TextField()
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "project_ai_resolution_criteria"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.project.uuid} - {self.uuid}"
+
+
+class BedrockGuardrailPool(models.Model):
+    """Shared Bedrock Guardrail resource for one blocked-category combination."""
+
+    combination_key = models.CharField(max_length=512, unique=True, db_index=True)
+    category_slugs = models.JSONField(default=list)
+    bedrock_guardrail_identifier = models.CharField(max_length=255)
+    bedrock_guardrail_version = models.CharField(max_length=64)
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bedrock Guardrail pool"
+        verbose_name_plural = "Bedrock Guardrail pools"
+
+    def __str__(self) -> str:
+        return f"Pool {self.combination_key} ({self.bedrock_guardrail_identifier})"
+
+
+class ProjectGuardrailsConfig(models.Model):
+    BLOCKING_MESSAGE_MAX_LENGTH = 240
+
+    project = models.OneToOneField(Project, on_delete=models.CASCADE, related_name="guardrails_config")
+    category_states = models.JSONField(default=dict)
+    blocking_message = models.TextField(null=True, blank=True)
+    prompt_injection_filter_enabled = models.BooleanField(default=False)
+    bedrock_guardrail_pool = models.ForeignKey(
+        BedrockGuardrailPool,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="project_configs",
+    )
+    bedrock_guardrail_identifier = models.CharField(max_length=255, null=True, blank=True)
+    bedrock_guardrail_version = models.CharField(max_length=64, null=True, blank=True)
+    initialized_as_new_project = models.BooleanField(default=False)
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"Guardrails config for {self.project}"
+
+    def save(self, *args, **kwargs):
+        if self.bedrock_guardrail_pool_id:
+            pool = self.bedrock_guardrail_pool
+            self.bedrock_guardrail_identifier = pool.bedrock_guardrail_identifier
+            self.bedrock_guardrail_version = pool.bedrock_guardrail_version
+        else:
+            self.bedrock_guardrail_identifier = None
+            self.bedrock_guardrail_version = None
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = list(
+                set(update_fields)
+                | {
+                    "bedrock_guardrail_identifier",
+                    "bedrock_guardrail_version",
+                }
+            )
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.blocking_message is not None and len(self.blocking_message) > self.BLOCKING_MESSAGE_MAX_LENGTH:
+            raise ValidationError(
+                {"blocking_message": f"Blocking message must be at most {self.BLOCKING_MESSAGE_MAX_LENGTH} characters."}
+            )
+
+        if not isinstance(self.category_states, dict):
+            raise ValidationError({"category_states": "Must be a mapping of slug to boolean."})
+
+        for slug, blocked in self.category_states.items():
+            if not isinstance(slug, str) or not isinstance(blocked, bool):
+                raise ValidationError({"category_states": "Each entry must be a slug string mapped to a boolean."})

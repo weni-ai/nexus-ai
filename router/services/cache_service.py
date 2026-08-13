@@ -21,10 +21,11 @@ class CacheService:
         "data": {"ttl": PROJECT_DATA_TTL, "key_suffix": "data"},
         "content_base": {"ttl": CONTENT_BASE_TTL, "key_suffix": "content_base"},
         "team": {"ttl": TEAM_DATA_TTL, "key_suffix": "team", "requires_backend": True},
-        "guardrails": {"ttl": GUARDRAILS_TTL, "key_suffix": "guardrails"},
+        "guardrails": {"ttl": GUARDRAILS_TTL, "key_suffix": "guardrails_v2"},
         "inline_agent_config": {"ttl": INLINE_AGENT_CONFIG_TTL, "key_suffix": "inline_agent_config"},
         "instructions": {"ttl": INSTRUCTIONS_TTL, "key_suffix": "instructions"},
         "agent": {"ttl": AGENT_DATA_TTL, "key_suffix": "agent"},
+        "api_error_message": {"ttl": PROJECT_DATA_TTL, "key_suffix": "api_error_message"},
     }
 
     # Required cache types for composite cache
@@ -71,7 +72,13 @@ class CacheService:
         composite_key = f"project:{project_uuid}:all"
         cached = self.cache_repository.get(composite_key)
         if cached:
-            return cached
+            if self._is_valid_guardrails_payload(cached.get("guardrails")):
+                return cached
+
+            if "guardrails" in fetch_funcs:
+                cached["guardrails"] = self._fetch_and_cache_guardrails(project_uuid, fetch_funcs["guardrails"])
+                self.cache_repository.set(composite_key, cached, self.PROJECT_DATA_TTL)
+                return cached
 
         # Cache miss - fetch all data
         # Support both "project" and "data" keys for backward compatibility
@@ -128,10 +135,24 @@ class CacheService:
         cache_key = self._get_cache_key(project_uuid, "team", agents_backend)
         return self._get_or_create(cache_key, fetch_func, self.TEAM_DATA_TTL, project_uuid, agents_backend)
 
+    def _is_valid_guardrails_payload(self, payload: Any) -> bool:
+        """Reject legacy cache entries missing the ApplyGuardrail runtime schema."""
+        return isinstance(payload, dict) and "has_blocked_category" in payload
+
+    def _fetch_and_cache_guardrails(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Dict:
+        data = fetch_func(project_uuid)
+        cache_key = self._get_cache_key(project_uuid, "guardrails")
+        self.cache_repository.set(cache_key, data, self.GUARDRAILS_TTL)
+        return data
+
     def get_guardrails_config(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Dict:
         """Get guardrails configuration from cache or fetch and cache."""
         cache_key = self._get_cache_key(project_uuid, "guardrails")
-        return self._get_or_create(cache_key, fetch_func, self.GUARDRAILS_TTL, project_uuid)
+        cached = self.cache_repository.get(cache_key)
+        if cached and self._is_valid_guardrails_payload(cached):
+            return cached
+
+        return self._fetch_and_cache_guardrails(project_uuid, fetch_func)
 
     def get_inline_agent_config(self, project_uuid: str, fetch_func: Callable[[str], Dict]) -> Optional[Dict]:
         """Get inline agent configuration from cache or fetch and cache."""
@@ -166,6 +187,15 @@ class CacheService:
         """Cache data for a specific workflow."""
         cache_key = f"workflow:{workflow_id}:{data_type}"
         self.cache_repository.set(cache_key, data, ttl or self.WORKFLOW_CACHE_TTL)
+
+    def get_api_error_message(self, project_uuid: str) -> Optional[str]:
+        """Get cached effective API error message for a project."""
+        return self.cache_repository.get(self._get_cache_key(project_uuid, "api_error_message"))
+
+    def set_api_error_message(self, project_uuid: str, message: str) -> None:
+        """Cache resolved API error message (cleared by invalidate_project_cache)."""
+        cache_key = self._get_cache_key(project_uuid, "api_error_message")
+        self.cache_repository.set(cache_key, message, self.PROJECT_DATA_TTL)
 
     def get_workflow_data(self, workflow_id: str, data_type: str) -> Optional[Any]:
         """Get cached data for a workflow."""
