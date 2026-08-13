@@ -199,9 +199,3 @@ celerybeat-schedule.*
 .cursor/*
 !.cursor/skills/
 !.cursor/skills/speckit-*/
-# Feature specs — version tracked specs only (additional specs in follow-up PRs)
-specs/*
-!specs/001-amazonmq-project-consumer/
-!specs/001-amazonmq-project-consumer/**
-!specs/001-project-guardrails-config/
-!specs/001-project-guardrails-config/**
