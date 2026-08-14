@@ -52,3 +52,9 @@ class LambdaValidationFailedError(Exception):
     def __init__(self, message: str = "The criterion could not be validated due to a technical issue"):
         self.message = message
         super().__init__(message)
+
+
+class ProjectApiTokenNameAlreadyExists(Exception):
+    def __init__(self, message: str = "A token with this name already exists for the project"):
+        self.message = message
+        super().__init__(message)
