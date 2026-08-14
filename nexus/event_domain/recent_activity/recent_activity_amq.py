@@ -31,10 +31,21 @@ ACTION_MODEL_TO_ENTITY = {
     "ContentBaseInstruction": Entity.CONTENT_BASE_INSTRUCTION,
     "ContentBaseLink": Entity.CONTENT_BASE_LINK,
     "ContentBaseText": Entity.CONTENT_BASE_TEXT,
+    "Agent": Entity.AGENT,
     "Intelligence": Entity.INTELLIGENCE,
     "LLM": Entity.LLM,
     "Project": Entity.PROJECT,
     "brain_on": Entity.PROJECT,
+}
+
+ENTITY_TO_MODULE = {
+    Entity.CONTENT_BASE: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_FILE: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_LINK: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_TEXT: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_INSTRUCTION: Module.INSTRUCTIONS,
+    Entity.CONTENT_BASE_AGENT: Module.MY_AGENTS,
+    Entity.AGENT: Module.MY_AGENTS,
 }
 
 
@@ -79,6 +90,10 @@ def _resolve_entity(action_model: Optional[Union[str, Entity]]) -> Entity:
         return Entity.PROJECT
 
 
+def _resolve_module(entity: Entity) -> Module:
+    return ENTITY_TO_MODULE.get(entity, Module.NEXUS)
+
+
 def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str], Optional[str]]:
     if not action_details:
         return None, None
@@ -98,6 +113,7 @@ _OBJECT_NAME_ATTRS_BY_MODEL = {
     "ContentBaseText": ("title", "file_name"),
     "ContentBaseInstruction": ("instruction", "suggested_category"),
     "ContentBaseAgent": ("name",),
+    "Agent": ("name",),
     "ContentBase": ("title",),
     "Intelligence": ("name",),
     "LLM": ("model",),
@@ -165,13 +181,14 @@ def notify_change(
         return
 
     try:
+        resolved_entity = _resolve_entity(entity)
         Notifier.notify_change(
             project_uuid=project_uuid,
             user_email=user_email,
             date=date,
             action=_resolve_action(action),
-            entity=_resolve_entity(entity),
-            module=Module.NEXUS,
+            entity=resolved_entity,
+            module=_resolve_module(resolved_entity),
             object_id=object_id,
             object_name=object_name,
             old_value=old_value,
