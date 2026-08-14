@@ -8,6 +8,21 @@ from django.db import transaction
 
 from nexus.projects.models import Channel, Project
 
+MAILROOM_FLOW_SIMULATOR_CHANNEL_UUID = "440099cf-200c-4d45-a8e7-4a564f4a0e8b"
+MAILROOM_FLOW_SIMULATOR_CONTACT_URN = "tel:+12065551212"
+
+
+def is_mailroom_flow_simulator_traffic(
+    contact_urn: str | None,
+    channel_uuid: str | UUID | None,
+) -> bool:
+    normalized_contact_urn = (contact_urn or "").strip()
+    normalized_channel_uuid = str(channel_uuid).strip() if channel_uuid is not None else ""
+    return (
+        normalized_contact_urn == MAILROOM_FLOW_SIMULATOR_CONTACT_URN
+        or normalized_channel_uuid == MAILROOM_FLOW_SIMULATOR_CHANNEL_UUID
+    )
+
 
 def get_default_channel_uuid(project_uuid: str) -> str | None:
     row = Channel.objects.filter(project_id=project_uuid, is_default_for_preview=True).only("uuid").first()
