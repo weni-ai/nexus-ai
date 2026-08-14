@@ -19,6 +19,12 @@ DEFAULT_PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION = (
 CORE_IDENTITY_MARKERS = ("<core_identity>", "## Core Identity")
 
 
+def is_gpt_foundation_model(model: str | None) -> bool:
+    if not model:
+        return False
+    return "gpt" in model.strip().lower()
+
+
 def get_progressive_feedback_orchestration_instruction() -> str:
     return getattr(settings, "PROGRESSIVE_FEEDBACK_ORCHESTRATION_INSTRUCTION", "") or ""
 
@@ -30,10 +36,12 @@ def should_inject_progressive_feedback_instruction(
     channel_type: str = "",
     preview: bool = False,
     preview_websocket: bool = False,
+    manager_foundation_model: str = "",
 ) -> bool:
     return (
         rationale_switch
         and not turn_off_rationale
+        and is_gpt_foundation_model(manager_foundation_model)
         and supports_progressive_feedback(
             contact_urn,
             channel_type,
@@ -78,6 +86,7 @@ def log_progressive_feedback_orchestration_decision(
     preview: bool = False,
     preview_websocket: bool = False,
     instruction_preview: str | None = None,
+    manager_foundation_model: str = "",
 ) -> None:
     channel_from_urn = channel_hint_from_contact_urn(contact_urn) if contact_urn else None
     if injected:
@@ -100,6 +109,17 @@ def log_progressive_feedback_orchestration_decision(
             contact_urn or None,
             rationale_switch,
             turn_off_rationale,
+        )
+        return
+
+    if not is_gpt_foundation_model(manager_foundation_model):
+        logger.info(
+            "[ProgressiveFeedback] Orchestration instruction skipped project_id=%s channel_from_urn=%s "
+            "contact_urn=%s reason=non_gpt_manager manager_foundation_model=%r",
+            project_id,
+            channel_from_urn,
+            contact_urn or None,
+            manager_foundation_model or None,
         )
         return
 

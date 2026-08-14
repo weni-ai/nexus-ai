@@ -8703,7 +8703,7 @@ name = "weni-commons"
 version = "1.4.2a1"
 description = "Weni's common utilities for Python backends"
 optional = false
-python-versions = ">=3.8,<4.0"
+python-versions = "<4.0,>=3.8"
 groups = ["main"]
 files = [
     {file = "weni_commons-1.4.2a1-py3-none-any.whl", hash = "sha256:b2f27e0f3fe87ace6272049397e1bed14363d0a00e38928da12f0eb8fdf8772e"},
