@@ -25,7 +25,6 @@ def _build_project_dto(body: dict) -> ProjectCreationDTO:
         authorizations=body.get("authorizations"),
         indexer_database=body.get("indexer_database") or Project.BEDROCK,
         inline_agent_switch=body.get("inline_agent_switch", True),
-        is_live_desk_copilot=bool(body.get("is_live_desk_copilot", False)),
     )
 
 

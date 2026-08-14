@@ -1,4 +1,3 @@
-import os
 import signal
 
 from weni.eda.django.eda_app.management.commands.edaconsume import Command as WeniEDACommand
@@ -11,7 +10,7 @@ AMQ_CONSUMERS_HANDLE = "nexus.event_driven.handle_amq.handle_amq_consumers"
 def handle_sigterm(*args):
     """Handle SIGTERM signal - exit gracefully."""
     print("[edaconsume_amq] - Received SIGTERM signal, exiting gracefully")
-    os._exit(0)
+    raise SystemExit(0)
 
 
 class Command(WeniEDACommand):
