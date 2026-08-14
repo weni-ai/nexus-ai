@@ -11,7 +11,7 @@ from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.retrieve import get_integrated_feature
 
 
-def update_message(update_project_dto: UpdateProjectDTO, old_brain_on: bool):  # pragma: no cover
+def update_message(update_project_dto: UpdateProjectDTO, old_brain_on: bool):
     publisher = RabbitMQPublisher()
 
     action = "UPDATE"
