@@ -28,8 +28,7 @@ class Command(WeniEDACommand):
             dest="group",
             default="eda",
             help=(
-                "Consumer group label, kept for parity with the entrypoint "
-                "aliases. Currently informational only."
+                "Consumer group label, kept for parity with the entrypoint " "aliases. Currently informational only."
             ),
         )
 

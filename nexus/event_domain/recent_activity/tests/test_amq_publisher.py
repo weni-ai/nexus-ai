@@ -72,7 +72,75 @@ class RecentActivityAmqTestCase(TestCase):
 
         kwargs = mock_notifier.call_args.kwargs
         self.assertEqual(kwargs["entity"], Entity.CONTENT_BASE)
-        self.assertEqual(kwargs["module"], Module.NEXUS)
+        self.assertEqual(kwargs["module"], Module.KNOWLEDGE_BASE)
+        mock_clear_connection.assert_called_once()
+
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAConnection.clear_connection")
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
+    def test_notify_change_maps_instruction_to_instructions_module(self, mock_notifier, mock_clear_connection):
+        notify_change(
+            project_uuid=str(self.project.uuid),
+            user_email=self.project.created_by.email,
+            date=pendulum.now("UTC"),
+            action="C",
+            entity="ContentBaseInstruction",
+            object_name="Always greet the customer",
+        )
+
+        kwargs = mock_notifier.call_args.kwargs
+        self.assertEqual(kwargs["entity"], Entity.CONTENT_BASE_INSTRUCTION)
+        self.assertEqual(kwargs["module"], Module.INSTRUCTIONS)
+        mock_clear_connection.assert_called_once()
+
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAConnection.clear_connection")
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
+    def test_notify_change_maps_agent_to_my_agents_module(self, mock_notifier, mock_clear_connection):
+        notify_change(
+            project_uuid=str(self.project.uuid),
+            user_email=self.project.created_by.email,
+            date=pendulum.now("UTC"),
+            action="C",
+            entity="ContentBaseAgent",
+            object_name="Product Concierge",
+        )
+
+        kwargs = mock_notifier.call_args.kwargs
+        self.assertEqual(kwargs["entity"], Entity.CONTENT_BASE_AGENT)
+        self.assertEqual(kwargs["module"], Module.MY_AGENTS)
+        mock_clear_connection.assert_called_once()
+
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAConnection.clear_connection")
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
+    def test_notify_change_maps_inline_agent_to_my_agents_module(self, mock_notifier, mock_clear_connection):
+        notify_change(
+            project_uuid=str(self.project.uuid),
+            user_email=self.project.created_by.email,
+            date=pendulum.now("UTC"),
+            action="C",
+            entity="Agent",
+            object_name="Product Concierge",
+        )
+
+        kwargs = mock_notifier.call_args.kwargs
+        self.assertEqual(kwargs["entity"], Entity.AGENT)
+        self.assertEqual(kwargs["module"], Module.MY_AGENTS)
+        mock_clear_connection.assert_called_once()
+
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.EDAConnection.clear_connection")
+    @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
+    def test_notify_change_maps_link_to_knowledge_base_module(self, mock_notifier, mock_clear_connection):
+        notify_change(
+            project_uuid=str(self.project.uuid),
+            user_email=self.project.created_by.email,
+            date=pendulum.now("UTC"),
+            action="ADD",
+            entity="ContentBaseLink",
+            object_name="https://test.com",
+        )
+
+        kwargs = mock_notifier.call_args.kwargs
+        self.assertEqual(kwargs["entity"], Entity.CONTENT_BASE_LINK)
+        self.assertEqual(kwargs["module"], Module.KNOWLEDGE_BASE)
         mock_clear_connection.assert_called_once()
 
     @patch("nexus.event_domain.recent_activity.recent_activity_amq.Notifier.notify_change")
@@ -175,3 +243,7 @@ class RecentActivityAmqTestCase(TestCase):
         self.assertEqual(Entity.LLM.value, "LLM")
         self.assertEqual(Entity.PROJECT.value, "PROJECT")
         self.assertEqual(Entity.FLOW.value, "FLOW")
+        self.assertEqual(Entity.AGENT.value, "AGENT")
+        self.assertEqual(Module.KNOWLEDGE_BASE.value, "KNOWLEDGE_BASE")
+        self.assertEqual(Module.INSTRUCTIONS.value, "INSTRUCTIONS")
+        self.assertEqual(Module.MY_AGENTS.value, "MY_AGENTS")

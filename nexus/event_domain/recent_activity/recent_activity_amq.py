@@ -31,10 +31,21 @@ ACTION_MODEL_TO_ENTITY = {
     "ContentBaseInstruction": Entity.CONTENT_BASE_INSTRUCTION,
     "ContentBaseLink": Entity.CONTENT_BASE_LINK,
     "ContentBaseText": Entity.CONTENT_BASE_TEXT,
+    "Agent": Entity.AGENT,
     "Intelligence": Entity.INTELLIGENCE,
     "LLM": Entity.LLM,
     "Project": Entity.PROJECT,
     "brain_on": Entity.PROJECT,
+}
+
+ENTITY_TO_MODULE = {
+    Entity.CONTENT_BASE: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_FILE: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_LINK: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_TEXT: Module.KNOWLEDGE_BASE,
+    Entity.CONTENT_BASE_INSTRUCTION: Module.INSTRUCTIONS,
+    Entity.CONTENT_BASE_AGENT: Module.MY_AGENTS,
+    Entity.AGENT: Module.MY_AGENTS,
 }
 
 
@@ -79,6 +90,10 @@ def _resolve_entity(action_model: Optional[Union[str, Entity]]) -> Entity:
         return Entity.PROJECT
 
 
+def _resolve_module(entity: Entity) -> Module:
+    return ENTITY_TO_MODULE.get(entity, Module.NEXUS)
+
+
 def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str], Optional[str]]:
     if not action_details:
         return None, None
@@ -98,6 +113,7 @@ _OBJECT_NAME_ATTRS_BY_MODEL = {
     "ContentBaseText": ("title", "file_name"),
     "ContentBaseInstruction": ("instruction", "suggested_category"),
     "ContentBaseAgent": ("name",),
+    "Agent": ("name",),
     "ContentBase": ("title",),
     "Intelligence": ("name",),
     "LLM": ("model",),
@@ -116,7 +132,8 @@ def _object_name_from_instance(instance) -> Optional[str]:
             value = getattr(instance, attr, None)
             if callable(value):
                 value = value()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Error reading attr %r from %r: %s", attr, instance, exc)
             continue
         if value is None:
             continue
@@ -165,13 +182,14 @@ def notify_change(
         return
 
     try:
+        resolved_entity = _resolve_entity(entity)
         Notifier.notify_change(
             project_uuid=project_uuid,
             user_email=user_email,
             date=date,
             action=_resolve_action(action),
-            entity=_resolve_entity(entity),
-            module=Module.NEXUS,
+            entity=resolved_entity,
+            module=_resolve_module(resolved_entity),
             object_id=object_id,
             object_name=object_name,
             old_value=old_value,
@@ -227,7 +245,7 @@ def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
         )
 
 
-def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool) -> None:
+def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool, old_brain_on: bool) -> None:
     notify_change(
         project_uuid=project_uuid,
         user_email=user,
@@ -236,6 +254,6 @@ def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool)
         entity="brain_on",
         object_id=project_uuid,
         object_name="brain_on",
-        old_value=str(not brain_on),
+        old_value=str(old_brain_on),
         new_value=str(brain_on),
     )
