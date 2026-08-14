@@ -19,7 +19,10 @@ from inline_agents.backends.openai.legacy_formatter_pipeline import is_new_pipel
 from inline_agents.backends.openai.message_context import extract_message_context
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
-from nexus.projects.channel_ops import channel_matches_default_preview
+from nexus.projects.channel_ops import (
+    channel_matches_default_preview,
+    is_mailroom_flow_simulator_traffic,
+)
 from nexus.projects.simulation_model_cache import (
     simulation_manager_model_redis_key,
     simulation_manager_pipeline_version_redis_key,
@@ -53,8 +56,10 @@ logger = logging.getLogger(__name__)
 
 
 def effective_simulation_channel(message: Dict, simulation_channel: bool = False) -> bool:
-    """Whether to treat this message as default preview-channel traffic for conversation SQS gating."""
+    """Whether to treat this message as simulation traffic for conversation SQS gating."""
     if bool(simulation_channel):
+        return True
+    if is_mailroom_flow_simulator_traffic(message.get("contact_urn"), message.get("channel_uuid")):
         return True
     project_uuid = message.get("project_uuid") or ""
     try:
