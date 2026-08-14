@@ -98,10 +98,16 @@ def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str],
     if not action_details:
         return None, None
 
-    if len(action_details) == 1:
-        change = next(iter(action_details.values()))
-        if isinstance(change, dict) and "old" in change and "new" in change:
-            return str(change["old"]), str(change["new"])
+    if len(action_details) != 1:
+        logger.warning(
+            "action_details has %d keys; cannot extract old/new values cleanly",
+            len(action_details),
+        )
+        return None, json.dumps(action_details)
+
+    change = next(iter(action_details.values()))
+    if isinstance(change, dict) and "old" in change and "new" in change:
+        return str(change["old"]), str(change["new"])
 
     return None, json.dumps(action_details)
 
