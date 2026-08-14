@@ -8700,14 +8700,14 @@ files = [
 
 [[package]]
 name = "weni-commons"
-version = "1.4.2a1"
+version = "1.4.2a6"
 description = "Weni's common utilities for Python backends"
 optional = false
 python-versions = "<4.0,>=3.8"
 groups = ["main"]
 files = [
-    {file = "weni_commons-1.4.2a1-py3-none-any.whl", hash = "sha256:b2f27e0f3fe87ace6272049397e1bed14363d0a00e38928da12f0eb8fdf8772e"},
-    {file = "weni_commons-1.4.2a1.tar.gz", hash = "sha256:885d62ba642e9a2a1942139d793f0879e27f06c3b1085bbf0e608214f401ad8a"},
+    {file = "weni_commons-1.4.2a6-py3-none-any.whl", hash = "sha256:f451174052b88c5d3f685417122d89350825e9230c12fbfb669a1ec45b51766e"},
+    {file = "weni_commons-1.4.2a6.tar.gz", hash = "sha256:667bd134967acbf40d3e4b2858424ddc29fbcc95d1ce5bd90675c377f966f234"},
 ]
 
 [package.dependencies]
@@ -8719,7 +8719,7 @@ djangorestframework = ">=3.12.0,<4.0"
 mozilla-django-oidc = ">=2.0.0,<5.0"
 pyjwt = ">=2.8.0,<3.0"
 requests = ">=2.25.0"
-weni-eda = "0.3.0"
+weni-eda = ">=0.1.2a0"
 weni-feature-flags = ">=2.2.0,<3.0.0"
 
 [[package]]
@@ -9407,4 +9407,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "201d9071626c3177e1d877d5a93cabf91987f629d002f7982a55e3794f635bc8"
+content-hash = "93903bf7dc1072420fb3a45d3975ee00cfb1c276f9249b11ed21c0a5ebd59208"
