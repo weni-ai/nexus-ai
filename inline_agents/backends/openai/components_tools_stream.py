@@ -26,13 +26,13 @@ def _clean_text(value: Optional[str]) -> Optional[str]:
 
 
 class QuickRepliesArgs(BaseModel):
-    """Arguments for quick replies component (2-3 options). No text field — agent writes text separately."""
+    """Arguments for quick replies component (1-3 options). No text field — agent writes text separately."""
 
     quick_replies: List[str] = Field(
         ...,
-        min_length=2,
+        min_length=1,
         max_length=3,
-        description="List of 2-3 quick reply options, maximum 20 characters each",
+        description="List of 1-3 quick reply options, maximum 20 characters each",
     )
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
