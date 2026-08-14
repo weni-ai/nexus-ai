@@ -7,7 +7,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIn
 from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase
 from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO, UpdateProjectDTO
 from nexus.usecases.projects.tests.project_factory import IntegratedFeatureFactory, ProjectFactory
-from nexus.usecases.projects.update import ProjectUpdateUseCase, UpdateIntegratedFeatureUseCase
+from nexus.usecases.projects.update import ProjectUpdateUseCase, UpdateIntegratedFeatureUseCase, update_message
 
 
 class UpdateProjectTestCase(TestCase):
@@ -26,6 +26,22 @@ class UpdateProjectTestCase(TestCase):
         usecase = ProjectUpdateUseCase()
         updated_project = usecase.update_project(dto)
         self.assertEqual(updated_project.brain_on, brain_on)
+        mock_update_message.assert_called_once_with(dto, old_brain_on=False)
+
+    @patch("nexus.usecases.projects.update.publish_brain_status_to_amq")
+    @patch("nexus.usecases.projects.update.RabbitMQPublisher")
+    def test_update_message_calls_amq_with_old_brain_on(self, mock_rabbit, mock_amq):
+        dto = UpdateProjectDTO(uuid="proj-uuid", user_email="u@e.com", brain_on=True)
+
+        update_message(dto, old_brain_on=False)
+
+        mock_rabbit.return_value.send_message.assert_called_once()
+        mock_amq.assert_called_once_with(
+            user="u@e.com",
+            project_uuid="proj-uuid",
+            brain_on=True,
+            old_brain_on=False,
+        )
 
 
 class UpdateIntegratedFeatureTestCase(TestCase):
