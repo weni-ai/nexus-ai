@@ -116,11 +116,20 @@ def _publish_assignment_change_history(
             )
             return
 
+        action_by_type = {"C": "CREATE", "D": "DELETE"}
+        action = action_by_type.get(action_type)
+        if action is None:
+            logger.warning(
+                "Unexpected action_type %r for agent assignment change history",
+                action_type,
+            )
+            return
+
         notify_change(
             project_uuid=str(project.uuid),
             user_email=created_by.email,
             date=pendulum.now("UTC"),
-            action="CREATE" if action_type == "C" else "DELETE",
+            action=action,
             entity="Agent",
             object_id=str(agent.uuid),
             object_name=agent.name,

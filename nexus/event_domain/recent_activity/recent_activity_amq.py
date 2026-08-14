@@ -132,7 +132,8 @@ def _object_name_from_instance(instance) -> Optional[str]:
             value = getattr(instance, attr, None)
             if callable(value):
                 value = value()
-        except Exception:
+        except Exception as exc:
+            logger.debug("Error reading attr %r from %r: %s", attr, instance, exc)
             continue
         if value is None:
             continue
@@ -244,7 +245,7 @@ def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
         )
 
 
-def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool) -> None:
+def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool, old_brain_on: bool) -> None:
     notify_change(
         project_uuid=project_uuid,
         user_email=user,
@@ -253,6 +254,6 @@ def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool)
         entity="brain_on",
         object_id=project_uuid,
         object_name="brain_on",
-        old_value=str(not brain_on),
+        old_value=str(old_brain_on),
         new_value=str(brain_on),
     )
