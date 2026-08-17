@@ -100,7 +100,7 @@ class BedrockGuardrailPoolService:
         if region.startswith("eu"):
             return "eu.guardrail.v1:0"
         if region.startswith("ap"):
-            return "ap.guardrail.v1:0"
+            return "apac.guardrail.v1:0"
         if region.startswith("ca"):
             return "ca.guardrail.v1:0"
         return "us.guardrail.v1:0"
