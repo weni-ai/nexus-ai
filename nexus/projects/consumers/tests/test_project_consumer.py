@@ -3,7 +3,7 @@ from unittest import mock
 from django.test import SimpleTestCase
 from weni.eda.messages import Message as WeniMessage
 
-from nexus.projects.consumers.project_consumer import OldProjectConsumer, WeniEDAProjectConsumer
+from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer
 
 
 class DummyChannel:
@@ -23,44 +23,6 @@ class DummyAmqpMessage:
         self.body = body
         self.channel = channel or DummyChannel()
         self.delivery_tag = 1
-
-
-class OldProjectConsumerTests(SimpleTestCase):
-    def setUp(self):
-        self.message = DummyAmqpMessage(body=b"{}")
-        self.consumer = OldProjectConsumer()
-
-    @mock.patch(
-        "nexus.projects.consumers.project_consumer.JSONParser.parse",
-        return_value={
-            "uuid": "p1",
-            "name": "Test Project",
-            "organization_uuid": "org-1",
-            "user_email": "user@test.com",
-        },
-    )
-    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
-    def test_old_project_consumer_triggers_creation(self, mock_usecase_cls, _):
-        self.consumer.consume(self.message)
-
-        mock_usecase_cls.return_value.create_project.assert_called_once()
-        self.assertEqual(self.message.channel.acked, [1])
-
-    @mock.patch(
-        "nexus.projects.consumers.project_consumer.JSONParser.parse",
-        return_value={"uuid": "p1"},
-    )
-    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
-    @mock.patch("nexus.projects.consumers.project_consumer.capture_exception")
-    def test_old_project_consumer_rejects_on_error(
-        self, mock_capture, mock_usecase_cls, _
-    ):
-        mock_usecase_cls.return_value.create_project.side_effect = RuntimeError("boom")
-
-        self.consumer.consume(self.message)
-
-        mock_capture.assert_called_once()
-        self.assertEqual(self.message.channel.rejected, [(1, False)])
 
 
 class WeniEDAProjectConsumerTests(SimpleTestCase):
