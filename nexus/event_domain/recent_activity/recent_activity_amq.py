@@ -94,21 +94,89 @@ def _resolve_module(entity: Entity) -> Module:
     return ENTITY_TO_MODULE.get(entity, Module.NEXUS)
 
 
+_ACTION_DETAILS_SKIP_KEYS = frozenset(
+    {
+        "modified_at",
+        "modified_by",
+        "created_at",
+        "created_by",
+        "last_updated_at",
+        "end_at",
+        "uuid",
+        "id",
+        "pk",
+    }
+)
+
+_ACTION_DETAILS_PREFERRED_KEYS = (
+    "text",
+    "instruction",
+    "link",
+    "name",
+    "title",
+    "file_name",
+    "created_file_name",
+    "goal",
+    "role",
+    "personality",
+    "brain_on",
+)
+
+
+def _stringify_change_value(value) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text != "" else None
+
+
+def _pair_from_change(change) -> Optional[Tuple[Optional[str], Optional[str]]]:
+    if isinstance(change, dict) and "old" in change and "new" in change:
+        return _stringify_change_value(change["old"]), _stringify_change_value(change["new"])
+    return None
+
+
 def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str], Optional[str]]:
     if not action_details:
         return None, None
 
-    if len(action_details) != 1:
+    if (
+        "old" in action_details
+        and "new" in action_details
+        and not any(isinstance(v, dict) and "old" in v and "new" in v for v in action_details.values())
+    ):
+        return _stringify_change_value(action_details["old"]), _stringify_change_value(action_details["new"])
+
+    nested_changes = {
+        key: change
+        for key, change in action_details.items()
+        if isinstance(change, dict) and "old" in change and "new" in change
+    }
+
+    if not nested_changes:
         logger.warning(
-            "action_details has %d keys; cannot extract old/new values cleanly",
-            len(action_details),
+            "action_details has unexpected shape; falling back to json dump (keys=%s)",
+            list(action_details.keys()),
         )
         return None, json.dumps(action_details)
 
-    change = next(iter(action_details.values()))
-    if isinstance(change, dict) and "old" in change and "new" in change:
-        return str(change["old"]), str(change["new"])
+    if len(nested_changes) == 1:
+        return _pair_from_change(next(iter(nested_changes.values())))
 
+    for preferred in _ACTION_DETAILS_PREFERRED_KEYS:
+        if preferred in nested_changes:
+            return _pair_from_change(nested_changes[preferred])
+
+    content_changes = {k: v for k, v in nested_changes.items() if k not in _ACTION_DETAILS_SKIP_KEYS}
+    if len(content_changes) == 1:
+        return _pair_from_change(next(iter(content_changes.values())))
+    if content_changes:
+        return _pair_from_change(next(iter(content_changes.values())))
+
+    logger.warning(
+        "action_details has %d keys with only metadata changes; cannot extract content old/new",
+        len(action_details),
+    )
     return None, json.dumps(action_details)
 
 
