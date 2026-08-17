@@ -345,6 +345,14 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     content_base=instance,
                 )
 
+                event_manager.notify(
+                    event="contentbase_agent_activity",
+                    content_base_agent=created_agent,
+                    action_type="C",
+                    action_details={"old": "", "new": created_agent.name or ""},
+                    user=self.context.get("request").user,
+                )
+
                 # Fire cache invalidation event for agent creation
 
                 notify_async(
