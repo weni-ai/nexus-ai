@@ -156,6 +156,65 @@ class BedrockGuardrailPoolServiceTestCase(TestCase):
         GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={"en-us": "Blocked.", "pt-br": "Blocked.", "es": "Blocked."},
         GUARDRAILS_BEDROCK_CONTENT_FILTERS=[],
         GUARDRAILS_BEDROCK_PII_ENTITIES=[],
+        GUARDRAILS_BEDROCK_TOPIC_TIER="STANDARD",
+        GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER="",
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    def test_build_create_guardrail_payload_derives_us_profile_for_standard(self):
+        payload = BedrockGuardrailPoolService.build_create_guardrail_payload(
+            combination_key="politics",
+            blocked_slugs=["politics"],
+        )
+        self.assertEqual(
+            payload["crossRegionConfig"]["guardrailProfileIdentifier"],
+            "us.guardrail.v1:0",
+        )
+
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={"en-us": "Blocked.", "pt-br": "Blocked.", "es": "Blocked."},
+        GUARDRAILS_BEDROCK_CONTENT_FILTERS=[],
+        GUARDRAILS_BEDROCK_PII_ENTITIES=[],
+        GUARDRAILS_BEDROCK_TOPIC_TIER="STANDARD",
+        GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER="",
+        AWS_BEDROCK_REGION_NAME="ca-central-1",
+    )
+    def test_build_create_guardrail_payload_derives_ca_profile_for_standard(self):
+        payload = BedrockGuardrailPoolService.build_create_guardrail_payload(
+            combination_key="politics",
+            blocked_slugs=["politics"],
+        )
+        self.assertEqual(
+            payload["crossRegionConfig"]["guardrailProfileIdentifier"],
+            "ca.guardrail.v1:0",
+        )
+
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={"en-us": "Blocked.", "pt-br": "Blocked.", "es": "Blocked."},
+        GUARDRAILS_BEDROCK_CONTENT_FILTERS=[],
+        GUARDRAILS_BEDROCK_PII_ENTITIES=[],
+        GUARDRAILS_BEDROCK_TOPIC_TIER="STANDARD",
+        GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER="",
+        AWS_BEDROCK_REGION_NAME="sa-east-1",
+    )
+    def test_build_create_guardrail_payload_warns_and_defaults_unknown_region(self):
+        with self.assertLogs(
+            "nexus.usecases.guardrails.bedrock_guardrail_pool",
+            level="WARNING",
+        ) as logs:
+            payload = BedrockGuardrailPoolService.build_create_guardrail_payload(
+                combination_key="politics",
+                blocked_slugs=["politics"],
+            )
+        self.assertEqual(
+            payload["crossRegionConfig"]["guardrailProfileIdentifier"],
+            "us.guardrail.v1:0",
+        )
+        self.assertTrue(any("sa-east-1" in message for message in logs.output))
+
+    @override_settings(
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={"en-us": "Blocked.", "pt-br": "Blocked.", "es": "Blocked."},
+        GUARDRAILS_BEDROCK_CONTENT_FILTERS=[],
+        GUARDRAILS_BEDROCK_PII_ENTITIES=[],
     )
     def test_build_create_guardrail_payload_accepts_name_suffix(self):
         payload = BedrockGuardrailPoolService.build_create_guardrail_payload(

@@ -103,6 +103,13 @@ class BedrockGuardrailPoolService:
             return "apac.guardrail.v1:0"
         if region.startswith("ca"):
             return "ca.guardrail.v1:0"
+        if region.startswith("us"):
+            return "us.guardrail.v1:0"
+
+        logger.warning(
+            "Unknown AWS_BEDROCK_REGION_NAME=%r; defaulting to us.guardrail.v1:0",
+            region,
+        )
         return "us.guardrail.v1:0"
 
     @classmethod
