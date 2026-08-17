@@ -224,14 +224,6 @@ class UpdateContentBaseFileUseCase:
         content_base_file.modified_at = pendulum.now()
         content_base_file.modified_by = user
         content_base_file.save()
-
-        self.event_manager_notify(
-            event="contentbase_file_activity",
-            content_base_file=content_base_file,
-            action_type="C",
-            user=user,
-        )
-
         return content_base_file
 
     def update_inline_content_base_file(
@@ -246,14 +238,6 @@ class UpdateContentBaseFileUseCase:
         content_base_file.modified_at = pendulum.now()
         content_base_file.modified_by = user
         content_base_file.save()
-
-        self.event_manager_notify(
-            event="contentbase_file_activity",
-            content_base_file=content_base_file,
-            action_type="C",
-            user=user,
-        )
-
         return content_base_file
 
 
