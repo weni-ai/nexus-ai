@@ -116,25 +116,29 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
-class AgentModel:
-    def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
-        if "litellm" in model:
-            cleaned_model = model.replace("litellm/", "")
-            kwargs = {
-                "model": cleaned_model,
-            }
-
-            if "vertex" in model:
-                return LitellmModel(**kwargs)
-
-            if user_model_credentials.get("api_key"):
-                kwargs["api_key"] = user_model_credentials.get("api_key")
-            if user_model_credentials.get("api_base"):
-                kwargs["base_url"] = user_model_credentials.get("api_base")
-
-            return LitellmModel(**kwargs)
+def resolve_agent_model(model: str, user_model_credentials: Dict[str, Any] | None) -> LitellmModel | str:
+    """Return LitellmModel when model is litellm-prefixed; otherwise return the model string unchanged."""
+    if not model or "litellm" not in model:
         return model
 
+    credentials = user_model_credentials or {}
+    cleaned_model = model.replace("litellm/", "")
+    kwargs: Dict[str, Any] = {"model": cleaned_model}
+
+    if "vertex" in model:
+        return LitellmModel(**kwargs)
+
+    api_key = credentials.get("api_key")
+    if api_key:
+        kwargs["api_key"] = api_key
+    api_base = credentials.get("api_base")
+    if api_base:
+        kwargs["base_url"] = api_base
+
+    return LitellmModel(**kwargs)
+
+
+class AgentModel:
     def custom_tool_handler(
         self, context: RunContextWrapper[Any], tool_results: List[FunctionToolResult]
     ) -> ToolsToFinalOutputResult:
@@ -175,7 +179,7 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
         else:
             model_name = foundation_model
 
-        model = self.get_model(model_name, user_model_credentials)
+        model = resolve_agent_model(model_name, user_model_credentials)
         model_settings_kw = dict(model_settings)
         if isinstance(model, LitellmModel):
             model_settings_kw["include_usage"] = True
@@ -215,7 +219,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
     ):
         tools.extend(self.function_tools())
 
-        model = self.get_model(model, user_model_credentials)
+        model = resolve_agent_model(model, user_model_credentials)
 
         model_settings_kwargs: Dict[str, Any] = {
             "parallel_tool_calls": parallel_tool_calls,
