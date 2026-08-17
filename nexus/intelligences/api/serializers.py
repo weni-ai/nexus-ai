@@ -309,6 +309,10 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 
         # Handle agent updates
         if agent_data:
+            request = self.context.get("request")
+            user = getattr(request, "user", None) if request else None
+            user = user or getattr(instance, "created_by", None)
+
             try:
                 agent = instance.agent
                 old_agent_data = model_to_dict(agent)
@@ -320,14 +324,15 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 agent.save()
                 new_agent_data = model_to_dict(agent)
 
-                event_manager.notify(
-                    event="contentbase_agent_activity",
-                    content_base_agent=agent,
-                    action_type="U",
-                    old_agent_data=old_agent_data,
-                    new_agent_data=new_agent_data,
-                    user=self.context.get("request").user,
-                )
+                if user is not None:
+                    event_manager.notify(
+                        event="contentbase_agent_activity",
+                        content_base_agent=agent,
+                        action_type="U",
+                        old_agent_data=old_agent_data,
+                        new_agent_data=new_agent_data,
+                        user=user,
+                    )
 
                 # Fire cache invalidation event
                 notify_async(
@@ -344,6 +349,15 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     goal=agent_data.get("goal"),
                     content_base=instance,
                 )
+
+                if user is not None:
+                    event_manager.notify(
+                        event="contentbase_agent_activity",
+                        content_base_agent=created_agent,
+                        action_type="C",
+                        action_details={"old": "", "new": created_agent.name or ""},
+                        user=user,
+                    )
 
                 # Fire cache invalidation event for agent creation
 

@@ -185,11 +185,6 @@ class CreateContentBaseLinkUseCase:
         content_base_link = ContentBaseLink.objects.create(
             link=content_base_link.link, content_base=content_base, created_by=user
         )
-
-        self.event_manager_notify(
-            event="contentbase_link_activity", content_base_link=content_base_link, action_type="C", user=user
-        )
-
         return content_base_link
 
 
