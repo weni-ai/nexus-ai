@@ -31,19 +31,36 @@ class WeniEDAProjectConsumer(WeniEDAConsumer):
     """Consumer responsible for handling project creation events from Amazon MQ."""
 
     def consume(self, message: WeniMessage):
-        logger.debug(
-            "[WeniEDAProjectConsumer] Consuming a message",
-            extra={"body_len": len(message.body) if message.body else None},
+        body_len = len(message.body) if message.body else 0
+        logger.info(
+            "[WeniEDAProjectConsumer] Received project creation message body_len=%s",
+            body_len,
         )
         try:
             body = JSONParser.parse(message.body)
             project_dto = _build_project_dto(body)
+            logger.info(
+                "[WeniEDAProjectConsumer] Processing project creation uuid=%s name=%s org=%s user=%s",
+                project_dto.uuid,
+                project_dto.name,
+                project_dto.org_uuid,
+                body.get("user_email"),
+            )
 
             project_creation = ProjectsUseCase()
             project_creation.create_project(project_dto=project_dto, user_email=body.get("user_email"))
 
             self.ack()
-            logger.info("[WeniEDAProjectConsumer] Project created", extra={"uuid": project_dto.uuid})
+            logger.info(
+                "[WeniEDAProjectConsumer] Project created uuid=%s name=%s",
+                project_dto.uuid,
+                project_dto.name,
+            )
         except Exception as exception:
+            logger.error(
+                "[WeniEDAProjectConsumer] Failed to create project: %s",
+                exception,
+                exc_info=True,
+            )
             capture_exception(exception)
             raise
