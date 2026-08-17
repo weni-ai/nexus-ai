@@ -8,6 +8,7 @@ from nexus.event_domain.recent_activity.create import create_recent_activity
 from nexus.event_domain.recent_activity.publishers_dto import RecentActivitiesDTO
 from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
 from nexus.event_domain.recent_activity.recent_activity_amq import (
+    _values_from_details,
     notify_change,
     publish_external_recent_activity_to_amq,
     publish_recent_activity_to_amq,
@@ -15,6 +16,34 @@ from nexus.event_domain.recent_activity.recent_activity_amq import (
 from nexus.logs.models import RecentActivities
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseLinkFactory, IntelligenceFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+
+
+class ValuesFromDetailsTestCase(TestCase):
+    def test_flat_old_new_shape(self):
+        old_value, new_value = _values_from_details({"old": "", "new": "template"})
+        self.assertIsNone(old_value)
+        self.assertEqual(new_value, "template")
+
+    def test_single_nested_field(self):
+        old_value, new_value = _values_from_details({"name": {"old": "a", "new": "b"}})
+        self.assertEqual(old_value, "a")
+        self.assertEqual(new_value, "b")
+
+    def test_multi_field_prefers_text_over_metadata(self):
+        old_value, new_value = _values_from_details(
+            {
+                "modified_by": {"old": None, "new": 23},
+                "modified_at": {"old": None, "new": "2026-08-14 17:40:17.280556+00:00"},
+                "text": {"old": "olaaaaaaaaaaaaa", "new": "olaaaaaaaaaaaaahmmmmmm"},
+                "last_updated_at": {"old": None, "new": "2026-08-14 17:40:17.280556+00:00"},
+            }
+        )
+        self.assertEqual(old_value, "olaaaaaaaaaaaaa")
+        self.assertEqual(new_value, "olaaaaaaaaaaaaahmmmmmm")
+
+    def test_empty_details(self):
+        self.assertEqual(_values_from_details(None), (None, None))
+        self.assertEqual(_values_from_details({}), (None, None))
 
 
 class RecentActivityAmqTestCase(TestCase):
