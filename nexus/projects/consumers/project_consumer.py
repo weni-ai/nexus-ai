@@ -1,3 +1,4 @@
+import json
 import logging
 
 from sentry_sdk import capture_exception
@@ -31,13 +32,17 @@ class WeniEDAProjectConsumer(WeniEDAConsumer):
     """Consumer responsible for handling project creation events from Amazon MQ."""
 
     def consume(self, message: WeniMessage):
-        body_len = len(message.body) if message.body else 0
+        raw_body = message.body.decode("utf-8") if message.body else ""
         logger.info(
-            "[WeniEDAProjectConsumer] Received project creation message body_len=%s",
-            body_len,
+            "[WeniEDAProjectConsumer] Received project creation message body=%s",
+            raw_body,
         )
         try:
             body = JSONParser.parse(message.body)
+            logger.info(
+                "[WeniEDAProjectConsumer] Parsed project creation payload=%s",
+                json.dumps(body, default=str),
+            )
             project_dto = _build_project_dto(body)
             logger.info(
                 "[WeniEDAProjectConsumer] Processing project creation uuid=%s name=%s org=%s user=%s",
