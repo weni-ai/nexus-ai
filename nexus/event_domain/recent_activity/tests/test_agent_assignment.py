@@ -26,7 +26,7 @@ class AssignAgentsChangeHistoryTestCase(TestCase):
         self.agent.versions.create(skills=[], display_skills=[])
         self.usecase = AssignAgentsUsecase()
 
-    @patch("nexus.usecases.inline_agents.assign.notify_change")
+    @patch("nexus.usecases.inline_agents.assign.schedule_notify_change")
     @patch("nexus.event_domain.recent_activity.create.publish_recent_activity_to_amq")
     def test_assign_publishes_create_recent_activity(self, mock_publish_amq, mock_notify_change):
         created, _ = self.usecase.assign_agent(str(self.agent.uuid), str(self.project.uuid), user=self.user)
@@ -42,7 +42,7 @@ class AssignAgentsChangeHistoryTestCase(TestCase):
         self.assertEqual(kwargs["instance"], self.agent)
         mock_notify_change.assert_not_called()
 
-    @patch("nexus.usecases.inline_agents.assign.notify_change")
+    @patch("nexus.usecases.inline_agents.assign.schedule_notify_change")
     @patch("nexus.event_domain.recent_activity.create.publish_recent_activity_to_amq")
     def test_unassign_publishes_delete_recent_activity(self, mock_publish_amq, mock_notify_change):
         self.usecase.assign_agent(str(self.agent.uuid), str(self.project.uuid), user=self.user)
@@ -57,7 +57,7 @@ class AssignAgentsChangeHistoryTestCase(TestCase):
         mock_publish_amq.assert_called_once()
         mock_notify_change.assert_not_called()
 
-    @patch("nexus.usecases.inline_agents.assign.notify_change")
+    @patch("nexus.usecases.inline_agents.assign.schedule_notify_change")
     @patch("nexus.event_domain.recent_activity.create.publish_recent_activity_to_amq")
     def test_assign_already_active_does_not_republish(self, mock_publish_amq, mock_notify_change):
         self.usecase.assign_agent(str(self.agent.uuid), str(self.project.uuid), user=self.user)
@@ -69,7 +69,7 @@ class AssignAgentsChangeHistoryTestCase(TestCase):
         mock_publish_amq.assert_not_called()
         mock_notify_change.assert_not_called()
 
-    @patch("nexus.usecases.inline_agents.assign.notify_change")
+    @patch("nexus.usecases.inline_agents.assign.schedule_notify_change")
     @patch("nexus.event_domain.recent_activity.create.publish_recent_activity_to_amq")
     def test_reactivate_inactive_assignment_publishes(self, mock_publish_amq, mock_notify_change):
         _, integrated = self.usecase.assign_agent(str(self.agent.uuid), str(self.project.uuid), user=self.user)
@@ -84,7 +84,7 @@ class AssignAgentsChangeHistoryTestCase(TestCase):
         self.assertEqual(RecentActivities.objects.filter(action_type="C").count(), 2)
 
     @patch("nexus.event_domain.recent_activity.create.publish_recent_activity_to_amq")
-    @patch("nexus.usecases.inline_agents.assign.notify_change")
+    @patch("nexus.usecases.inline_agents.assign.schedule_notify_change")
     def test_assign_without_integrated_intelligence_uses_amq_only(self, mock_notify_change, mock_publish_amq):
         project = ProjectFactory(name="No II", brain_on=True)
         self.assertFalse(IntegratedIntelligence.objects.filter(project=project).exists())

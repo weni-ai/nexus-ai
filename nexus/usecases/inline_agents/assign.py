@@ -6,7 +6,7 @@ from django.db.models import Prefetch
 
 from nexus.event_domain.recent_activity.create import create_recent_activity
 from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
-from nexus.event_domain.recent_activity.recent_activity_amq import notify_change
+from nexus.event_domain.recent_activity.recent_activity_amq import schedule_notify_change
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
 from nexus.intelligences.models import IntegratedIntelligence
 from nexus.projects.models import Project
@@ -125,7 +125,7 @@ def _publish_assignment_change_history(
             )
             return
 
-        notify_change(
+        schedule_notify_change(
             project_uuid=str(project.uuid),
             user_email=created_by.email,
             date=pendulum.now("UTC"),

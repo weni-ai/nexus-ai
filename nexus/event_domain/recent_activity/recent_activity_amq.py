@@ -4,6 +4,8 @@ import re
 from typing import Optional, Tuple, Union
 
 import pendulum
+from django.conf import settings
+from django.db import transaction
 from weni.eda.connection import EDAConnection
 from weni_commons.change_history import Action, Entity, Module, Notifier
 
@@ -273,28 +275,109 @@ def notify_change(
     except Exception:
         logger.exception("Failed to publish change history to Amazon MQ")
     finally:
-        # Avoid leaking thread-local AMQP connections across Django tests.
-        EDAConnection.clear_connection()
+        if getattr(settings, "TESTING", False):
+            # Avoid leaking thread-local AMQP connections across Django tests.
+            EDAConnection.clear_connection()
 
 
-def publish_recent_activity_to_amq(*, recent_activity: RecentActivities, instance=None) -> None:
+def _serialize_entity(entity: Optional[Union[str, Entity]]) -> Optional[str]:
+    if entity is None:
+        return None
+    if isinstance(entity, Entity):
+        return entity.value
+    return str(entity)
+
+
+def _enqueue_on_commit(enqueue_fn) -> None:
+    if getattr(settings, "TESTING", False):
+        enqueue_fn()
+        return
+    transaction.on_commit(enqueue_fn)
+
+
+def schedule_notify_change(
+    *,
+    project_uuid: str,
+    user_email: str,
+    date: pendulum.DateTime,
+    action: str,
+    entity: Optional[Union[str, Entity]] = None,
+    object_id: Optional[str] = None,
+    object_name: Optional[str] = None,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None,
+    user_ip: Optional[str] = None,
+) -> None:
+    """Enqueue change-history publishing on Celery so AMQ I/O stays out of consumer pods."""
+    if not getattr(settings, "USE_EDA", False):
+        return
+
+    from nexus.event_domain.recent_activity.tasks import notify_change_task
+
+    payload = {
+        "project_uuid": project_uuid,
+        "user_email": user_email,
+        "date_iso": date.isoformat(),
+        "action": action,
+        "entity": _serialize_entity(entity),
+        "object_id": object_id,
+        "object_name": object_name,
+        "old_value": old_value,
+        "new_value": new_value,
+        "user_ip": user_ip,
+    }
+
+    def enqueue() -> None:
+        notify_change_task.delay(**payload)
+
+    _enqueue_on_commit(enqueue)
+
+
+def publish_recent_activity_to_amq_sync(
+    *,
+    recent_activity: RecentActivities,
+    object_name: Optional[str] = None,
+    object_id: Optional[str] = None,
+    instance=None,
+) -> None:
+    if instance is not None:
+        object_name = _object_name_from_instance(instance) or object_name
+        object_id = _object_id_from_instance(instance, fallback=object_id or str(recent_activity.uuid))
+
     old_value, new_value = _values_from_details(recent_activity.action_details)
-    object_name = _object_name_from_instance(instance) or recent_activity.action_model
-    object_id = _object_id_from_instance(instance, fallback=str(recent_activity.uuid))
     notify_change(
         project_uuid=str(recent_activity.project.uuid),
         user_email=recent_activity.created_by.email,
         date=pendulum.instance(recent_activity.created_at),
         action=recent_activity.action_type,
         entity=recent_activity.action_model,
-        object_id=object_id,
-        object_name=object_name,
+        object_id=object_id or _object_id_from_instance(None, fallback=str(recent_activity.uuid)),
+        object_name=object_name or recent_activity.action_model,
         old_value=old_value,
         new_value=new_value,
     )
 
 
-def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
+def publish_recent_activity_to_amq(*, recent_activity: RecentActivities, instance=None) -> None:
+    if not getattr(settings, "USE_EDA", False):
+        return
+
+    from nexus.event_domain.recent_activity.tasks import publish_recent_activity_task
+
+    object_name = _object_name_from_instance(instance) or recent_activity.action_model
+    object_id = _object_id_from_instance(instance, fallback=str(recent_activity.uuid))
+
+    def enqueue() -> None:
+        publish_recent_activity_task.delay(
+            str(recent_activity.uuid),
+            object_name,
+            object_id,
+        )
+
+    _enqueue_on_commit(enqueue)
+
+
+def publish_external_recent_activity_to_amq_sync(dto: RecentActivitiesDTO) -> None:
     """
     Org-level recent activity messages have no single project on the DTO.
     Publish one change-history event per project in the org (same fan-out as create).
@@ -319,8 +402,26 @@ def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
         )
 
 
+def publish_external_recent_activity_to_amq(dto: RecentActivitiesDTO) -> None:
+    if not getattr(settings, "USE_EDA", False):
+        return
+
+    from nexus.event_domain.recent_activity.tasks import publish_external_recent_activity_task
+
+    def enqueue() -> None:
+        publish_external_recent_activity_task.delay(
+            str(dto.org.uuid),
+            dto.user.email,
+            dto.entity_name,
+            dto.action,
+            dto.action_model,
+        )
+
+    _enqueue_on_commit(enqueue)
+
+
 def publish_brain_status_to_amq(*, user: str, project_uuid: str, brain_on: bool, old_brain_on: bool) -> None:
-    notify_change(
+    schedule_notify_change(
         project_uuid=project_uuid,
         user_email=user,
         date=pendulum.now("UTC"),
