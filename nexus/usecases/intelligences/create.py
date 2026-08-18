@@ -113,6 +113,9 @@ class CreateContentBaseUseCase:
 
 
 class CreateContentBaseTextUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify) -> None:
+        self.event_manager_notify = event_manager_notify
+
     def create_contentbasetext(
         self,
         content_base_dto: ContentBaseDTO,
@@ -135,6 +138,14 @@ class CreateContentBaseTextUseCase:
             file=content_base_text_dto.file,
             file_name=content_base_text_dto.file_name,
             title=title,
+        )
+        label = title or contentbasetext.file_name or ""
+        self.event_manager_notify(
+            event="contentbase_text_activity",
+            content_base_text=contentbasetext,
+            action_type="C",
+            user=user,
+            action_details={"old": "", "new": label},
         )
         return contentbasetext
 

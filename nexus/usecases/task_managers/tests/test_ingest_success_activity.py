@@ -72,7 +72,7 @@ class IngestSuccessCreateActivityTestCase(TestCase):
         self.assertEqual(kwargs["content_base_link"], content_base_link)
 
     @patch("nexus.usecases.task_managers.celery_task_manager.event_manager.notify")
-    def test_text_success_notifies_create(self, mock_notify):
+    def test_text_success_does_not_notify_create(self, mock_notify):
         content_base_text = ContentBaseTextFactory(content_base=self.content_base, created_by=self.user)
         task = ContentBaseTextTaskManager.objects.create(
             status=TaskManager.STATUS_PROCESSING,
@@ -84,10 +84,7 @@ class IngestSuccessCreateActivityTestCase(TestCase):
 
         publish_ingest_success_create(task)
 
-        kwargs = mock_notify.call_args.kwargs
-        self.assertEqual(kwargs["event"], "contentbase_text_activity")
-        self.assertEqual(kwargs["action_type"], "C")
-        self.assertEqual(kwargs["content_base_text"], content_base_text)
+        mock_notify.assert_not_called()
 
     @patch("nexus.usecases.task_managers.celery_task_manager.event_manager.notify")
     def test_skips_create_when_content_already_succeeded(self, mock_notify):
