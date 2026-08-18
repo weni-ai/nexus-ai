@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .project_api_token_views import ProjectApiTokenCreateView
+from .projects_agents_views import ProjectsAgentsView
 from .resolution_criteria_views import (
     AIResolutionCriteriaDetailView,
     AIResolutionCriteriaListCreateView,
@@ -68,6 +69,7 @@ urlpatterns = [
     ),
     path("<project_uuid>/ab-project-details", AgentBuilderProjectDetailsView.as_view(), name="ab-project-details"),
     path("v2/projects/resolution-rate", ProjectsResolutionRateView.as_view(), name="projects-resolution-rate-v2"),
+    path("v2/projects/agents", ProjectsAgentsView.as_view(), name="projects-agents-v2"),
     path("v2/<project_uuid>/conversations", ConversationsProxyView.as_view(), name="conversations-proxy-v2"),
     path(
         "v2/<project_uuid>/conversations/export",
