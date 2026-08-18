@@ -57,7 +57,7 @@ def _already_succeeded_for_content(task_manager: TaskManager) -> bool:
 
 def publish_ingest_success_create(task_manager: TaskManager) -> None:
     """
-    Publish CREATE recent-activity for file/link/text when ingest reaches SUCCESS.
+    Publish CREATE recent-activity for file/link when ingest reaches SUCCESS.
 
     Safe to call only on first transition to SUCCESS for this task (caller must guard).
     Skips if the content already had a successful ingest (re-index after edit).
@@ -100,16 +100,7 @@ def publish_ingest_success_create(task_manager: TaskManager) -> None:
         )
         return
 
-    content_base_text = getattr(task_manager, "content_base_text", None)
-    if content_base_text is not None:
-        label = content_base_text.title or content_base_text.file_name or ""
-        event_manager.notify(
-            event="contentbase_text_activity",
-            content_base_text=content_base_text,
-            action_type="C",
-            user=user,
-            action_details={"old": "", "new": label},
-        )
+    if getattr(task_manager, "content_base_text", None) is not None:
         return
 
     logger.warning(
