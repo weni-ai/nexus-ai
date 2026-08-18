@@ -113,3 +113,27 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
 
         mock_capture.assert_called_once()
         self.assertEqual(self.channel.rejected, [(1, False)])
+
+    @mock.patch(
+        "nexus.projects.consumers.project_consumer.JSONParser.parse",
+        return_value={
+            "uuid": "p1",
+            "name": "Test Project",
+            "organization_uuid": "org-1",
+            "user_email": "user@test.com",
+        },
+    )
+    @mock.patch("nexus.projects.consumers.project_consumer.Project.objects.filter")
+    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
+    def test_weni_eda_project_consumer_acks_duplicate_project_message(
+        self, mock_usecase_cls, mock_filter, _
+    ):
+        from django.db import IntegrityError
+
+        mock_usecase_cls.return_value.create_project.side_effect = IntegrityError("duplicate key")
+        mock_filter.return_value.exists.return_value = True
+
+        self.consumer._message = self.weni_message
+        self.consumer.consume(self.weni_message)
+
+        self.assertEqual(self.channel.acked, [1])

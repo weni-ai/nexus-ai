@@ -1,5 +1,7 @@
+import json
 import logging
 
+from django.db import IntegrityError
 from sentry_sdk import capture_exception
 from weni.eda.django.consumers import EDAConsumer as WeniEDAConsumer
 from weni.eda.messages import Message as WeniMessage
@@ -42,20 +44,54 @@ class WeniEDAProjectConsumer(WeniEDAConsumer):
     """Consumer responsible for handling project creation events from Amazon MQ."""
 
     def consume(self, message: WeniMessage):
-        logger.debug(
-            "[WeniEDAProjectConsumer] Consuming a message",
-            extra={"body_len": len(message.body) if message.body else None},
+        raw_body = message.body.decode("utf-8") if message.body else ""
+        logger.info(
+            "[WeniEDAProjectConsumer] Received project creation message body=%s",
+            raw_body,
         )
         try:
             parsed_body = JSONParser.parse(message.body)
+            logger.info(
+                "[WeniEDAProjectConsumer] Parsed project creation payload=%s",
+                json.dumps(parsed_body, default=str),
+            )
             body = _extract_project_payload(parsed_body)
             project_dto = _build_project_dto(body)
+            logger.info(
+                "[WeniEDAProjectConsumer] Processing project creation uuid=%s name=%s org=%s user=%s",
+                project_dto.uuid,
+                project_dto.name,
+                project_dto.org_uuid,
+                body.get("user_email"),
+            )
 
             project_creation = ProjectsUseCase()
-            project_creation.create_project(project_dto=project_dto, user_email=body.get("user_email"))
+            try:
+                project_creation.create_project(
+                    project_dto=project_dto,
+                    user_email=body.get("user_email"),
+                )
+            except IntegrityError:
+                if Project.objects.filter(uuid=project_dto.uuid).exists():
+                    logger.warning(
+                        "[WeniEDAProjectConsumer] Project already exists uuid=%s, acknowledging duplicate message",
+                        project_dto.uuid,
+                    )
+                    self.ack()
+                    return
+                raise
 
             self.ack()
-            logger.info("[WeniEDAProjectConsumer] Project created", extra={"uuid": project_dto.uuid})
+            logger.info(
+                "[WeniEDAProjectConsumer] Project created uuid=%s name=%s",
+                project_dto.uuid,
+                project_dto.name,
+            )
         except Exception as exception:
+            logger.error(
+                "[WeniEDAProjectConsumer] Failed to create project: %s",
+                exception,
+                exc_info=True,
+            )
             capture_exception(exception)
             raise

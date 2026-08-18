@@ -1,9 +1,18 @@
+import logging
 from typing import Optional, Tuple
 
+import pendulum
 from django.db.models import Prefetch
 
+from nexus.event_domain.recent_activity.create import create_recent_activity
+from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
+from nexus.event_domain.recent_activity.recent_activity_amq import schedule_notify_change
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
+from nexus.intelligences.models import IntegratedIntelligence
 from nexus.projects.models import Project
+from nexus.users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 def infer_single_active_mcp_selection(agent: Agent) -> tuple[str | None, str | None]:
@@ -77,9 +86,70 @@ def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedA
     return True
 
 
+def _publish_assignment_change_history(
+    *,
+    agent: Agent,
+    project: Project,
+    action_type: str,
+    user: Optional[User] = None,
+) -> None:
+    created_by = user or project.created_by
+    if created_by is None:
+        logger.warning(
+            "Skipping agent assignment change history: missing user for project %s",
+            project.uuid,
+        )
+        return
+
+    try:
+        integrated = IntegratedIntelligence.objects.filter(project=project).select_related("intelligence").first()
+        if integrated is not None:
+            create_recent_activity(
+                instance=agent,
+                dto=CreateRecentActivityDTO(
+                    action_type=action_type,
+                    project=project,
+                    created_by=created_by,
+                    intelligence=integrated.intelligence,
+                    action_details={},
+                ),
+            )
+            return
+
+        action_by_type = {"C": "CREATE", "D": "DELETE"}
+        action = action_by_type.get(action_type)
+        if action is None:
+            logger.warning(
+                "Unexpected action_type %r for agent assignment change history",
+                action_type,
+            )
+            return
+
+        schedule_notify_change(
+            project_uuid=str(project.uuid),
+            user_email=created_by.email,
+            date=pendulum.now("UTC"),
+            action=action,
+            entity="Agent",
+            object_id=str(agent.uuid),
+            object_name=agent.name,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to publish agent assignment change history for agent=%s project=%s",
+            getattr(agent, "uuid", None),
+            getattr(project, "uuid", None),
+        )
+
+
 class AssignAgentsUsecase:
     def assign_agent(
-        self, agent_uuid: str, project_uuid: str, *, infer_mcp_metadata: bool = False
+        self,
+        agent_uuid: str,
+        project_uuid: str,
+        *,
+        infer_mcp_metadata: bool = False,
+        user: Optional[User] = None,
     ) -> Tuple[bool, IntegratedAgent]:
         try:
             if infer_mcp_metadata:
@@ -94,18 +164,33 @@ class AssignAgentsUsecase:
                 project=project,
                 defaults={"metadata": {}, "is_active": True},
             )
+            reactivated = False
             if not created and not integrated_agent.is_active:
                 integrated_agent.is_active = True
                 integrated_agent.save(update_fields=["is_active"])
+                reactivated = True
             if infer_mcp_metadata and _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent, agent):
                 integrated_agent.save(update_fields=["metadata"])
+            if created or reactivated:
+                _publish_assignment_change_history(
+                    agent=agent,
+                    project=project,
+                    action_type="C",
+                    user=user,
+                )
             return created, integrated_agent
         except Agent.DoesNotExist as e:
             raise ValueError("Agent not found") from e
         except Project.DoesNotExist as e:
             raise ValueError("Project not found") from e
 
-    def unassign_agent(self, agent_uuid: str, project_uuid: str) -> Tuple[bool, Optional[IntegratedAgent]]:
+    def unassign_agent(
+        self,
+        agent_uuid: str,
+        project_uuid: str,
+        *,
+        user: Optional[User] = None,
+    ) -> Tuple[bool, Optional[IntegratedAgent]]:
         try:
             agent = Agent.objects.get(uuid=agent_uuid)
             project = Project.objects.get(uuid=project_uuid)
@@ -114,7 +199,12 @@ class AssignAgentsUsecase:
                 deleted_agent = integrated_agent
                 integrated_agent.delete()
                 _clear_agent_credential_values_on_unassign(agent, project)
-
+                _publish_assignment_change_history(
+                    agent=agent,
+                    project=project,
+                    action_type="D",
+                    user=user,
+                )
                 return True, deleted_agent
             except IntegratedAgent.DoesNotExist:
                 return False, None

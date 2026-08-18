@@ -10,14 +10,23 @@ Only consumers that have been migrated to the new broker should be registered
 here.
 """
 
+import logging
+
 from django.conf import settings
 from weni.eda.channels import Channel
 
 from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer
 
+logger = logging.getLogger(__name__)
+
 
 def handle_amq_consumers(channel: Channel) -> None:
+    queue_name = settings.PROJECT_AMQ_QUEUE_NAME
     channel.basic_consume(
-        settings.PROJECT_AMQ_QUEUE_NAME,
+        queue_name,
         callback=WeniEDAProjectConsumer().handle,
+    )
+    logger.info(
+        "[handle_amq_consumers] Registered WeniEDAProjectConsumer on queue %s",
+        queue_name,
     )
