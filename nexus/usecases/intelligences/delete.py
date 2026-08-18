@@ -102,6 +102,7 @@ class DeleteContentBaseTextUseCase:
 
         contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
         label = contentbasetext.title or contentbasetext.file_name or ""
+        contentbasetext.delete()
         self.event_manager_notify(
             event="contentbase_text_activity",
             content_base_text=contentbasetext,
@@ -109,7 +110,6 @@ class DeleteContentBaseTextUseCase:
             user=user,
             action_details={"old": label, "new": ""},
         )
-        contentbasetext.delete()
         self.delete_content_base_text_from_index(
             contentbasetext_uuid=str(contentbasetext_uuid),
             content_base_uuid=str(contentbasetext.content_base.uuid),
@@ -125,6 +125,7 @@ class DeleteContentBaseTextUseCase:
         contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
         actor = user or contentbasetext.created_by
         label = contentbasetext.title or contentbasetext.file_name or ""
+        contentbasetext.delete()
         if actor is not None:
             self.event_manager_notify(
                 event="contentbase_text_activity",
@@ -133,7 +134,6 @@ class DeleteContentBaseTextUseCase:
                 user=actor,
                 action_details={"old": label, "new": ""},
             )
-        contentbasetext.delete()
         self.delete_content_base_text_from_index(
             contentbasetext_uuid=str(contentbasetext_uuid),
             content_base_uuid=str(contentbasetext.content_base.uuid),
