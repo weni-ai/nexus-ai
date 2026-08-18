@@ -1,6 +1,7 @@
 import json
 import logging
 
+from django.db import IntegrityError
 from sentry_sdk import capture_exception
 from weni.eda.django.consumers import EDAConsumer as WeniEDAConsumer
 from weni.eda.messages import Message as WeniMessage
@@ -66,7 +67,20 @@ class WeniEDAProjectConsumer(WeniEDAConsumer):
             )
 
             project_creation = ProjectsUseCase()
-            project_creation.create_project(project_dto=project_dto, user_email=body.get("user_email"))
+            try:
+                project_creation.create_project(
+                    project_dto=project_dto,
+                    user_email=body.get("user_email"),
+                )
+            except IntegrityError:
+                if Project.objects.filter(uuid=project_dto.uuid).exists():
+                    logger.warning(
+                        "[WeniEDAProjectConsumer] Project already exists uuid=%s, acknowledging duplicate message",
+                        project_dto.uuid,
+                    )
+                    self.ack()
+                    return
+                raise
 
             self.ack()
             logger.info(
