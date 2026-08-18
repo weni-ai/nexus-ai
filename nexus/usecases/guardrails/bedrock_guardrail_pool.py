@@ -84,6 +84,35 @@ class BedrockGuardrailPoolService:
         return list(getattr(settings, "GUARDRAILS_BEDROCK_PII_ENTITIES", None) or [])
 
     @classmethod
+    def _topic_tier_name(cls) -> str:
+        tier = str(getattr(settings, "GUARDRAILS_BEDROCK_TOPIC_TIER", "STANDARD") or "STANDARD").strip().upper()
+        if tier not in {"CLASSIC", "STANDARD"}:
+            logger.warning("Invalid GUARDRAILS_BEDROCK_TOPIC_TIER=%r; using STANDARD", tier)
+            return "STANDARD"
+        return tier
+
+    @classmethod
+    def _guardrail_profile_identifier(cls) -> str:
+        override = str(getattr(settings, "GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER", "") or "").strip()
+        if override:
+            return override
+        region = str(getattr(settings, "AWS_BEDROCK_REGION_NAME", "") or "").strip().lower()
+        if region.startswith("eu"):
+            return "eu.guardrail.v1:0"
+        if region.startswith("ap"):
+            return "apac.guardrail.v1:0"
+        if region.startswith("ca"):
+            return "ca.guardrail.v1:0"
+        if region.startswith("us"):
+            return "us.guardrail.v1:0"
+
+        logger.warning(
+            "Unknown AWS_BEDROCK_REGION_NAME=%r; defaulting to us.guardrail.v1:0",
+            region,
+        )
+        return "us.guardrail.v1:0"
+
+    @classmethod
     def _apply_optional_policy_configs(cls, payload: dict) -> None:
         """Attach content/PII policies from settings when configured; omit when empty."""
         content_filters = cls._content_filters_from_settings()
@@ -93,6 +122,24 @@ class BedrockGuardrailPoolService:
         pii_entities = cls._pii_entities_from_settings()
         if pii_entities:
             payload["sensitiveInformationPolicyConfig"] = {"piiEntitiesConfig": pii_entities}
+
+    @classmethod
+    def _apply_topic_tier_config(cls, payload: dict, *, topics: list[dict]) -> None:
+        """Attach Denied Topics + optional STANDARD tier / cross-region profile."""
+        if not topics:
+            return
+
+        tier = cls._topic_tier_name()
+        topic_policy: dict = {
+            "topicsConfig": topics,
+            "tierConfig": {"tierName": tier},
+        }
+        payload["topicPolicyConfig"] = topic_policy
+
+        if tier == "STANDARD":
+            payload["crossRegionConfig"] = {
+                "guardrailProfileIdentifier": cls._guardrail_profile_identifier(),
+            }
 
     @classmethod
     def build_create_guardrail_payload(
@@ -118,10 +165,7 @@ class BedrockGuardrailPoolService:
             "blockedOutputsMessaging": default_message,
         }
         cls._apply_optional_policy_configs(payload)
-
-        topics = cls.build_topics_config(blocked_slugs)
-        if topics:
-            payload["topicPolicyConfig"] = {"topicsConfig": topics}
+        cls._apply_topic_tier_config(payload, topics=cls.build_topics_config(blocked_slugs))
 
         return payload
 
