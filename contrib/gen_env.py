@@ -269,6 +269,7 @@ def generate_env():
         "SUPERVISOR_SERVICE_AVAILABLE": "False",
         "REPORT_RECIPIENT_EMAILS": "",
         "VTEX_SUPPORT_EMAIL": "",
+        "VTEX_SUPPORT_FROM_EMAIL": "nexus@weni.ai",
         "CSRF_TRUSTED_ORIGINS": "",
         "MULTI_AGENTS_CAN_ACCESS": "",
         "SKILL_FILE_SIZE_LIMIT": "50",

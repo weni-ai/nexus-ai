@@ -170,7 +170,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
         DEBUG=False,
         SEND_EMAILS=True,
         VTEX_SUPPORT_EMAIL="support@vtex.com",
-        DEFAULT_FROM_EMAIL="no-reply@weni.ai",
+        VTEX_SUPPORT_FROM_EMAIL="nexus@weni.ai",
     )
     @mock.patch("nexus.projects.services.improvement_support_email.EmailMessage")
     def test_email_message_content(self, mock_email_message):
@@ -195,7 +195,7 @@ class TestOpenSupportTicketView(_PermissionTestBase):
                 affected_conversations=payload["affected_conversations"],
                 user_email="agent@example.com",
             ),
-            from_email="no-reply@weni.ai",
+            from_email="nexus@weni.ai",
             to=["support@vtex.com"],
             reply_to=["agent@example.com"],
             connection=None,
