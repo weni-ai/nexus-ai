@@ -13,6 +13,18 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 logger = logging.getLogger(__name__)
 
 
+def _extract_project_payload(body: dict) -> dict:
+    """Unwrap weni-engine event envelopes that nest the payload under ``data``."""
+    if not isinstance(body, dict):
+        return body
+
+    nested = body.get("data")
+    if isinstance(nested, dict) and body.get("event_type"):
+        return nested
+
+    return body
+
+
 def _build_project_dto(body: dict) -> ProjectCreationDTO:
     return ProjectCreationDTO(
         uuid=body.get("uuid"),
@@ -38,11 +50,12 @@ class WeniEDAProjectConsumer(WeniEDAConsumer):
             raw_body,
         )
         try:
-            body = JSONParser.parse(message.body)
+            parsed_body = JSONParser.parse(message.body)
             logger.info(
                 "[WeniEDAProjectConsumer] Parsed project creation payload=%s",
-                json.dumps(body, default=str),
+                json.dumps(parsed_body, default=str),
             )
+            body = _extract_project_payload(parsed_body)
             project_dto = _build_project_dto(body)
             logger.info(
                 "[WeniEDAProjectConsumer] Processing project creation uuid=%s name=%s org=%s user=%s",
