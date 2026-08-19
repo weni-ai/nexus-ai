@@ -66,6 +66,15 @@ def _pascal_to_screaming_snake(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).upper()
 
 
+def _entity_from_string(name: str) -> Entity:
+    for candidate in (name, _pascal_to_screaming_snake(name)):
+        try:
+            return Entity(candidate)
+        except ValueError:
+            continue
+    raise ValueError(name)
+
+
 def _resolve_entity(action_model: Optional[Union[str, Entity]]) -> Entity:
     if isinstance(action_model, Entity):
         return action_model
@@ -78,12 +87,7 @@ def _resolve_entity(action_model: Optional[Union[str, Entity]]) -> Entity:
         return mapped
 
     try:
-        return Entity(action_model)
-    except ValueError:
-        pass
-
-    try:
-        return Entity(_pascal_to_screaming_snake(action_model))
+        return _entity_from_string(action_model)
     except ValueError:
         logger.warning(
             "Unknown change-history entity %r, defaulting to PROJECT",
@@ -170,8 +174,6 @@ def _values_from_details(action_details: Optional[dict]) -> Tuple[Optional[str],
             return _pair_from_change(nested_changes[preferred])
 
     content_changes = {k: v for k, v in nested_changes.items() if k not in _ACTION_DETAILS_SKIP_KEYS}
-    if len(content_changes) == 1:
-        return _pair_from_change(next(iter(content_changes.values())))
     if content_changes:
         return _pair_from_change(next(iter(content_changes.values())))
 

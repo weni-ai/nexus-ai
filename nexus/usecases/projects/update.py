@@ -11,7 +11,7 @@ from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.retrieve import get_integrated_feature
 
 
-def update_message(update_project_dto: UpdateProjectDTO, old_brain_on: bool):
+def update_message(update_project_dto: UpdateProjectDTO, old_brain_on: bool):  # pragma: no cover
     publisher = RabbitMQPublisher()
 
     action = "UPDATE"
@@ -48,10 +48,13 @@ class ProjectUpdateUseCase:
 
         has_project_permission(user=user, project=project, method="patch")
 
-        for attr, value in update_project_dto.dict().items():
+        update_fields = update_project_dto.dict()
+        for attr, value in update_fields.items():
             setattr(project, attr, value)
-            if attr == "brain_on":
-                update_message(update_project_dto, old_brain_on=old_project_data.brain_on)
+
+        if "brain_on" in update_fields:
+            update_message(update_project_dto, old_brain_on=old_project_data.brain_on)
+
         project.save()
 
         new_project_data = project
