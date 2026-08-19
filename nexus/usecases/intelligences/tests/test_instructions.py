@@ -228,6 +228,22 @@ class TestProjectInstructionsUseCase(TestCase):
         self.assertEqual(instruction.category_id, category.id)
         self.assertEqual(instruction.suggested_category, "Personality")
 
+    def test_patch_rejects_rename_when_legacy_case_insensitive_duplicate_exists(self):
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="Greeting")
+        InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+
+        with self.assertRaises(DuplicateCategoryNameError):
+            self.use_case.patch_grouped_instructions(
+                content_base=self.content_base,
+                categories_data=[{"id": greeting.id, "name": "greeting"}],
+                uncategorized_data=None,
+                user=self.user,
+                project_uuid=str(self.project.uuid),
+            )
+
+        greeting.refresh_from_db()
+        self.assertEqual(greeting.name, "Greeting")
+
     def test_patch_reuses_existing_category_by_name_without_error(self):
         InstructionCategory.objects.create(content_base=self.content_base, name="policy")
         existing = ContentBaseInstruction.objects.create(
