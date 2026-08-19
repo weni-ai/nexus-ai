@@ -3,7 +3,7 @@ from unittest import mock
 from django.test import SimpleTestCase
 from weni.eda.messages import Message as WeniMessage
 
-from nexus.projects.consumers.project_consumer import OldProjectConsumer, WeniEDAProjectConsumer
+from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer, _extract_project_payload
 
 
 class DummyChannel:
@@ -23,44 +23,6 @@ class DummyAmqpMessage:
         self.body = body
         self.channel = channel or DummyChannel()
         self.delivery_tag = 1
-
-
-class OldProjectConsumerTests(SimpleTestCase):
-    def setUp(self):
-        self.message = DummyAmqpMessage(body=b"{}")
-        self.consumer = OldProjectConsumer()
-
-    @mock.patch(
-        "nexus.projects.consumers.project_consumer.JSONParser.parse",
-        return_value={
-            "uuid": "p1",
-            "name": "Test Project",
-            "organization_uuid": "org-1",
-            "user_email": "user@test.com",
-        },
-    )
-    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
-    def test_old_project_consumer_triggers_creation(self, mock_usecase_cls, _):
-        self.consumer.consume(self.message)
-
-        mock_usecase_cls.return_value.create_project.assert_called_once()
-        self.assertEqual(self.message.channel.acked, [1])
-
-    @mock.patch(
-        "nexus.projects.consumers.project_consumer.JSONParser.parse",
-        return_value={"uuid": "p1"},
-    )
-    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
-    @mock.patch("nexus.projects.consumers.project_consumer.capture_exception")
-    def test_old_project_consumer_rejects_on_error(
-        self, mock_capture, mock_usecase_cls, _
-    ):
-        mock_usecase_cls.return_value.create_project.side_effect = RuntimeError("boom")
-
-        self.consumer.consume(self.message)
-
-        mock_capture.assert_called_once()
-        self.assertEqual(self.message.channel.rejected, [(1, False)])
 
 
 class WeniEDAProjectConsumerTests(SimpleTestCase):
@@ -95,6 +57,49 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
 
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
+        return_value={
+            "event_id": "5821d080-8d0a-42c4-955f-51107faab9ee",
+            "event_type": "project.created",
+            "producer": "weni-engine",
+            "timestamp": "2026-08-18T13:07:15Z",
+            "data": {
+                "uuid": "eb83a092-12ca-4095-9d37-0151381ff45a",
+                "name": "test project",
+                "organization_uuid": "3d7a1d1b-3d05-44d4-bee1-55c24c8e61a9",
+                "user_email": "user@test.com",
+                "is_template": False,
+            },
+        },
+    )
+    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
+    def test_weni_eda_project_consumer_unwraps_event_envelope(
+        self, mock_usecase_cls, _
+    ):
+        self.consumer._message = self.weni_message
+        self.consumer.consume(self.weni_message)
+
+        mock_usecase_cls.return_value.create_project.assert_called_once_with(
+            project_dto=mock.ANY,
+            user_email="user@test.com",
+        )
+        project_dto = mock_usecase_cls.return_value.create_project.call_args.kwargs["project_dto"]
+        self.assertEqual(project_dto.uuid, "eb83a092-12ca-4095-9d37-0151381ff45a")
+        self.assertEqual(project_dto.name, "test project")
+        self.assertEqual(self.channel.acked, [1])
+
+    def test_extract_project_payload_unwraps_event_envelope(self):
+        envelope = {
+            "event_type": "project.created",
+            "data": {"uuid": "p1", "name": "Test"},
+        }
+        self.assertEqual(_extract_project_payload(envelope), {"uuid": "p1", "name": "Test"})
+
+    def test_extract_project_payload_keeps_flat_body(self):
+        flat = {"uuid": "p1", "name": "Test", "user_email": "user@test.com"}
+        self.assertEqual(_extract_project_payload(flat), flat)
+
+    @mock.patch(
+        "nexus.projects.consumers.project_consumer.JSONParser.parse",
         return_value={"uuid": "p1"},
     )
     @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
@@ -108,3 +113,27 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
 
         mock_capture.assert_called_once()
         self.assertEqual(self.channel.rejected, [(1, False)])
+
+    @mock.patch(
+        "nexus.projects.consumers.project_consumer.JSONParser.parse",
+        return_value={
+            "uuid": "p1",
+            "name": "Test Project",
+            "organization_uuid": "org-1",
+            "user_email": "user@test.com",
+        },
+    )
+    @mock.patch("nexus.projects.consumers.project_consumer.Project.objects.filter")
+    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
+    def test_weni_eda_project_consumer_acks_duplicate_project_message(
+        self, mock_usecase_cls, mock_filter, _
+    ):
+        from django.db import IntegrityError
+
+        mock_usecase_cls.return_value.create_project.side_effect = IntegrityError("duplicate key")
+        mock_filter.return_value.exists.return_value = True
+
+        self.consumer._message = self.weni_message
+        self.consumer.consume(self.weni_message)
+
+        self.assertEqual(self.channel.acked, [1])

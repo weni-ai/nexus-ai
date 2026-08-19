@@ -1,5 +1,5 @@
-from nexus.event_domain.recent_activity.external_activities import intelligence_activity_message
 from nexus.event_domain.recent_activity.recent_activities_dto import RecentActivitiesDTO
+from nexus.event_domain.recent_activity.recent_activity_amq import publish_external_recent_activity_to_amq
 from nexus.orgs.models import Org
 from nexus.users.models import User
 
@@ -9,7 +9,8 @@ def recent_activity_message(
     user: User,
     entity_name: str,
     action: str,
-    intelligence_activity_message=intelligence_activity_message,
+    action_model: str = "Intelligence",
+    intelligence_activity_message=None,
 ):  # pragma: no cover
     action_type_mapping = {
         "C": "CREATE",
@@ -25,5 +26,6 @@ def recent_activity_message(
         user=user,
         entity_name=entity_name,
         action=action,
+        action_model=action_model,
     )
-    intelligence_activity_message(msg_dto)
+    publish_external_recent_activity_to_amq(msg_dto)
