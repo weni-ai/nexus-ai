@@ -92,6 +92,69 @@ class TestProjectInstructionsViewSet(TestCase):
         content = json.loads(response.content)
         self.assertEqual(content["error"], DUPLICATE_CATEGORY_NAME_ERROR)
 
+    def test_post_returns_409_when_creating_duplicate_category_case_insensitive(self):
+        InstructionCategory.objects.create(content_base=self.content_base, name="Greeting")
+
+        response = self._post(
+            {
+                "instruction": "Always greet the customer",
+                "category": {"name": "greeting"},
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+
+    def test_patch_renames_category_successfully(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        instruction = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=category,
+            instruction="Always greet the customer",
+            suggested_category="greeting",
+        )
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "id": category.id,
+                        "name": "Personality",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        category.refresh_from_db()
+        instruction.refresh_from_db()
+        self.assertEqual(category.name, "Personality")
+        self.assertEqual(instruction.category_id, category.id)
+        self.assertEqual(instruction.instruction, "Always greet the customer")
+        self.assertEqual(instruction.suggested_category, "Personality")
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(content["categories"][0]["name"], "Personality")
+        self.assertEqual(content["categories"][0]["instructions"][0]["id"], instruction.id)
+
+    def test_patch_allows_renaming_category_to_different_casing_only(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="Personality")
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "id": category.id,
+                        "name": "personality",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        category.refresh_from_db()
+        self.assertEqual(category.name, "personality")
+
     def test_patch_returns_409_when_renaming_category_to_duplicate_name(self):
         greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
         policy = InstructionCategory.objects.create(content_base=self.content_base, name="policy")
@@ -111,6 +174,25 @@ class TestProjectInstructionsViewSet(TestCase):
         greeting.refresh_from_db()
         self.assertEqual(greeting.name, "greeting")
         self.assertTrue(InstructionCategory.objects.filter(id=policy.id).exists())
+
+    def test_patch_returns_409_when_renaming_category_to_duplicate_name_case_insensitive(self):
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        InstructionCategory.objects.create(content_base=self.content_base, name="Policy")
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "id": greeting.id,
+                        "name": "policy",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        greeting.refresh_from_db()
+        self.assertEqual(greeting.name, "greeting")
 
     def test_list_returns_grouped_categories_including_empty_category(self):
         greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
