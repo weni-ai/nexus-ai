@@ -23,7 +23,7 @@ def notify_change_task(self, **payload):
         notify_change(date=pendulum.parse(date_iso), **payload)
     except Exception as exc:
         logger.exception("Failed to publish change history task")
-        raise self.retry(exc=exc) from exc
+        raise self.retry(exc=exc)
 
 
 @app.task(
@@ -53,7 +53,7 @@ def publish_recent_activity_task(self, recent_activity_uuid: str, object_name: s
             "Failed to publish recent activity task recent_activity_uuid=%s",
             recent_activity_uuid,
         )
-        raise self.retry(exc=exc) from exc
+        raise self.retry(exc=exc)
 
 
 @app.task(
@@ -96,4 +96,4 @@ def publish_external_recent_activity_task(
             org_uuid,
             action,
         )
-        raise self.retry(exc=exc) from exc
+        raise self.retry(exc=exc)
