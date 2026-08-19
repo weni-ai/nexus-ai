@@ -193,6 +193,41 @@ class TestProjectInstructionsUseCase(TestCase):
                 project_uuid=str(self.project.uuid),
             )
 
+    def test_create_instruction_raises_when_category_name_differs_only_by_case(self):
+        InstructionCategory.objects.create(content_base=self.content_base, name="Greeting")
+
+        with self.assertRaises(DuplicateCategoryNameError):
+            self.use_case.create_instruction(
+                content_base=self.content_base,
+                instruction_text="Always greet the customer",
+                category_data={"name": "greeting"},
+                user=self.user,
+                project_uuid=str(self.project.uuid),
+            )
+
+    def test_patch_renames_category_by_id(self):
+        category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+        instruction = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            category=category,
+            instruction="Existing instruction",
+            suggested_category="greeting",
+        )
+
+        self.use_case.patch_grouped_instructions(
+            content_base=self.content_base,
+            categories_data=[{"id": category.id, "name": "Personality"}],
+            uncategorized_data=None,
+            user=self.user,
+            project_uuid=str(self.project.uuid),
+        )
+
+        category.refresh_from_db()
+        instruction.refresh_from_db()
+        self.assertEqual(category.name, "Personality")
+        self.assertEqual(instruction.category_id, category.id)
+        self.assertEqual(instruction.suggested_category, "Personality")
+
     def test_patch_reuses_existing_category_by_name_without_error(self):
         InstructionCategory.objects.create(content_base=self.content_base, name="policy")
         existing = ContentBaseInstruction.objects.create(

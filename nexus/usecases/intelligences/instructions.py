@@ -14,6 +14,10 @@ class DuplicateCategoryNameError(Exception):
     """Raised when creating or renaming a category would duplicate an existing name."""
 
 
+def _find_category_by_name(content_base: ContentBase, name: str) -> InstructionCategory | None:
+    return content_base.instruction_categories.filter(name__iexact=name).first()
+
+
 class ProjectInstructionsUseCase:
     def get_grouped_instructions(self, content_base: ContentBase) -> dict[str, list[dict[str, Any]]]:
         categories = []
@@ -166,20 +170,23 @@ class ProjectInstructionsUseCase:
         if category_id is not None:
             category = content_base.instruction_categories.get(id=category_id)
             name = (category_data.get("name") or "").strip()
-            if name and category.name != name:
-                self._ensure_category_name_available(content_base, name, exclude_category_id=category.id)
-                category.name = name
-                try:
-                    category.save(update_fields=["name"])
-                except IntegrityError as error:
-                    raise DuplicateCategoryNameError from error
+            if name:
+                if name.casefold() != category.name.casefold():
+                    self._ensure_category_name_available(content_base, name, exclude_category_id=category.id)
+                if name != category.name:
+                    category.name = name
+                    try:
+                        category.save(update_fields=["name"])
+                    except IntegrityError as error:
+                        raise DuplicateCategoryNameError from error
+                    ContentBaseInstruction.objects.filter(category=category).update(suggested_category=name)
             return category
 
         name = (category_data.get("name") or "").strip()
         if not name:
             raise ValueError("Category id or name is required")
 
-        existing_category = content_base.instruction_categories.filter(name=name).first()
+        existing_category = _find_category_by_name(content_base, name)
         if existing_category:
             return existing_category
 
@@ -192,7 +199,7 @@ class ProjectInstructionsUseCase:
         *,
         exclude_category_id: int | None = None,
     ) -> None:
-        queryset = content_base.instruction_categories.filter(name=name)
+        queryset = content_base.instruction_categories.filter(name__iexact=name)
         if exclude_category_id is not None:
             queryset = queryset.exclude(id=exclude_category_id)
         if queryset.exists():
