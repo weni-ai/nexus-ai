@@ -155,6 +155,25 @@ class TestProjectInstructionsViewSet(TestCase):
         category.refresh_from_db()
         self.assertEqual(category.name, "personality")
 
+    def test_patch_returns_409_when_renaming_to_existing_name_different_casing(self):
+        greeting = InstructionCategory.objects.create(content_base=self.content_base, name="Greeting")
+        InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
+
+        response = self._patch(
+            {
+                "categories": [
+                    {
+                        "id": greeting.id,
+                        "name": "greeting",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        greeting.refresh_from_db()
+        self.assertEqual(greeting.name, "Greeting")
+
     def test_patch_returns_409_when_renaming_category_to_duplicate_name(self):
         greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")
         policy = InstructionCategory.objects.create(content_base=self.content_base, name="policy")

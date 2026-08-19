@@ -170,16 +170,14 @@ class ProjectInstructionsUseCase:
         if category_id is not None:
             category = content_base.instruction_categories.get(id=category_id)
             name = (category_data.get("name") or "").strip()
-            if name:
-                if name.casefold() != category.name.casefold():
-                    self._ensure_category_name_available(content_base, name, exclude_category_id=category.id)
-                if name != category.name:
-                    category.name = name
-                    try:
-                        category.save(update_fields=["name"])
-                    except IntegrityError as error:
-                        raise DuplicateCategoryNameError from error
-                    ContentBaseInstruction.objects.filter(category=category).update(suggested_category=name)
+            if name and name != category.name:
+                self._ensure_category_name_available(content_base, name, exclude_category_id=category.id)
+                category.name = name
+                try:
+                    category.save(update_fields=["name"])
+                except IntegrityError as error:
+                    raise DuplicateCategoryNameError from error
+                ContentBaseInstruction.objects.filter(category=category).update(suggested_category=name)
             return category
 
         name = (category_data.get("name") or "").strip()
