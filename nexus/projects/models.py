@@ -86,6 +86,11 @@ class Project(BaseModel, SoftDeleteModel):
     api_error_message = models.TextField(null=True, blank=True)
     manager_agent = models.ForeignKey("inline_agents.ManagerAgent", on_delete=models.SET_NULL, null=True, blank=True)
 
+    # Synced from Connect EDA (projects.topic / update-projects.topic)
+    vtex_account = models.CharField(max_length=255, null=True, blank=True, unique=True)
+    vtex_host_store = models.CharField(max_length=512, null=True, blank=True)
+    storefront_type = models.CharField(max_length=64, null=True, blank=True)
+
     def __str__(self):
         return f"{self.uuid} - Project: {self.name} - Org: {self.org.name}"
 

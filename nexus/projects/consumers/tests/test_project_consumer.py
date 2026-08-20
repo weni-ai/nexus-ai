@@ -35,6 +35,12 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
             channel=self.channel,
         )
         self.consumer = WeniEDAProjectConsumer()
+        self._sync_patcher = mock.patch("nexus.projects.consumers.project_consumer.SyncProjectVtexUseCase")
+        self._atomic_patcher = mock.patch("nexus.projects.consumers.project_consumer.transaction.atomic")
+        self.addCleanup(self._sync_patcher.stop)
+        self.addCleanup(self._atomic_patcher.stop)
+        self._sync_patcher.start()
+        self._atomic_patcher.start()
 
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
@@ -104,8 +110,10 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
     )
     @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
     @mock.patch("nexus.projects.consumers.project_consumer.capture_exception")
+    @mock.patch("weni.eda.django.consumers.consumer.message_started.send")
+    @mock.patch("weni.eda.django.consumers.consumer.message_finished.send")
     def test_weni_eda_project_consumer_rejects_on_error_via_handle(
-        self, mock_capture, mock_usecase_cls, _
+        self, _finished, _started, mock_capture, mock_usecase_cls, _
     ):
         mock_usecase_cls.return_value.create_project.side_effect = RuntimeError("boom")
 

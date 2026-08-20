@@ -16,6 +16,7 @@ from django.conf import settings
 from weni.eda.channels import Channel
 
 from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer
+from nexus.projects.consumers.project_update_consumer import WeniEDAProjectUpdateConsumer
 
 logger = logging.getLogger(__name__)
 
@@ -29,4 +30,14 @@ def handle_amq_consumers(channel: Channel) -> None:
     logger.info(
         "[handle_amq_consumers] Registered WeniEDAProjectConsumer on queue %s",
         queue_name,
+    )
+
+    update_queue_name = settings.PROJECT_UPDATE_AMQ_QUEUE_NAME
+    channel.basic_consume(
+        update_queue_name,
+        callback=WeniEDAProjectUpdateConsumer().handle,
+    )
+    logger.info(
+        "[handle_amq_consumers] Registered WeniEDAProjectUpdateConsumer on queue %s",
+        update_queue_name,
     )

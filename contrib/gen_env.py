@@ -258,6 +258,7 @@ def generate_env():
         "AMQ_VIRTUAL_HOST": "/",
         "AMQ_BROKER_PORT": "5671",
         "PROJECT_AMQ_QUEUE_NAME": "nexus-ai.projects.queue",
+        "PROJECT_UPDATE_AMQ_QUEUE_NAME": "nexus-ai.update-projects.queue",
         "OIDC_RP_SCOPES": "openid email",
         "LLM_CHAR_LIMIT": "640",
         "CREDENTIAL_ENCRYPTION_KEY": "",
