@@ -104,6 +104,10 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         flat = {"uuid": "p1", "name": "Test", "user_email": "user@test.com"}
         self.assertEqual(_extract_project_payload(flat), flat)
 
+    def test_extract_project_payload_keeps_body_when_data_has_no_event_type(self):
+        body = {"uuid": "p1", "name": "Test", "data": {"extra": 1}}
+        self.assertEqual(_extract_project_payload(body), body)
+
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
         return_value={"uuid": "p1"},

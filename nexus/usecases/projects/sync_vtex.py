@@ -22,11 +22,16 @@ class VtexFields:
 
 
 def unwrap_eda_payload(body: dict) -> dict:
-    """Normalize AmazonMQ envelope (`event_type` + `data`) to a flat project payload."""
+    """Normalize AmazonMQ envelope (`event_type` + `data`) to a flat project payload.
+
+    Only unwrap when both `event_type` and a dict `data` are present. A project
+    payload may legitimately include a `data` field of its own; unwrapping on
+    `data` alone would drop uuid, vtex_account and the rest of the root body.
+    """
     if not isinstance(body, dict):
         return {}
     data = body.get("data")
-    if isinstance(data, dict):
+    if "event_type" in body and isinstance(data, dict):
         return data
     return body
 

@@ -29,6 +29,18 @@ class UnwrapAndExtractVtexFieldsTestCase(TestCase):
         body = {"event_type": "project.created", "producer": "EDA_PRODUCER", "data": inner}
         self.assertEqual(unwrap_eda_payload(body), inner)
 
+    def test_unwrap_keeps_payload_with_data_but_no_event_type(self):
+        body = {
+            "uuid": "abc",
+            "vtex_account": "store",
+            "data": {"nested": True},
+        }
+        self.assertEqual(unwrap_eda_payload(body), body)
+
+    def test_unwrap_keeps_envelope_when_data_is_not_a_dict(self):
+        body = {"event_type": "project.created", "data": "not-a-dict"}
+        self.assertEqual(unwrap_eda_payload(body), body)
+
     def test_extract_with_config(self):
         fields = extract_vtex_fields(
             {
