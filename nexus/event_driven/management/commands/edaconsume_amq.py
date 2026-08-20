@@ -1,6 +1,10 @@
+import logging
 import signal
 
+from django.conf import settings
 from weni.eda.django.eda_app.management.commands.edaconsume import Command as WeniEDACommand
+
+logger = logging.getLogger(__name__)
 
 AMQ_PARAMS_CLASS = "weni.eda.django.AMQConnectionParamsFactory"
 AMQ_CONNECTION_BACKEND = "weni.eda.backends.pyamqp_backend.PyAMQPConnectionBackend"
@@ -37,4 +41,10 @@ class Command(WeniEDACommand):
         options["params_class"] = AMQ_PARAMS_CLASS
         options["handle"] = AMQ_CONSUMERS_HANDLE
         options["backend"] = AMQ_CONNECTION_BACKEND
+        logger.info(
+            "[edaconsume_amq] Starting Amazon MQ consumer host=%s port=%s queue=%s",
+            settings.AMQ_BROKER_HOST,
+            settings.AMQ_BROKER_PORT,
+            settings.PROJECT_AMQ_QUEUE_NAME,
+        )
         super().handle(*args, **options)

@@ -219,6 +219,29 @@ def _result_to_value(result):
     return result
 
 
+def _update_contact_from_tool_result(context_data, result) -> None:
+    """Merge contacts_updated fields into context_data.contact.fields when present."""
+    parsed = parse_tool_result(result)
+    if not isinstance(parsed, dict):
+        return
+    contacts_updated = parsed.get("contacts_updated")
+    if not isinstance(contacts_updated, list):
+        return
+    contact = getattr(context_data, "contact", None)
+    if not isinstance(contact, dict):
+        return
+    fields = contact.get("fields")
+    if not isinstance(fields, dict):
+        fields = {}
+        contact["fields"] = fields
+    for item in contacts_updated:
+        if not isinstance(item, dict):
+            continue
+        updated_fields = item.get("fields")
+        if isinstance(updated_fields, dict):
+            fields.update(updated_fields)
+
+
 def _maybe_send_tool_messages_sent_to_conversation(
     context_data,
     result,
@@ -681,6 +704,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         await self.tool_started(context, agent, tool)
 
         context_data = context.context
+        _update_contact_from_tool_result(context_data, result)
         project_uuid = context_data.project.get("uuid")
         tool_info = self.hooks_state.get_tool_info(tool.name)
         parameters = tool_info.get("parameters", [])
@@ -967,6 +991,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
     async def _on_tool_end_regular_tool(self, context, agent, tool, result, context_data, project_uuid, parameters):
         """Handle on_tool_end for regular (non-agent) tools."""
+        _update_contact_from_tool_result(context_data, result)
         _maybe_send_tool_messages_sent_to_conversation(
             context_data,
             result,

@@ -1,21 +1,53 @@
 import json
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 from nexus.projects.api.serializers import ProjectSerializer
 from nexus.projects.channel_ops import (
+    MAILROOM_FLOW_SIMULATOR_CHANNEL_UUID,
+    MAILROOM_FLOW_SIMULATOR_CONTACT_URN,
     channel_matches_default_preview,
     create_channel_from_wwc_event,
+    is_mailroom_flow_simulator_traffic,
 )
 from nexus.projects.consumers.channel_wwc_consumer import ChannelWwcConsumer
 from nexus.projects.models import Channel
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.projects.tests.test_agents_backend import MockExternalAgentClient
+
+
+class MailroomFlowSimulatorTrafficTests(SimpleTestCase):
+    def test_identifies_mailroom_flow_simulator_traffic(self) -> None:
+        simulator_uuid = UUID(MAILROOM_FLOW_SIMULATOR_CHANNEL_UUID)
+        cases = [
+            (MAILROOM_FLOW_SIMULATOR_CONTACT_URN, None),
+            (None, MAILROOM_FLOW_SIMULATOR_CHANNEL_UUID),
+            (MAILROOM_FLOW_SIMULATOR_CONTACT_URN, MAILROOM_FLOW_SIMULATOR_CHANNEL_UUID),
+            (None, simulator_uuid),
+            (f" {MAILROOM_FLOW_SIMULATOR_CONTACT_URN} ", None),
+            (None, f" {MAILROOM_FLOW_SIMULATOR_CHANNEL_UUID} "),
+        ]
+
+        for contact_urn, channel_uuid in cases:
+            with self.subTest(contact_urn=contact_urn, channel_uuid=channel_uuid):
+                self.assertTrue(is_mailroom_flow_simulator_traffic(contact_urn, channel_uuid))
+
+    def test_does_not_identify_regular_traffic_as_mailroom_flow_simulator(self) -> None:
+        cases = [
+            (None, None),
+            ("", ""),
+            ("tel:+5511999999999", str(uuid4())),
+            ("ext:user@example.com", None),
+        ]
+
+        for contact_urn, channel_uuid in cases:
+            with self.subTest(contact_urn=contact_urn, channel_uuid=channel_uuid):
+                self.assertFalse(is_mailroom_flow_simulator_traffic(contact_urn, channel_uuid))
 
 
 class ChannelOpsTestCase(TestCase):
