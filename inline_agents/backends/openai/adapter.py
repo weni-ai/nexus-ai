@@ -234,6 +234,9 @@ class OpenAITeamAdapter(TeamAdapter):
         manager_pipeline_version: Optional[str] = None,
         channel_type: str = "",
         prompt_injection_filter_enabled: bool = False,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -346,6 +349,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                vtex_account=vtex_account,
+                vtex_host_store=vtex_host_store,
+                storefront_type=storefront_type,
             ),
             "user_model_credentials": user_model_credentials,
             "model_vendor": supervisor.get("model_vendor", ""),
@@ -390,6 +396,9 @@ class OpenAITeamAdapter(TeamAdapter):
         business_rules: str = None,
         instructions: list[str] = None,
         agent_data: dict = None,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
@@ -534,6 +543,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                vtex_account=vtex_account,
+                vtex_host_store=vtex_host_store,
+                storefront_type=storefront_type,
             ),
         }
 
@@ -551,6 +563,9 @@ class OpenAITeamAdapter(TeamAdapter):
         session: Optional[Any] = None,
         input_text: str = "",
         hooks_state: Optional[HooksState] = None,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
     ) -> Context:
         if globals_dict is None:
             globals_dict = {}
@@ -562,7 +577,14 @@ class OpenAITeamAdapter(TeamAdapter):
 
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
-        project = {"uuid": project_uuid, "auth_token": auth_token, "flows_url": settings.FLOWS_REST_ENDPOINT}
+        project = {
+            "uuid": project_uuid,
+            "auth_token": auth_token,
+            "flows_url": settings.FLOWS_REST_ENDPOINT,
+            "vtex_account": vtex_account,
+            "vtex_host_store": vtex_host_store,
+            "storefront_type": storefront_type,
+        }
         content_base = {"uuid": content_base_uuid}
 
         return Context(

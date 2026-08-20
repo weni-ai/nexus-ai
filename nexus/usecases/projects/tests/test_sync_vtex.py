@@ -64,6 +64,9 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
     def setUp(self):
         self.project = ProjectFactory()
         self.usecase = SyncProjectVtexUseCase()
+        self.notify_patcher = patch("nexus.usecases.projects.sync_vtex.notify_async")
+        self.mock_notify = self.notify_patcher.start()
+        self.addCleanup(self.notify_patcher.stop)
 
     def test_create_mode_sets_filled_fields(self):
         fields = extract_vtex_fields(
@@ -127,6 +130,24 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
         self.assertEqual(result.uuid, self.project.uuid)
         self.project.refresh_from_db()
         self.assertEqual(Project.objects.get(uuid=other.uuid).vtex_account, "taken")
+
+    def test_successful_save_invalidates_project_cache(self):
+        fields = extract_vtex_fields({"vtex_account": "mystore", "config": {}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        self.mock_notify.assert_called_once()
+        self.assertEqual(self.mock_notify.call_args.kwargs["event"], "cache_invalidation:project")
+        self.assertEqual(self.mock_notify.call_args.kwargs["project"].uuid, self.project.uuid)
+
+    def test_no_field_changes_does_not_invalidate_cache(self):
+        fields = extract_vtex_fields({"uuid": "abc", "config": {}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        self.mock_notify.assert_not_called()
+
+    def test_integrity_error_does_not_invalidate_cache(self):
+        ProjectFactory(vtex_account="taken")
+        fields = extract_vtex_fields({"vtex_account": "taken", "config": {}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        self.mock_notify.assert_not_called()
 
 
 class ProjectUpdateConsumerTestCase(TestCase):

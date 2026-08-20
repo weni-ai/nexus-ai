@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from django.db import IntegrityError, transaction
 from sentry_sdk import capture_exception
 
+from nexus.events import notify_async
 from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ class SyncProjectVtexUseCase:
             project.refresh_from_db()
             return project
 
+        notify_async(event="cache_invalidation:project", project=project)
         logger.info(
             "[SyncProjectVtexUseCase] Project VTEX fields synced",
             extra={"project_uuid": project_uuid, "update_fields": update_fields, "mode": mode},

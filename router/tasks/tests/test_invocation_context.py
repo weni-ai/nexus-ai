@@ -184,6 +184,9 @@ class TestCachedProjectDataEdgeCases(TestCase):
             "guardrails_config",
             "prompt_injection_filter_enabled",
             "default_instructions_for_collaborators",
+            "vtex_account",
+            "vtex_host_store",
+            "storefront_type",
         ]
 
         for key in expected_keys:
@@ -212,3 +215,28 @@ class TestCachedProjectDataEdgeCases(TestCase):
         self.assertFalse(kwargs.get("prompt_injection_filter_enabled", True))
         self.assertEqual(kwargs.get("conversation_turns_to_include"), 10)
         self.assertTrue(kwargs.get("exclude_previous_thinking_steps", False))
+        self.assertIsNone(kwargs.get("vtex_account"))
+        self.assertIsNone(kwargs.get("vtex_host_store"))
+        self.assertIsNone(kwargs.get("storefront_type"))
+
+    def test_get_invoke_kwargs_includes_vtex_fields(self):
+        cached_data = CachedProjectData(
+            project_dict={
+                "vtex_account": "mystore",
+                "vtex_host_store": "https://www.mystore.com.br",
+                "storefront_type": "vtex_io",
+            },
+            content_base_dict={"uuid": "cb-uuid"},
+            team=[],
+            guardrails_config={},
+            inline_agent_config_dict=None,
+            instructions=[],
+            agent_data=None,
+            formatter_agent_configurations=None,
+        )
+
+        kwargs = cached_data.get_invoke_kwargs(team=[])
+
+        self.assertEqual(kwargs["vtex_account"], "mystore")
+        self.assertEqual(kwargs["vtex_host_store"], "https://www.mystore.com.br")
+        self.assertEqual(kwargs["storefront_type"], "vtex_io")
