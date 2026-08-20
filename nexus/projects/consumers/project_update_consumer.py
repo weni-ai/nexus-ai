@@ -77,7 +77,11 @@ class ProjectUpdateConsumer(EDAConsumer):
 
 
 class WeniEDAProjectUpdateConsumer(WeniEDAConsumer):
-    """Consumes Connect project update events from Amazon MQ."""
+    """Consumes Connect project update events from Amazon MQ.
+
+    Not registered in `handle_amq_consumers` yet: Connect still publishes project
+    updates only to the legacy RabbitMQ broker.
+    """
 
     def consume(self, message: WeniMessage):
         logger.debug(

@@ -315,9 +315,6 @@ if USE_EDA:
     AMQ_BROKER_HEARTBEAT = env.int("AMQ_BROKER_HEARTBEAT", default=300)
 
     PROJECT_AMQ_QUEUE_NAME = env.str("PROJECT_AMQ_QUEUE_NAME", default="nexus-ai.projects.queue")
-    PROJECT_UPDATE_AMQ_QUEUE_NAME = env.str(
-        "PROJECT_UPDATE_AMQ_QUEUE_NAME", default="nexus-ai.update-projects.queue"
-    )
 
 RABBITMQ_DEFAULT_USER = env.str("RABBITMQ_DEFAULT_USER")
 RABBITMQ_DEFAULT_PASS = env.str("RABBITMQ_DEFAULT_PASS")
