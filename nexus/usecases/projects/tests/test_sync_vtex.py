@@ -91,6 +91,20 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
         self.assertIsNone(self.project.vtex_account)
         self.assertIsNone(self.project.vtex_host_store)
 
+    def test_create_mode_redelivery_keeps_values_synced_by_update(self):
+        self.project.vtex_account = "mystore"
+        self.project.vtex_host_store = "https://www.mystore.com.br"
+        self.project.storefront_type = "vtex_io"
+        self.project.save()
+
+        fields = extract_vtex_fields({"vtex_account": None, "config": {"vtex_host_store": ""}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="create")
+
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.vtex_account, "mystore")
+        self.assertEqual(self.project.vtex_host_store, "https://www.mystore.com.br")
+        self.assertEqual(self.project.storefront_type, "vtex_io")
+
     def test_update_mode_applies_snapshot_including_null(self):
         self.project.vtex_account = "oldstore"
         self.project.vtex_host_store = "https://old.com"
@@ -289,6 +303,21 @@ class WeniEDAProjectUpdateConsumerTestCase(TestCase):
         self.assertEqual(self.project.vtex_account, "enveloped")
         self.assertEqual(self.project.storefront_type, "vtex_io")
         self.assertEqual(self.channel.acked, [1])
+
+    @patch("nexus.projects.consumers.project_update_consumer.capture_exception")
+    @patch("nexus.projects.consumers.project_update_consumer.logger")
+    def test_consume_logs_error_before_raising(self, mock_logger, _mock_capture):
+        from weni.eda.messages import Message as WeniMessage
+
+        weni_message = WeniMessage(body=b"not-json", delivery_tag=9, channel=self.channel)
+        self.consumer._message = weni_message
+        with self.assertRaises(Exception):
+            self.consumer.consume(weni_message)
+        mock_logger.error.assert_called_once_with(
+            "[WeniEDAProjectUpdateConsumer] Message rejected",
+            exc_info=True,
+        )
+        self.assertEqual(self.channel.acked, [])
 
 
 class ProjectConsumerVtexTestCase(TestCase):

@@ -58,6 +58,14 @@ class SyncProjectVtexUseCase:
         *,
         mode: Literal["create", "update"] = "update",
     ) -> Optional[Project]:
+        """Apply the VTEX snapshot of a Connect project event.
+
+        The two modes treat empty values differently on purpose. `update` applies
+        the payload by key presence, so an explicit null clears the stored value.
+        `create` only applies filled values because it also runs when a creation
+        event is redelivered for an existing project; a stale creation payload
+        must not wipe values already synced by a later update event.
+        """
         try:
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:

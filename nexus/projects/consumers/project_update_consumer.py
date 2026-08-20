@@ -94,4 +94,5 @@ class WeniEDAProjectUpdateConsumer(WeniEDAConsumer):
             self.ack()
         except Exception as exception:
             capture_exception(exception)
+            logger.error("[WeniEDAProjectUpdateConsumer] Message rejected", exc_info=True)
             raise
