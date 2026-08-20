@@ -113,8 +113,14 @@ class SyncProjectVtexUseCase:
                     "vtex_account": fields.vtex_account,
                 },
             )
-            project.refresh_from_db()
-            return project
+            # The unique constraint blocked the write, so the persisted row is
+            # unchanged. Skip cache invalidation and return a fresh instance
+            # from the database instead of the in-memory object that still
+            # holds the conflicting vtex_account.
+            try:
+                return Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                return None
 
         notify_async(event="cache_invalidation:project", project=project)
         logger.info(

@@ -49,11 +49,6 @@ def _handle_project_updated(body: dict) -> tuple[str | None, bool]:
             "[ProjectUpdateConsumer] Project not found, skipping VTEX sync",
             extra={"project_uuid": project_uuid},
         )
-    else:
-        logger.info(
-            "[ProjectUpdateConsumer] Project VTEX fields updated",
-            extra={"project_uuid": project_uuid},
-        )
 
     return str(project_uuid), False
 
@@ -68,8 +63,15 @@ class ProjectUpdateConsumer(EDAConsumer):
         )
         try:
             body = JSONParser.parse(message.body)
-            _handle_project_updated(body)
+            project_uuid, skipped = _handle_project_updated(body)
             message.channel.basic_ack(message.delivery_tag)
+            if skipped:
+                logger.info("[ProjectUpdateConsumer] Message skipped", extra={"uuid": project_uuid})
+            else:
+                logger.info(
+                    "[ProjectUpdateConsumer] Project VTEX fields updated",
+                    extra={"uuid": project_uuid},
+                )
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
@@ -90,8 +92,15 @@ class WeniEDAProjectUpdateConsumer(WeniEDAConsumer):
         )
         try:
             body = JSONParser.parse(message.body)
-            _handle_project_updated(body)
+            project_uuid, skipped = _handle_project_updated(body)
             self.ack()
+            if skipped:
+                logger.info("[WeniEDAProjectUpdateConsumer] Message skipped", extra={"uuid": project_uuid})
+            else:
+                logger.info(
+                    "[WeniEDAProjectUpdateConsumer] Project VTEX fields updated",
+                    extra={"uuid": project_uuid},
+                )
         except Exception as exception:
             capture_exception(exception)
             logger.error("[WeniEDAProjectUpdateConsumer] Message rejected", exc_info=True)

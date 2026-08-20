@@ -142,7 +142,9 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
         fields = extract_vtex_fields({"vtex_account": "taken", "config": {}})
         result = self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
         self.assertEqual(result.uuid, self.project.uuid)
+        self.assertIsNone(result.vtex_account)
         self.project.refresh_from_db()
+        self.assertIsNone(self.project.vtex_account)
         self.assertEqual(Project.objects.get(uuid=other.uuid).vtex_account, "taken")
 
     def test_successful_save_invalidates_project_cache(self):
@@ -266,6 +268,37 @@ class ProjectUpdateConsumerTestCase(TestCase):
         )
         self.consumer.consume(msg)
         msg.channel.basic_ack.assert_called_once_with(42)
+
+    @patch("nexus.projects.consumers.project_update_consumer.logger")
+    def test_consume_logs_updated_uuid(self, mock_logger):
+        project_uuid = str(self.project.uuid)
+        msg = self._message(
+            {
+                "project_uuid": project_uuid,
+                "action": "updated",
+                "vtex_account": "mystore",
+                "config": {},
+            }
+        )
+        self.consumer.consume(msg)
+        mock_logger.info.assert_any_call(
+            "[ProjectUpdateConsumer] Project VTEX fields updated",
+            extra={"uuid": project_uuid},
+        )
+
+    @patch("nexus.projects.consumers.project_update_consumer.logger")
+    def test_consume_logs_skipped_when_action_ignored(self, mock_logger):
+        msg = self._message(
+            {
+                "project_uuid": str(self.project.uuid),
+                "action": "deleted",
+            }
+        )
+        self.consumer.consume(msg)
+        mock_logger.info.assert_any_call(
+            "[ProjectUpdateConsumer] Message skipped",
+            extra={"uuid": None},
+        )
 
 
 class WeniEDAProjectUpdateConsumerTestCase(TestCase):
