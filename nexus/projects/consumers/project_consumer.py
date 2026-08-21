@@ -39,6 +39,12 @@ def _build_project_dto(body: dict) -> ProjectCreationDTO:
     )
 
 
+def _sync_created_project_vtex(project_uuid: str | None, vtex_fields) -> None:
+    if not project_uuid:
+        return
+    SyncProjectVtexUseCase().sync_project_vtex(project_uuid, vtex_fields, mode="create")
+
+
 def _handle_project_created(body: dict) -> str:
     payload = _extract_project_payload(body)
     project_uuid = payload.get("uuid")
@@ -48,6 +54,7 @@ def _handle_project_created(body: dict) -> str:
     try:
         with transaction.atomic():
             ProjectsUseCase().create_project(project_dto=project_dto, user_email=payload.get("user_email"))
+            _sync_created_project_vtex(project_uuid, vtex_fields)
         logger.info("[ProjectConsumer] Project created", extra={"uuid": project_uuid})
     except IntegrityError:
         if project_uuid and Project.objects.filter(uuid=project_uuid).exists():
@@ -55,11 +62,9 @@ def _handle_project_created(body: dict) -> str:
                 "[ProjectConsumer] Project already exists, syncing VTEX fields only",
                 extra={"uuid": project_uuid},
             )
+            _sync_created_project_vtex(project_uuid, vtex_fields)
         else:
             raise
-
-    if project_uuid:
-        SyncProjectVtexUseCase().sync_project_vtex(project_uuid, vtex_fields, mode="create")
 
     return project_uuid
 

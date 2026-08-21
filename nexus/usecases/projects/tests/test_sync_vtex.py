@@ -29,6 +29,18 @@ class UnwrapAndExtractVtexFieldsTestCase(TestCase):
         body = {"event_type": "project.created", "producer": "EDA_PRODUCER", "data": inner}
         self.assertEqual(unwrap_eda_payload(body), inner)
 
+    def test_unwrap_keeps_payload_with_data_but_no_event_type(self):
+        body = {
+            "uuid": "abc",
+            "vtex_account": "store",
+            "data": {"nested": True},
+        }
+        self.assertEqual(unwrap_eda_payload(body), body)
+
+    def test_unwrap_keeps_envelope_when_data_is_not_a_dict(self):
+        body = {"event_type": "project.created", "data": "not-a-dict"}
+        self.assertEqual(unwrap_eda_payload(body), body)
+
     def test_extract_with_config(self):
         fields = extract_vtex_fields(
             {
@@ -64,6 +76,9 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
     def setUp(self):
         self.project = ProjectFactory()
         self.usecase = SyncProjectVtexUseCase()
+        self.notify_patcher = patch("nexus.usecases.projects.sync_vtex.notify_async")
+        self.mock_notify = self.notify_patcher.start()
+        self.addCleanup(self.notify_patcher.stop)
 
     def test_create_mode_sets_filled_fields(self):
         fields = extract_vtex_fields(
@@ -87,6 +102,20 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
         self.project.refresh_from_db()
         self.assertIsNone(self.project.vtex_account)
         self.assertIsNone(self.project.vtex_host_store)
+
+    def test_create_mode_redelivery_keeps_values_synced_by_update(self):
+        self.project.vtex_account = "mystore"
+        self.project.vtex_host_store = "https://www.mystore.com.br"
+        self.project.storefront_type = "vtex_io"
+        self.project.save()
+
+        fields = extract_vtex_fields({"vtex_account": None, "config": {"vtex_host_store": ""}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="create")
+
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.vtex_account, "mystore")
+        self.assertEqual(self.project.vtex_host_store, "https://www.mystore.com.br")
+        self.assertEqual(self.project.storefront_type, "vtex_io")
 
     def test_update_mode_applies_snapshot_including_null(self):
         self.project.vtex_account = "oldstore"
@@ -125,8 +154,28 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
         fields = extract_vtex_fields({"vtex_account": "taken", "config": {}})
         result = self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
         self.assertEqual(result.uuid, self.project.uuid)
+        self.assertIsNone(result.vtex_account)
         self.project.refresh_from_db()
+        self.assertIsNone(self.project.vtex_account)
         self.assertEqual(Project.objects.get(uuid=other.uuid).vtex_account, "taken")
+
+    def test_successful_save_invalidates_project_cache(self):
+        fields = extract_vtex_fields({"vtex_account": "mystore", "config": {}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        self.mock_notify.assert_called_once()
+        self.assertEqual(self.mock_notify.call_args.kwargs["event"], "cache_invalidation:project")
+        self.assertEqual(self.mock_notify.call_args.kwargs["project"].uuid, self.project.uuid)
+
+    def test_no_field_changes_does_not_invalidate_cache(self):
+        fields = extract_vtex_fields({"uuid": "abc", "config": {}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        self.mock_notify.assert_not_called()
+
+    def test_integrity_error_does_not_invalidate_cache(self):
+        ProjectFactory(vtex_account="taken")
+        fields = extract_vtex_fields({"vtex_account": "taken", "config": {}})
+        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        self.mock_notify.assert_not_called()
 
 
 class ProjectUpdateConsumerTestCase(TestCase):
@@ -232,6 +281,37 @@ class ProjectUpdateConsumerTestCase(TestCase):
         self.consumer.consume(msg)
         msg.channel.basic_ack.assert_called_once_with(42)
 
+    @patch("nexus.projects.consumers.project_update_consumer.logger")
+    def test_consume_logs_updated_uuid(self, mock_logger):
+        project_uuid = str(self.project.uuid)
+        msg = self._message(
+            {
+                "project_uuid": project_uuid,
+                "action": "updated",
+                "vtex_account": "mystore",
+                "config": {},
+            }
+        )
+        self.consumer.consume(msg)
+        mock_logger.info.assert_any_call(
+            "[ProjectUpdateConsumer] Project VTEX fields updated",
+            extra={"uuid": project_uuid},
+        )
+
+    @patch("nexus.projects.consumers.project_update_consumer.logger")
+    def test_consume_logs_skipped_when_action_ignored(self, mock_logger):
+        msg = self._message(
+            {
+                "project_uuid": str(self.project.uuid),
+                "action": "deleted",
+            }
+        )
+        self.consumer.consume(msg)
+        mock_logger.info.assert_any_call(
+            "[ProjectUpdateConsumer] Message skipped",
+            extra={"uuid": None},
+        )
+
 
 class WeniEDAProjectUpdateConsumerTestCase(TestCase):
     def setUp(self):
@@ -268,6 +348,21 @@ class WeniEDAProjectUpdateConsumerTestCase(TestCase):
         self.assertEqual(self.project.vtex_account, "enveloped")
         self.assertEqual(self.project.storefront_type, "vtex_io")
         self.assertEqual(self.channel.acked, [1])
+
+    @patch("nexus.projects.consumers.project_update_consumer.capture_exception")
+    @patch("nexus.projects.consumers.project_update_consumer.logger")
+    def test_consume_logs_error_before_raising(self, mock_logger, _mock_capture):
+        from weni.eda.messages import Message as WeniMessage
+
+        weni_message = WeniMessage(body=b"not-json", delivery_tag=9, channel=self.channel)
+        self.consumer._message = weni_message
+        with self.assertRaises(Exception):
+            self.consumer.consume(weni_message)
+        mock_logger.error.assert_called_once_with(
+            "[WeniEDAProjectUpdateConsumer] Message rejected",
+            exc_info=True,
+        )
+        self.assertEqual(self.channel.acked, [])
 
 
 class ProjectConsumerVtexTestCase(TestCase):

@@ -1,4 +1,5 @@
 from typing import Optional
+from unittest.mock import patch
 
 from django.test import TestCase
 from pydantic import BaseModel, ValidationError
@@ -435,3 +436,39 @@ class TestOpenAIDataLakeEventAdapterDataLakeEvents(TestCase):
         self.assertEqual(len(self.mock_service.sent_events_async), 1)
         self.assertEqual(self.mock_service.sent_events_async[0]["key"], "tool_result")
         self.assertEqual(len(self.mock_service.sent_events_sync), 0)
+
+
+class TestOpenAITeamAdapterGetContext(TestCase):
+    @patch.object(OpenAITeamAdapter, "_get_credentials", return_value={"api_key": "secret"})
+    def test_get_context_includes_vtex_fields(self, _mock_credentials):
+        context = OpenAITeamAdapter._get_context(
+            project_uuid="proj-123",
+            contact_urn="tel:123",
+            auth_token="token",
+            channel_uuid="ch-1",
+            contact_name="Ana",
+            content_base_uuid="cb-1",
+            contact_fields="{}",
+            vtex_account="mystore",
+            vtex_host_store="https://www.mystore.com.br",
+            storefront_type="vtex_io",
+        )
+        self.assertEqual(context.project["uuid"], "proj-123")
+        self.assertEqual(context.project["vtex_account"], "mystore")
+        self.assertEqual(context.project["vtex_host_store"], "https://www.mystore.com.br")
+        self.assertEqual(context.project["storefront_type"], "vtex_io")
+
+    @patch.object(OpenAITeamAdapter, "_get_credentials", return_value={})
+    def test_get_context_vtex_fields_default_to_none(self, _mock_credentials):
+        context = OpenAITeamAdapter._get_context(
+            project_uuid="proj-123",
+            contact_urn="tel:123",
+            auth_token="token",
+            channel_uuid="ch-1",
+            contact_name="Ana",
+            content_base_uuid="cb-1",
+            contact_fields="{}",
+        )
+        self.assertIsNone(context.project["vtex_account"])
+        self.assertIsNone(context.project["vtex_host_store"])
+        self.assertIsNone(context.project["storefront_type"])

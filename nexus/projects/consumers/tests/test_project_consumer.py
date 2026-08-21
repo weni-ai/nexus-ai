@@ -39,7 +39,7 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         self._atomic_patcher = mock.patch("nexus.projects.consumers.project_consumer.transaction.atomic")
         self.addCleanup(self._sync_patcher.stop)
         self.addCleanup(self._atomic_patcher.stop)
-        self._sync_patcher.start()
+        self.mock_sync_cls = self._sync_patcher.start()
         self._atomic_patcher.start()
 
     @mock.patch(
@@ -104,6 +104,10 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         flat = {"uuid": "p1", "name": "Test", "user_email": "user@test.com"}
         self.assertEqual(_extract_project_payload(flat), flat)
 
+    def test_extract_project_payload_keeps_body_when_data_has_no_event_type(self):
+        body = {"uuid": "p1", "name": "Test", "data": {"extra": 1}}
+        self.assertEqual(_extract_project_payload(body), body)
+
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
         return_value={"uuid": "p1"},
@@ -145,3 +149,22 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         self.consumer.consume(self.weni_message)
 
         self.assertEqual(self.channel.acked, [1])
+        self.mock_sync_cls.return_value.sync_project_vtex.assert_called_once()
+
+    @mock.patch(
+        "nexus.projects.consumers.project_consumer.JSONParser.parse",
+        return_value={
+            "uuid": "p1",
+            "name": "Test Project",
+            "organization_uuid": "org-1",
+            "user_email": "user@test.com",
+        },
+    )
+    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
+    def test_weni_eda_project_consumer_does_not_ack_when_vtex_sync_fails(self, mock_usecase_cls, _):
+        self.mock_sync_cls.return_value.sync_project_vtex.side_effect = RuntimeError("vtex boom")
+        self.consumer._message = self.weni_message
+        with self.assertRaises(RuntimeError):
+            self.consumer.consume(self.weni_message)
+        mock_usecase_cls.return_value.create_project.assert_called_once()
+        self.assertEqual(self.channel.acked, [])

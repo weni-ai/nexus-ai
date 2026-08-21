@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from django.db import IntegrityError, transaction
 from sentry_sdk import capture_exception
 
+from nexus.events import notify_async
 from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
@@ -21,11 +22,16 @@ class VtexFields:
 
 
 def unwrap_eda_payload(body: dict) -> dict:
-    """Normalize AmazonMQ envelope (`event_type` + `data`) to a flat project payload."""
+    """Normalize AmazonMQ envelope (`event_type` + `data`) to a flat project payload.
+
+    Only unwrap when both `event_type` and a dict `data` are present. A project
+    payload may legitimately include a `data` field of its own; unwrapping on
+    `data` alone would drop uuid, vtex_account and the rest of the root body.
+    """
     if not isinstance(body, dict):
         return {}
     data = body.get("data")
-    if isinstance(data, dict):
+    if "event_type" in body and isinstance(data, dict):
         return data
     return body
 
@@ -57,6 +63,14 @@ class SyncProjectVtexUseCase:
         *,
         mode: Literal["create", "update"] = "update",
     ) -> Optional[Project]:
+        """Apply the VTEX snapshot of a Connect project event.
+
+        The two modes treat empty values differently on purpose. `update` applies
+        the payload by key presence, so an explicit null clears the stored value.
+        `create` only applies filled values because it also runs when a creation
+        event is redelivered for an existing project; a stale creation payload
+        must not wipe values already synced by a later update event.
+        """
         try:
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
@@ -104,9 +118,16 @@ class SyncProjectVtexUseCase:
                     "vtex_account": fields.vtex_account,
                 },
             )
-            project.refresh_from_db()
-            return project
+            # The unique constraint blocked the write, so the persisted row is
+            # unchanged. Skip cache invalidation and return a fresh instance
+            # from the database instead of the in-memory object that still
+            # holds the conflicting vtex_account.
+            try:
+                return Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                return None
 
+        notify_async(event="cache_invalidation:project", project=project)
         logger.info(
             "[SyncProjectVtexUseCase] Project VTEX fields synced",
             extra={"project_uuid": project_uuid, "update_fields": update_fields, "mode": mode},
