@@ -35,6 +35,12 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
             channel=self.channel,
         )
         self.consumer = WeniEDAProjectConsumer()
+        self._sync_patcher = mock.patch("nexus.projects.consumers.project_consumer.SyncProjectVtexUseCase")
+        self._atomic_patcher = mock.patch("nexus.projects.consumers.project_consumer.transaction.atomic")
+        self.addCleanup(self._sync_patcher.stop)
+        self.addCleanup(self._atomic_patcher.stop)
+        self.mock_sync_cls = self._sync_patcher.start()
+        self._atomic_patcher.start()
 
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
@@ -98,14 +104,20 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         flat = {"uuid": "p1", "name": "Test", "user_email": "user@test.com"}
         self.assertEqual(_extract_project_payload(flat), flat)
 
+    def test_extract_project_payload_keeps_body_when_data_has_no_event_type(self):
+        body = {"uuid": "p1", "name": "Test", "data": {"extra": 1}}
+        self.assertEqual(_extract_project_payload(body), body)
+
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
         return_value={"uuid": "p1"},
     )
     @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
     @mock.patch("nexus.projects.consumers.project_consumer.capture_exception")
+    @mock.patch("weni.eda.django.consumers.consumer.message_started.send")
+    @mock.patch("weni.eda.django.consumers.consumer.message_finished.send")
     def test_weni_eda_project_consumer_rejects_on_error_via_handle(
-        self, mock_capture, mock_usecase_cls, _
+        self, _finished, _started, mock_capture, mock_usecase_cls, _
     ):
         mock_usecase_cls.return_value.create_project.side_effect = RuntimeError("boom")
 
@@ -137,3 +149,22 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         self.consumer.consume(self.weni_message)
 
         self.assertEqual(self.channel.acked, [1])
+        self.mock_sync_cls.return_value.sync_project_vtex.assert_called_once()
+
+    @mock.patch(
+        "nexus.projects.consumers.project_consumer.JSONParser.parse",
+        return_value={
+            "uuid": "p1",
+            "name": "Test Project",
+            "organization_uuid": "org-1",
+            "user_email": "user@test.com",
+        },
+    )
+    @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
+    def test_weni_eda_project_consumer_does_not_ack_when_vtex_sync_fails(self, mock_usecase_cls, _):
+        self.mock_sync_cls.return_value.sync_project_vtex.side_effect = RuntimeError("vtex boom")
+        self.consumer._message = self.weni_message
+        with self.assertRaises(RuntimeError):
+            self.consumer.consume(self.weni_message)
+        mock_usecase_cls.return_value.create_project.assert_called_once()
+        self.assertEqual(self.channel.acked, [])

@@ -440,6 +440,9 @@ class OpenAIBackend(InlineAgentsBackend):
         instructions_cached = kwargs.pop("instructions", None)
         agent_data_cached = kwargs.pop("agent_data", None)
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
+        vtex_account_cached = kwargs.pop("vtex_account", None)
+        vtex_host_store_cached = kwargs.pop("vtex_host_store", None)
+        storefront_type_cached = kwargs.pop("storefront_type", None)
 
         if supervisor_agent_uuid:
             external_team = self.team_adapter.to_external_enhanced(
@@ -475,6 +478,9 @@ class OpenAIBackend(InlineAgentsBackend):
                 manager_pipeline_version=manager_pipeline_version,
                 channel_type=channel_type,
                 prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -513,6 +519,9 @@ class OpenAIBackend(InlineAgentsBackend):
                 skip_conversation_sqs=skip_conversation_sqs,
                 channel_type=channel_type,
                 prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
 
         client = self._get_client()
