@@ -94,7 +94,7 @@ class EventManager:
             try:
                 self.validators[event].validate(event, kwargs)
             except Exception as e:
-                logger.error(f"Event '{event}' validation failed: {e}", extra={"event": event, "kwargs": kwargs})
+                logger.error(f"Event '{event}' validation failed: {e}", f"event: {event}, kwargs: {kwargs}")
                 raise
 
         # Get observers from registry only (subscribe() registers all observers there)
@@ -126,12 +126,8 @@ class EventManager:
 
                     logger.error(
                         f"Observer '{observer_name}' failed for event '{event}' (isolated): {e}",
+                        f"observer: {observer_name}, event: {event}, kwargs: {kwargs}",
                         exc_info=True,
-                        extra={
-                            "event": event,
-                            "observer": observer_name,
-                            "kwargs": kwargs,
-                        },
                     )
                     # Continue with next observer
             else:
@@ -232,7 +228,7 @@ class AsyncEventManager:
             try:
                 self.validators[event].validate(event, kwargs)
             except Exception as e:
-                logger.error(f"Event '{event}' validation failed: {e}", extra={"event": event, "kwargs": kwargs})
+                logger.error(f"Event '{event}' validation failed: {e}", f"event: {event}, kwargs: {kwargs}")
                 raise
 
         # Get observers from registry only (subscribe() registers all observers there)
@@ -267,12 +263,8 @@ class AsyncEventManager:
 
                     logger.error(
                         f"Observer '{observer_name}' failed for event '{event}' (isolated): {e}",
+                        f"observer: {observer_name}, event: {event}, kwargs: {kwargs}",
                         exc_info=True,
-                        extra={
-                            "event": event,
-                            "observer": observer_name,
-                            "kwargs": kwargs,
-                        },
                     )
                     # Continue with next observer
             else:

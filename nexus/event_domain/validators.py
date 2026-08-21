@@ -162,6 +162,6 @@ class ValidatorChain:
             except Exception as e:
                 logger.warning(
                     f"Event '{event}' validation failed: {e}",
-                    extra={"event": event, "payload_keys": list(payload.keys())},
+                    f"event: {event}, payload_keys: {list(payload.keys())}",
                 )
                 raise
