@@ -148,6 +148,7 @@ class ManagerAgentRepository(SupervisorRepository):
             "model_has_reasoning": supervisor_data["model_has_reasoning"],
             "reasoning_effort": supervisor_data["reasoning_effort"],
             "reasoning_summary": supervisor_data["reasoning_summary"],
+            "reasoning_mode": supervisor_data["reasoning_mode"],
             "parallel_tool_calls": supervisor_data["parallel_tool_calls"],
             "manager_extra_args": manager_extra_args,
         }

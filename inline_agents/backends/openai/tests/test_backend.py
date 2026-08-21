@@ -473,7 +473,18 @@ class ManagerAgentRepositoryTestCase(TestCase):
         self.assertEqual(result["model_settings"]["model_has_reasoning"], self.manager_agent.model_has_reasoning)
         self.assertEqual(result["model_settings"]["reasoning_effort"], self.manager_agent.reasoning_effort)
         self.assertEqual(result["model_settings"]["reasoning_summary"], self.manager_agent.reasoning_summary)
+        self.assertIsNone(result["model_settings"]["reasoning_mode"])
         self.assertEqual(result["model_settings"]["parallel_tool_calls"], self.manager_agent.parallel_tool_calls)
+
+    def test_get_supervisor_includes_reasoning_mode_when_set(self):
+        self.manager_agent.reasoning_mode = "minimal"
+        self.manager_agent.save()
+
+        result = self.repository.get_supervisor(
+            supervisor_agent_uuid=str(self.manager_agent.uuid),
+        )
+
+        self.assertEqual(result["model_settings"]["reasoning_mode"], "minimal")
 
     def test_get_supervisor_max_tokens_structure(self):
         """Test get_supervisor includes correct max_tokens structure."""
