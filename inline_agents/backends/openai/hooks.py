@@ -884,6 +884,10 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
     async def on_start(self, context, agent):
         logger.info(f"[HOOK] Agente '{_get_agent_slug(agent, self.hooks_state)}' iniciado.")
+        context_data = context.context
+        print("--------------------")
+        print(context_data)
+        print("--------------------")
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
