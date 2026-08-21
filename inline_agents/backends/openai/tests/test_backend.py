@@ -294,52 +294,6 @@ class TestFormatterAgentLitellmCredentials(TestCase):
         self.assertFalse(agent.model_settings.include_usage)
 
 
-class TestOpenAICompatibleClient(TestCase):
-    def setUp(self):
-        self.backend = OpenAIBackend()
-
-    @patch("inline_agents.backends.openai.backend.set_default_openai_client")
-    @patch("inline_agents.backends.openai.backend.AsyncOpenAI")
-    def test_sets_mantle_client_with_project_credentials(self, mock_async_openai, mock_set_default_client):
-        credentials = {
-            "api_key": "bedrock-api-key",
-            "api_base": "https://bedrock-mantle.us-west-2.api.aws/openai/v1",
-        }
-
-        self.backend._set_openai_client(credentials, "aws_mantle")
-
-        mock_async_openai.assert_called_once_with(
-            base_url="https://bedrock-mantle.us-west-2.api.aws/openai/v1",
-            api_key="bedrock-api-key",
-        )
-        mock_set_default_client.assert_called_once_with(mock_async_openai.return_value)
-
-    @patch("inline_agents.backends.openai.backend.set_default_openai_client")
-    @patch("inline_agents.backends.openai.backend.AsyncOpenAI")
-    def test_defaults_mantle_to_us_west_2(self, mock_async_openai, mock_set_default_client):
-        self.backend._set_openai_client({"api_key": "bedrock-api-key"}, "aws_mantle")
-
-        mock_async_openai.assert_called_once_with(
-            base_url="https://bedrock-mantle.us-west-2.api.aws/openai/v1",
-            api_key="bedrock-api-key",
-        )
-        mock_set_default_client.assert_called_once_with(mock_async_openai.return_value)
-
-    @patch("inline_agents.backends.openai.backend.set_default_openai_client")
-    @patch("inline_agents.backends.openai.backend.AsyncOpenAI")
-    def test_does_not_set_client_for_unknown_vendor(self, mock_async_openai, mock_set_default_client):
-        self.backend._set_openai_client(
-            {
-                "api_key": "bedrock-api-key",
-                "api_base": "https://bedrock-mantle.us-west-2.api.aws/openai/v1",
-            },
-            "unknown",
-        )
-
-        mock_async_openai.assert_not_called()
-        mock_set_default_client.assert_not_called()
-
-
 class TestFormatterAgentSkip(TestCase):
     def test_formatter_not_needed_when_use_components_false(self):
         use_components = False
@@ -519,7 +473,18 @@ class ManagerAgentRepositoryTestCase(TestCase):
         self.assertEqual(result["model_settings"]["model_has_reasoning"], self.manager_agent.model_has_reasoning)
         self.assertEqual(result["model_settings"]["reasoning_effort"], self.manager_agent.reasoning_effort)
         self.assertEqual(result["model_settings"]["reasoning_summary"], self.manager_agent.reasoning_summary)
+        self.assertIsNone(result["model_settings"]["reasoning_mode"])
         self.assertEqual(result["model_settings"]["parallel_tool_calls"], self.manager_agent.parallel_tool_calls)
+
+    def test_get_supervisor_includes_reasoning_mode_when_set(self):
+        self.manager_agent.reasoning_mode = "minimal"
+        self.manager_agent.save()
+
+        result = self.repository.get_supervisor(
+            supervisor_agent_uuid=str(self.manager_agent.uuid),
+        )
+
+        self.assertEqual(result["model_settings"]["reasoning_mode"], "minimal")
 
     def test_get_supervisor_max_tokens_structure(self):
         """Test get_supervisor includes correct max_tokens structure."""

@@ -116,6 +116,25 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
+def build_reasoning_settings(
+    *,
+    model_has_reasoning: bool = False,
+    reasoning_effort: str | None = None,
+    reasoning_summary: str | None = None,
+    reasoning_mode: str | None = None,
+) -> Reasoning | None:
+    """Build Responses API reasoning settings, omitting blank mode."""
+    kwargs: Dict[str, Any] = {}
+    if model_has_reasoning and reasoning_effort:
+        kwargs["effort"] = reasoning_effort
+        kwargs["summary"] = reasoning_summary
+    if reasoning_mode:
+        kwargs["mode"] = reasoning_mode
+    if not kwargs:
+        return None
+    return Reasoning(**kwargs)
+
+
 def resolve_agent_model(model: str, user_model_credentials: Dict[str, Any] | None) -> LitellmModel | str:
     """Return LitellmModel when model is litellm-prefixed; otherwise return the model string unchanged."""
     if not model or "litellm" not in model:
@@ -214,6 +233,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         model_has_reasoning: bool = False,
         reasoning_effort: str = "",
         reasoning_summary: str = "",
+        reasoning_mode: str | None = None,
         parallel_tool_calls: bool = False,
         extra_args: dict | None = None,
     ):
@@ -230,8 +250,14 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         if isinstance(model, LitellmModel):
             model_settings_kwargs["include_usage"] = True
 
-        if model_has_reasoning and reasoning_effort:
-            model_settings_kwargs["reasoning"] = Reasoning(effort=reasoning_effort, summary=reasoning_summary)
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=model_has_reasoning,
+            reasoning_effort=reasoning_effort,
+            reasoning_summary=reasoning_summary,
+            reasoning_mode=reasoning_mode,
+        )
+        if reasoning is not None:
+            model_settings_kwargs["reasoning"] = reasoning
 
         super().__init__(
             name=name,

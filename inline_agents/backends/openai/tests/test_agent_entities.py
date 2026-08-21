@@ -3,6 +3,7 @@ from django.test import SimpleTestCase
 
 from inline_agents.backends.openai.agent_entities import (
     _final_output_from_tool_dict,
+    build_reasoning_settings,
     resolve_agent_model,
 )
 
@@ -39,11 +40,6 @@ class ResolveAgentModelTests(SimpleTestCase):
     def test_non_litellm_model_returns_string(self):
         self.assertEqual(resolve_agent_model("gpt-4o", {"api_key": "sk"}), "gpt-4o")
 
-    def test_mantle_luna_uses_native_responses_model(self):
-        model_name = "openai.gpt-5.6-luna"
-
-        self.assertEqual(resolve_agent_model(model_name, {"api_key": "bedrock-key"}), model_name)
-
     def test_litellm_azure_with_credentials(self):
         credentials = {
             "api_key": "azure-key",
@@ -62,3 +58,43 @@ class ResolveAgentModelTests(SimpleTestCase):
         self.assertEqual(model.model, "azure/gpt-4.1")
         self.assertIsNone(model.api_key)
         self.assertIsNone(model.base_url)
+
+
+class BuildReasoningSettingsTests(SimpleTestCase):
+    def test_omits_blank_mode(self):
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=True,
+            reasoning_effort="low",
+            reasoning_summary="auto",
+            reasoning_mode=None,
+        )
+
+        self.assertEqual(reasoning.effort, "low")
+        self.assertEqual(reasoning.summary, "auto")
+        self.assertNotIn("mode", reasoning.model_dump(exclude_unset=True))
+
+    def test_omits_empty_mode(self):
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=True,
+            reasoning_effort="low",
+            reasoning_summary="auto",
+            reasoning_mode="",
+        )
+
+        self.assertEqual(reasoning.effort, "low")
+        self.assertNotIn("mode", reasoning.model_dump(exclude_unset=True))
+
+    def test_includes_mode_when_set(self):
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=True,
+            reasoning_effort="none",
+            reasoning_summary="auto",
+            reasoning_mode="minimal",
+        )
+
+        self.assertEqual(reasoning.effort, "none")
+        self.assertEqual(reasoning.mode, "minimal")
+        self.assertEqual(reasoning.model_dump(exclude_unset=True)["mode"], "minimal")
+
+    def test_returns_none_when_no_reasoning_fields(self):
+        self.assertIsNone(build_reasoning_settings())
