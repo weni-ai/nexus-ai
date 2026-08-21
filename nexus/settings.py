@@ -147,6 +147,8 @@ if TESTING and USE_SQLITE_FOR_TESTS:
         }
     }
 
+TEST_RUNNER = "nexus.db.test_runner.NexusTestRunner"
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
