@@ -1,5 +1,5 @@
-from django.test import SimpleTestCase
 from agents.extensions.models.litellm_model import LitellmModel
+from django.test import SimpleTestCase
 
 from inline_agents.backends.openai.agent_entities import (
     _final_output_from_tool_dict,
@@ -38,6 +38,11 @@ class FinalOutputFromToolDictTests(SimpleTestCase):
 class ResolveAgentModelTests(SimpleTestCase):
     def test_non_litellm_model_returns_string(self):
         self.assertEqual(resolve_agent_model("gpt-4o", {"api_key": "sk"}), "gpt-4o")
+
+    def test_mantle_luna_uses_native_responses_model(self):
+        model_name = "openai.gpt-5.6-luna"
+
+        self.assertEqual(resolve_agent_model(model_name, {"api_key": "bedrock-key"}), model_name)
 
     def test_litellm_azure_with_credentials(self):
         credentials = {

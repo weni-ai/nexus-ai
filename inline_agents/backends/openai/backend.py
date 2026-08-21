@@ -64,6 +64,9 @@ from router.utils.redis_clients import get_redis_read_client, get_redis_write_cl
 
 logger = logging.getLogger(__name__)
 
+AWS_MANTLE_API_BASE = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+OPENAI_COMPATIBLE_MODEL_VENDORS = frozenset({"openai", "aws_mantle"})
+
 
 def _is_final_out_debug(msg: str) -> None:
     logger.debug("[is_final_output] %s", msg)
@@ -1225,11 +1228,14 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.capture_exception(exception)
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
-        if user_model_credentials and model_vendor.lower() == "openai":
+        normalized_vendor = model_vendor.lower()
+        if user_model_credentials and normalized_vendor in OPENAI_COMPATIBLE_MODEL_VENDORS:
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
+            if normalized_vendor == "aws_mantle" and not base_url:
+                base_url = AWS_MANTLE_API_BASE
 
-            if user_model_credentials.get("api_base", ""):
+            if base_url:
                 client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,
