@@ -1261,6 +1261,8 @@ class MultiAgentView(APIView):
             # Migrate legacy projects (AB 1.0) to AB 2.5 (OpenAI)
             if is_legacy_project_enabling:
                 project.agents_backend = "OpenAIBackend"
+            elif previous_inline_agent_switch and not multi_agents:
+                project.agents_backend = "BedrockBackend"
 
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True
@@ -1272,12 +1274,12 @@ class MultiAgentView(APIView):
                 project=project,
             )
 
-            if not previous_inline_agent_switch and multi_agents:
+            if previous_inline_agent_switch != multi_agents:
                 notify_async(
                     event=PROJECT_TYPE_UPDATE_EDA_EVENT,
                     project_uuid=str(project.uuid),
                     user_email=_multi_agent_request_user_email(request),
-                    is_multi_agents=True,
+                    is_multi_agents=multi_agents,
                 )
 
             return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
