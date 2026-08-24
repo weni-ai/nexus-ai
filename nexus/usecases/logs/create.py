@@ -80,7 +80,7 @@ class CreateLogUsecase:  # TODO: rename method
             setattr(log, key, kwargs.get(key))
 
         log.save()
-        if log.project.uuid and settings.USE_REDIS_CACHE_CONTEXT:
+        if log.project.uuid:
             self._create_redis_cache(log, log.project.uuid)
 
     def send_message(self, **kwargs):

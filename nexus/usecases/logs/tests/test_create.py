@@ -57,25 +57,3 @@ class TestCreateLogUsecase(TestCase):
         self.assertEqual(cache_data2[0]["text"], "Text 5")
 
         self.assertNotEqual(cache_data1, cache_data2)
-
-    def test_update_log_field_skips_cache_when_context_flag_off(self):
-        cache.clear()
-        usecase = CreateLogUsecase()
-        usecase.log = self.msg_log
-        with self.settings(USE_REDIS_CACHE_CONTEXT=False):
-            usecase.update_log_field(classification="test")
-
-        cache_key = f"last_5_messages_{self.msg_log.project.uuid}_{self.msg_log.message.contact_urn}"
-        self.assertIsNone(cache.get(cache_key))
-
-    def test_update_log_field_writes_cache_when_context_flag_on(self):
-        cache.clear()
-        usecase = CreateLogUsecase()
-        usecase.log = self.msg_log
-        with self.settings(USE_REDIS_CACHE_CONTEXT=True):
-            usecase.update_log_field(classification="test")
-
-        cache_key = f"last_5_messages_{self.msg_log.project.uuid}_{self.msg_log.message.contact_urn}"
-        cache_data = cache.get(cache_key)
-        self.assertIsNotNone(cache_data)
-        self.assertEqual(cache_data[0]["text"], self.msg_log.message.text)
