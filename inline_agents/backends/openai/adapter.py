@@ -330,6 +330,7 @@ class OpenAITeamAdapter(TeamAdapter):
             model_has_reasoning=supervisor_model_settings.get("model_has_reasoning", False),
             reasoning_effort=supervisor_model_settings.get("reasoning_effort", ""),
             reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
+            reasoning_mode=supervisor_model_settings.get("reasoning_mode") or None,
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
             extra_args=supervisor_model_settings.get("manager_extra_args") or {},
         )
