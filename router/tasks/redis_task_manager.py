@@ -50,6 +50,7 @@ class RedisTaskManager(TaskManager):
 
     CACHE_TIMEOUT = 300  # 5 minutes in seconds
     WORKFLOW_CACHE_TIMEOUT = 600  # 10 minutes for workflow state
+    PENDING_CACHE_TIMEOUT = 3600  # 1 hour; concat keys must outlive Celery time_limit
 
     def __init__(self, redis_client: Optional[Redis] = None):
         if redis_client:
@@ -274,15 +275,20 @@ class RedisTaskManager(TaskManager):
         pending_task_id = self._read_client.get(pending_task_key)
         return pending_task_id.decode("utf-8") if pending_task_id else None
 
+    def _pending_ttl(self) -> int:
+        from django.conf import settings
+
+        return int(getattr(settings, "REDIS_PENDING_TASK_KEY_DURATION", self.PENDING_CACHE_TIMEOUT))
+
     def store_pending_response(self, project_uuid: str, contact_urn: str, message_text: str) -> None:
         """Store a pending response for a contact - uses primary."""
         pending_response_key = f"response:{project_uuid}:{contact_urn}"
-        self._write_client.set(pending_response_key, message_text)
+        self._write_client.setex(pending_response_key, self._pending_ttl(), message_text)
 
     def store_pending_task_id(self, project_uuid: str, contact_urn: str, task_id: str) -> None:
         """Store a pending task ID for a contact - uses primary."""
         pending_task_key = f"task:{project_uuid}:{contact_urn}"
-        self._write_client.set(pending_task_key, task_id)
+        self._write_client.setex(pending_task_key, self._pending_ttl(), task_id)
 
     def clear_pending_tasks(self, project_uuid: str, contact_urn: str) -> None:
         """Clear all pending tasks for a contact - uses primary."""

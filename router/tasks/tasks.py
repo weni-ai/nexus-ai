@@ -329,6 +329,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     mailroom_msg_event["metadata"] = mailroom_msg_event.get("metadata") or {}
 
     log_usecase = CreateLogUsecase()
+    pending_response_key = f"response:{message.contact_urn}"
+    pending_task_key = f"task:{message.contact_urn}"
 
     try:
         project_uuid: str = message.project_uuid
@@ -393,8 +395,6 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version, api_key=llm_config.token)
 
         # Check if there's a pending response for this user
-        pending_response_key = f"response:{message.contact_urn}"
-        pending_task_key = f"task:{message.contact_urn}"
         pending_response = redis_read_client.get(pending_response_key)
         pending_task_id = redis_read_client.get(pending_task_key)
 
@@ -410,10 +410,10 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             redis_write_client.delete(pending_response_key)  # Remove the pending response
         else:
             # Store the current message in Redis
-            redis_write_client.set(pending_response_key, message.text)
+            redis_write_client.setex(pending_response_key, settings.REDIS_PENDING_TASK_KEY_DURATION, message.text)
 
         # Store the current task ID in Redis
-        redis_write_client.set(pending_task_key, self.request.id)
+        redis_write_client.setex(pending_task_key, settings.REDIS_PENDING_TASK_KEY_DURATION, self.request.id)
 
         # Generate response for the concatenated message
         response: dict = route(
@@ -442,6 +442,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
     except Exception as e:
         logger.error("START ROUTE error: %s", e, exc_info=True)
+        redis_write_client.delete(pending_response_key)
+        redis_write_client.delete(pending_task_key)
         if message.text:
             log_usecase.update_status("F", exception_text=e)
         raise
@@ -475,9 +477,9 @@ def _initialize_and_handle_pending_response(message, task_id):
         message.text = concatenated_message
         redis_write_client.delete(pending_response_key)
     else:
-        redis_write_client.set(pending_response_key, message.text)
+        redis_write_client.setex(pending_response_key, settings.REDIS_PENDING_TASK_KEY_DURATION, message.text)
 
-    redis_write_client.set(pending_task_key, task_id)
+    redis_write_client.setex(pending_task_key, settings.REDIS_PENDING_TASK_KEY_DURATION, task_id)
     return redis_write_client, message
 
 

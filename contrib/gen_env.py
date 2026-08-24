@@ -250,6 +250,7 @@ def generate_env():
         "EMAIL_PORT": "0",
         "PROJECT_COMPONENTS": "",
         "REDIS_MESSAGE_CACHE_KEY_DURATION": "3600",
+        "REDIS_PENDING_TASK_KEY_DURATION": "3600",
         "USE_REDIS_CACHE_CONTEXT": "True",
         "EDA_BROKER_PORT": "5672",
         "AMQ_BROKER_HOST": "localhost",
