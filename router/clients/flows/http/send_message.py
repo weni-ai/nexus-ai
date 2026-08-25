@@ -39,7 +39,13 @@ class SendMessageHTTPClient(DirectMessage):
                     f"[SendMessageHTTPClient] GRPC stream endpoint failed - "
                     f"project: {project_uuid}, status_code: {response.status_code}"
                 )
-                raise exceptions.UnableToSendMessage(str(error)) from error
+                exceptions.raise_unable_to_send_from_response(
+                    error,
+                    response,
+                    project_uuid=project_uuid,
+                    urns=urns,
+                    channel_uuid=channel_uuid,
+                )
             return
 
         url = f"{self.__host}/mr/msg/send"
@@ -54,7 +60,12 @@ class SendMessageHTTPClient(DirectMessage):
         try:
             response.raise_for_status()
         except Exception as error:
-            raise exceptions.UnableToSendMessage(str(error)) from error
+            exceptions.raise_unable_to_send_from_response(
+                error,
+                response,
+                project_uuid=project_uuid,
+                urns=urns,
+            )
 
 
 class WhatsAppBroadcastHTTPClient(DirectMessage):
@@ -144,7 +155,13 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             try:
                 response.raise_for_status()
             except Exception as error:
-                raise exceptions.UnableToSendMessage(str(error)) from error
+                exceptions.raise_unable_to_send_from_response(
+                    error,
+                    response,
+                    project_uuid=project_uuid,
+                    urns=urns,
+                    payload=msg,
+                )
 
     def format_response_for_bedrock(
         self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]

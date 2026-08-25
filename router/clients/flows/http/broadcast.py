@@ -26,4 +26,9 @@ class BroadcastHTTPClient(DirectMessage):
         try:
             response.raise_for_status()
         except Exception as error:
-            raise exceptions.UnableToSendMessage(str(error)) from error
+            exceptions.raise_unable_to_send_from_response(
+                error,
+                response,
+                project_uuid=project_uuid,
+                urns=urns,
+            )
