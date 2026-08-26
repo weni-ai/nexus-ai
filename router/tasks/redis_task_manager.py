@@ -308,7 +308,7 @@ class RedisTaskManager(TaskManager):
         if pending_response:
             # Concatenate the previous message with the new one
             final_message = f"{pending_response}\n{message_text}"
-            self.clear_pending_tasks(project_uuid, contact_urn)
+            self.store_pending_response(project_uuid, contact_urn, final_message)
         else:
             # Store the current message
             final_message = message_text
