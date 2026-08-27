@@ -1079,12 +1079,40 @@ class OpenAITeamAdapter(TeamAdapter):
 
                 cls._clean_schema(option)
 
+    # Only scalars are collapsed. Object and array options carry nested keywords such as
+    # additionalProperties that strict mode constrains differently at property level, so they
+    # keep the previous handling.
+    _COLLAPSIBLE_SCALAR_TYPES = frozenset({"string", "integer", "number", "boolean"})
+
+    @classmethod
+    def _collapse_nullable_anyof(cls, prop_schema: dict):
+        """Rewrite an Optional[scalar] schema as a plain {"type": scalar} schema.
+
+        Pydantic renders optional fields as ``anyOf: [{type: T}, {type: "null"}]`` with no
+        top-level ``type``. Injecting ``type: "string"`` on top of that produces a schema whose
+        two constraints cannot both hold when T is not a string, and OpenAI strict mode compiles
+        it into a grammar with no valid value, so the model cannot emit the tool call.
+        Collapsing to T keeps the existing non-nullable contract that Lambda payloads rely on.
+        """
+        options = [
+            option
+            for option in prop_schema.get("anyOf", [])
+            if isinstance(option, dict) and option.get("type") != "null"
+        ]
+        if len(options) == 1 and options[0].get("type") in cls._COLLAPSIBLE_SCALAR_TYPES:
+            prop_schema.pop("anyOf")
+            prop_schema.update(options[0])
+        else:
+            prop_schema["type"] = "string"
+
     @classmethod
     def _fix_property_schema(cls, prop_schema: Any):
         """Helper to fix the type of a single property's schema"""
         if isinstance(prop_schema, dict) and "type" not in prop_schema:
             if cls._is_array_schema(prop_schema):
                 prop_schema["type"] = "array"
+            elif "anyOf" in prop_schema:
+                cls._collapse_nullable_anyof(prop_schema)
             else:
                 prop_schema["type"] = "string"
 

@@ -298,6 +298,98 @@ class TestCreateFunctionArgsClass(TestCase):
         self.assertEqual(field_info.description, "Custom field")
 
 
+class TestFunctionToolSchema(TestCase):
+    """Schema handed to OpenAI for action-group tools.
+
+    Every property lands in ``required`` under strict mode, so the model always has to emit a
+    value for it. A property that declares both a top-level ``type`` and a conflicting ``anyOf``
+    has no value satisfying both, and the model cannot produce the tool call at all.
+    """
+
+    def build_schema(self, parameters: dict) -> dict:
+        model_class = OpenAITeamAdapter.create_function_args_class(
+            {"name": "TestModel", "parameters": parameters}
+        )
+        schema = model_class.model_json_schema()
+        OpenAITeamAdapter._clean_schema(schema)
+        return schema
+
+    def optional(self, field_type: str) -> dict:
+        return {"field": {"type": field_type, "description": "A field", "required": False}}
+
+    def test_no_scalar_property_declares_type_and_anyof_together(self):
+        parameters = {
+            name: {"type": name, "description": name, "required": False}
+            for name in ("string", "integer", "number", "boolean")
+        }
+
+        schema = self.build_schema(parameters)
+
+        for name, prop in schema["properties"].items():
+            with self.subTest(field=name):
+                self.assertFalse(
+                    "type" in prop and "anyOf" in prop,
+                    f"{name} declares both type and anyOf: {prop}",
+                )
+
+    def test_optional_integer_keeps_integer_type(self):
+        prop = self.build_schema(self.optional("integer"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "integer")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_number_keeps_number_type(self):
+        prop = self.build_schema(self.optional("number"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "number")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_boolean_keeps_boolean_type(self):
+        prop = self.build_schema(self.optional("boolean"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "boolean")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_string_stays_non_nullable_string(self):
+        """Lambda payloads have always received a string here; null must stay unreachable."""
+        prop = self.build_schema(self.optional("string"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "string")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_array_keeps_previous_shape(self):
+        """Arrays are out of scope: ``array`` and ``anyOf: [array, null]`` can both hold."""
+        prop = self.build_schema(self.optional("array"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "array")
+        self.assertIn("anyOf", prop)
+
+    def test_required_properties_keep_declared_types(self):
+        parameters = {
+            name: {"type": name, "description": name, "required": True}
+            for name in ("string", "integer", "number", "boolean")
+        }
+
+        schema = self.build_schema(parameters)
+
+        for name in parameters:
+            with self.subTest(field=name):
+                self.assertEqual(schema["properties"][name]["type"], name)
+
+    def test_descriptions_preserved_and_every_property_required(self):
+        """Strict mode requires every property, which is why one broken field blocks the call."""
+        parameters = {
+            "year": {"type": "integer", "description": "Release year", "required": False},
+            "item_id": {"type": "string", "description": "JIRA key", "required": True},
+        }
+
+        schema = self.build_schema(parameters)
+
+        self.assertEqual(schema["properties"]["year"]["description"], "Release year")
+        self.assertEqual(schema["properties"]["item_id"]["description"], "JIRA key")
+        self.assertEqual(sorted(schema["required"]), ["item_id", "year"])
+
+
 class TestToExternalNoneAgentData(TestCase):
     def test_agent_data_none_normalized_to_empty_dict(self):
         agent_data = None
