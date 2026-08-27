@@ -1102,8 +1102,9 @@ class OpenAITeamAdapter(TeamAdapter):
         if len(options) == 1 and options[0].get("type") in cls._COLLAPSIBLE_SCALAR_TYPES:
             prop_schema.pop("anyOf")
             prop_schema.update(options[0])
-        else:
-            prop_schema["type"] = "string"
+        # Any other anyOf keeps its own declaration. Adding a top-level type here would rebuild
+        # the contradiction this method exists to remove, and for a multi-type union it also
+        # narrows the model to the injected type instead of the ones the union declares.
 
     @classmethod
     def _fix_property_schema(cls, prop_schema: Any):

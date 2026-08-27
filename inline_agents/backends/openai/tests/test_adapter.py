@@ -358,11 +358,28 @@ class TestFunctionToolSchema(TestCase):
         self.assertNotIn("anyOf", prop)
 
     def test_optional_array_keeps_previous_shape(self):
-        """Arrays are out of scope: ``array`` and ``anyOf: [array, null]`` can both hold."""
+        """Arrays keep both keywords because together they still describe a usable value.
+
+        ``array`` and ``anyOf: [array, null]`` intersect to ``array``, so strict mode compiles a
+        grammar the model can satisfy. That is why optional array params call successfully today,
+        unlike ``string`` and ``anyOf: [integer, null]``, whose intersection is empty. Leaving
+        this shape alone keeps the patch limited to the properties that are actually broken.
+        """
         prop = self.build_schema(self.optional("array"))["properties"]["field"]
 
         self.assertEqual(prop["type"], "array")
         self.assertIn("anyOf", prop)
+
+    def test_non_collapsible_anyof_is_left_untouched(self):
+        """An anyOf that is not a nullable scalar keeps its own declaration.
+
+        Injecting a top-level type here would rebuild the same contradiction, and for a
+        multi-type union it would also force one branch of the union onto the model.
+        """
+        prop = self.build_schema(self.optional("object"))["properties"]["field"]
+
+        self.assertIn("anyOf", prop)
+        self.assertNotIn("type", prop)
 
     def test_required_properties_keep_declared_types(self):
         parameters = {
