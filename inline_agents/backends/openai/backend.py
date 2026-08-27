@@ -64,7 +64,6 @@ from router.utils.redis_clients import get_redis_read_client, get_redis_write_cl
 
 logger = logging.getLogger(__name__)
 
-AWS_MANTLE_API_BASE = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
 OPENAI_COMPATIBLE_MODEL_VENDORS = frozenset({"openai", "aws_mantle"})
 
 
@@ -1238,18 +1237,30 @@ class OpenAIBackend(InlineAgentsBackend):
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
         normalized_vendor = model_vendor.lower()
-        if user_model_credentials and normalized_vendor in OPENAI_COMPATIBLE_MODEL_VENDORS:
-            api_key = user_model_credentials.get("api_key", "")
-            base_url = user_model_credentials.get("api_base", "")
-            if normalized_vendor == "aws_mantle" and not base_url:
-                base_url = AWS_MANTLE_API_BASE
+        if normalized_vendor not in OPENAI_COMPATIBLE_MODEL_VENDORS:
+            return
 
-            if base_url:
-                client = AsyncOpenAI(
-                    base_url=base_url,
-                    api_key=api_key,
-                )
-                set_default_openai_client(client)
-                return
+        credentials = user_model_credentials or {}
+        api_key = credentials.get("api_key", "")
+        base_url = credentials.get("api_base", "")
 
-            set_default_openai_key(api_key)
+        if normalized_vendor == "aws_mantle":
+            # Mantle has one known endpoint and a deployment-wide credential, so a project or
+            # manager only needs to override them, not restate them. Without this fallback an
+            # empty credential map silently left the default OpenAI client in place and Bedrock
+            # model IDs were sent to api.openai.com.
+            base_url = base_url or settings.AWS_MANTLE_API_BASE
+            api_key = api_key or settings.AWS_BEARER_TOKEN_BEDROCK
+        elif not credentials:
+            # OpenAI without explicit credentials keeps the process-wide default client.
+            return
+
+        if base_url:
+            client = AsyncOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+            )
+            set_default_openai_client(client)
+            return
+
+        set_default_openai_key(api_key)

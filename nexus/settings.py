@@ -535,6 +535,11 @@ AWS_BEDROCK_MODEL_ID = env.str("AWS_BEDROCK_MODEL_ID")
 USE_BEDROCK_WENIGPT = env.bool("USE_BEDROCK_WENIGPT", True)
 AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS = env.int("AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS", 3600)
 
+# Bedrock Mantle: endpoint OpenAI-compativel usado pelos modelos openai.gpt-5.6-*.
+# Trocar a regiao aqui; sol nao esta disponivel em us-west-2.
+AWS_MANTLE_API_BASE = env.str("AWS_MANTLE_API_BASE", default="https://bedrock-mantle.us-west-2.api.aws/openai/v1")
+AWS_BEARER_TOKEN_BEDROCK = env.str("AWS_BEARER_TOKEN_BEDROCK", default="")
+
 # TODO: temporary solution, undo later
 RECENT_ACTIVITIES_START_DATE = env.str("RECENT_ACTIVITIES_START_DATE", "")
 
