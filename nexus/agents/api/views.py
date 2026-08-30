@@ -100,12 +100,12 @@ class PushAgents(APIView):
 
                     credential.agents.add(agent)
 
-                    logger.debug("Credential key", extra={"key": key})
+                    logger.debug("Credential key", f"key: {key}")
 
                 except Exception as e:
                     error_message = str(e)
                     warnings.append(f"Error processing credential '{key}': {error_message}")
-                    logger.error("Error processing credential", extra={"key": key, "error": error_message})
+                    logger.error("Error processing credential", f"key: {key}, error: {error_message}")
                     continue
 
         logger.info("Agent Credentials end")
@@ -638,7 +638,7 @@ class AgentTracesView(APIView):
         project_uuid = request.query_params.get("project_uuid")
         log_id = request.query_params.get("log_id")
 
-        logger.debug("Log retrieve", extra={"project_uuid": project_uuid, "log_id": log_id})
+        logger.debug("Log retrieve", f"project_uuid: {project_uuid}, log_id: {log_id}")
 
         if not log_id:
             return Response({"error": "log_id is required"}, status=400)
