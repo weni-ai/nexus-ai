@@ -457,6 +457,17 @@ class LegacyPendingTasksTestCase(SimpleTestCase):
         result = self.task_manager.handle_pending_response(self.project_uuid, self.contact_urn, "Second")
 
         self.assertEqual(result, "First\nSecond")
-        # Should have cleared the pending response
         stored = self.task_manager.get_pending_response(self.project_uuid, self.contact_urn)
-        self.assertIsNone(stored)
+        self.assertEqual(stored, "First\nSecond")
+
+    def test_handle_pending_response_accumulates_four_sequential_messages(self):
+        """Rapid inputs must accumulate all messages, not only the last pair."""
+        messages = ["A", "B", "C", "D"]
+        final_message = None
+
+        for message in messages:
+            final_message = self.task_manager.handle_pending_response(self.project_uuid, self.contact_urn, message)
+
+        self.assertEqual(final_message, "A\nB\nC\nD")
+        stored = self.task_manager.get_pending_response(self.project_uuid, self.contact_urn)
+        self.assertEqual(stored, "A\nB\nC\nD")
