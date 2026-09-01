@@ -444,6 +444,7 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
                 mcp_config,
                 system,
                 agent_uuid,
+                user=request.user,
             )
             res, agent = self._process_assignment_result(assignment_result, project_uuid)
             if isinstance(res, Response):
@@ -505,7 +506,7 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
             return Response({"error": error_msg}, status=400)
         return None
 
-    def _handle_group_unassignment(self, project_uuid, group_slug):
+    def _handle_group_unassignment(self, project_uuid, group_slug, user=None):
         """Handles unassignment of all agents in a group (active and inactive)."""
         integrated_agents_in_group = IntegratedAgent.objects.filter(
             project__uuid=project_uuid,
@@ -519,7 +520,7 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
                 uid = str(ia.agent.uuid)
                 if not first_uuid:
                     first_uuid = uid
-                usecase.unassign_agent(uid, project_uuid)
+                usecase.unassign_agent(uid, project_uuid, user=user)
             return {"assigned": False, "real_agent_uuid": first_uuid}
         return None
 
@@ -557,11 +558,12 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
         mcp_config: dict | None = None,
         system: str | None = None,
         agent_uuid: str | None = None,
+        user=None,
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
 
         if group_slug and not assigned:
-            result = self._handle_group_unassignment(project_uuid, group_slug)
+            result = self._handle_group_unassignment(project_uuid, group_slug, user=user)
             if result:
                 return result
 
@@ -575,7 +577,7 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
 
         if not assigned:
             try:
-                usecase.unassign_agent(real_agent_uuid, project_uuid)
+                usecase.unassign_agent(real_agent_uuid, project_uuid, user=user)
                 return {"assigned": False, "real_agent_uuid": real_agent_uuid}
             except ValueError as e:
                 return Response({"error": str(e)}, status=404)
@@ -586,7 +588,7 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
             agent = Agent.objects.prefetch_related(_INLINE_AGENT_MCP_PREFETCH).get(uuid=real_agent_uuid)
             mcp, mcp_config, system = resolve_assignment_mcp_fields(agent, mcp, mcp_config, system)
 
-            created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
+            created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid, user=user)
             self._update_agent_metadata(integrated_agent, mcp, mcp_config, system)
             return {"assigned": True, "assigned_created": created, "real_agent_uuid": real_agent_uuid}
         except Agent.DoesNotExist:
@@ -990,10 +992,11 @@ class VtexAppActiveAgentsView(APIView):
             return Response({"error": "mcp_config must be a JSON object"}, status=400)
 
         usecase = AssignAgentsUsecase()
+        user = request.user if getattr(request.user, "is_authenticated", False) else None
 
         try:
             if assign:
-                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid, user=user)
 
                 if mcp_config is not None:
                     _replace_integrated_agent_mcp_config(integrated_agent, mcp_config)
@@ -1010,7 +1013,7 @@ class VtexAppActiveAgentsView(APIView):
 
                 return Response({"assigned": True}, status=200)
 
-            usecase.unassign_agent(agent_uuid, project_uuid)
+            usecase.unassign_agent(agent_uuid, project_uuid, user=user)
 
             # Fire cache invalidation event for team update (agent unassigned)
             notify_async(
