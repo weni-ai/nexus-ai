@@ -523,13 +523,18 @@ class ConversationDetailProxyView(APIView):
         response.raise_for_status()
         return response.json()
 
-    def _transform_response(self, response_data, request, project_uuid, conversation_uuid):
-        """Transform response from conversations service to SupervisorPublicConversationsView format."""
+    def _extract_detail_topic(self, response_data):
+        """Prefer flat topic from conversations MS; fall back to nested classification.topic."""
         topic = response_data.get("topic")
-        if topic is None:
+        if topic is None or topic == "":
             classification = response_data.get("classification")
             if isinstance(classification, dict):
                 topic = classification.get("topic")
+        return topic
+
+    def _transform_response(self, response_data, request, project_uuid, conversation_uuid):
+        """Transform response from conversations service to SupervisorPublicConversationsView format."""
+        topic = self._extract_detail_topic(response_data)
 
         messages_data = response_data.get("messages", {})
         messages = {}
