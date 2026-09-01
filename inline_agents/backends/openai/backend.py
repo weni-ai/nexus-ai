@@ -64,6 +64,9 @@ from router.utils.redis_clients import get_redis_read_client, get_redis_write_cl
 
 logger = logging.getLogger(__name__)
 
+AWS_MANTLE_API_BASE = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+OPENAI_COMPATIBLE_MODEL_VENDORS = frozenset({"openai", "aws_mantle"})
+
 
 def _is_final_out_debug(msg: str) -> None:
     logger.debug("[is_final_output] %s", msg)
@@ -440,6 +443,9 @@ class OpenAIBackend(InlineAgentsBackend):
         instructions_cached = kwargs.pop("instructions", None)
         agent_data_cached = kwargs.pop("agent_data", None)
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
+        vtex_account_cached = kwargs.pop("vtex_account", None)
+        vtex_host_store_cached = kwargs.pop("vtex_host_store", None)
+        storefront_type_cached = kwargs.pop("storefront_type", None)
 
         if supervisor_agent_uuid:
             external_team = self.team_adapter.to_external_enhanced(
@@ -475,6 +481,9 @@ class OpenAIBackend(InlineAgentsBackend):
                 manager_pipeline_version=manager_pipeline_version,
                 channel_type=channel_type,
                 prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -513,6 +522,9 @@ class OpenAIBackend(InlineAgentsBackend):
                 skip_conversation_sqs=skip_conversation_sqs,
                 channel_type=channel_type,
                 prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
 
         client = self._get_client()
@@ -1225,11 +1237,14 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.capture_exception(exception)
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
-        if user_model_credentials and model_vendor.lower() == "openai":
+        normalized_vendor = model_vendor.lower()
+        if user_model_credentials and normalized_vendor in OPENAI_COMPATIBLE_MODEL_VENDORS:
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
+            if normalized_vendor == "aws_mantle" and not base_url:
+                base_url = AWS_MANTLE_API_BASE
 
-            if user_model_credentials.get("api_base", ""):
+            if base_url:
                 client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,

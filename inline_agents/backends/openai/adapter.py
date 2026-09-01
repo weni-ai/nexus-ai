@@ -234,6 +234,9 @@ class OpenAITeamAdapter(TeamAdapter):
         manager_pipeline_version: Optional[str] = None,
         channel_type: str = "",
         prompt_injection_filter_enabled: bool = False,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -327,6 +330,7 @@ class OpenAITeamAdapter(TeamAdapter):
             model_has_reasoning=supervisor_model_settings.get("model_has_reasoning", False),
             reasoning_effort=supervisor_model_settings.get("reasoning_effort", ""),
             reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
+            reasoning_mode=supervisor_model_settings.get("reasoning_mode") or None,
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
             extra_args=supervisor_model_settings.get("manager_extra_args") or {},
         )
@@ -346,6 +350,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                vtex_account=vtex_account,
+                vtex_host_store=vtex_host_store,
+                storefront_type=storefront_type,
             ),
             "user_model_credentials": user_model_credentials,
             "model_vendor": supervisor.get("model_vendor", ""),
@@ -390,6 +397,9 @@ class OpenAITeamAdapter(TeamAdapter):
         business_rules: str = None,
         instructions: list[str] = None,
         agent_data: dict = None,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
@@ -534,6 +544,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                vtex_account=vtex_account,
+                vtex_host_store=vtex_host_store,
+                storefront_type=storefront_type,
             ),
         }
 
@@ -551,6 +564,9 @@ class OpenAITeamAdapter(TeamAdapter):
         session: Optional[Any] = None,
         input_text: str = "",
         hooks_state: Optional[HooksState] = None,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
     ) -> Context:
         if globals_dict is None:
             globals_dict = {}
@@ -562,7 +578,14 @@ class OpenAITeamAdapter(TeamAdapter):
 
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
-        project = {"uuid": project_uuid, "auth_token": auth_token, "flows_url": settings.FLOWS_REST_ENDPOINT}
+        project = {
+            "uuid": project_uuid,
+            "auth_token": auth_token,
+            "flows_url": settings.FLOWS_REST_ENDPOINT,
+            "vtex_account": vtex_account,
+            "vtex_host_store": vtex_host_store,
+            "storefront_type": storefront_type,
+        }
         content_base = {"uuid": content_base_uuid}
 
         return Context(
@@ -1056,12 +1079,41 @@ class OpenAITeamAdapter(TeamAdapter):
 
                 cls._clean_schema(option)
 
+    # Only scalars are collapsed. Object and array options carry nested keywords such as
+    # additionalProperties that strict mode constrains differently at property level, so they
+    # keep the previous handling.
+    _COLLAPSIBLE_SCALAR_TYPES = frozenset({"string", "integer", "number", "boolean"})
+
+    @classmethod
+    def _collapse_nullable_anyof(cls, prop_schema: dict):
+        """Rewrite an Optional[scalar] schema as a plain {"type": scalar} schema.
+
+        Pydantic renders optional fields as ``anyOf: [{type: T}, {type: "null"}]`` with no
+        top-level ``type``. Injecting ``type: "string"`` on top of that produces a schema whose
+        two constraints cannot both hold when T is not a string, and OpenAI strict mode compiles
+        it into a grammar with no valid value, so the model cannot emit the tool call.
+        Collapsing to T keeps the existing non-nullable contract that Lambda payloads rely on.
+        """
+        options = [
+            option
+            for option in prop_schema.get("anyOf", [])
+            if isinstance(option, dict) and option.get("type") != "null"
+        ]
+        if len(options) == 1 and options[0].get("type") in cls._COLLAPSIBLE_SCALAR_TYPES:
+            prop_schema.pop("anyOf")
+            prop_schema.update(options[0])
+        # Any other anyOf keeps its own declaration. Adding a top-level type here would rebuild
+        # the contradiction this method exists to remove, and for a multi-type union it also
+        # narrows the model to the injected type instead of the ones the union declares.
+
     @classmethod
     def _fix_property_schema(cls, prop_schema: Any):
         """Helper to fix the type of a single property's schema"""
         if isinstance(prop_schema, dict) and "type" not in prop_schema:
             if cls._is_array_schema(prop_schema):
                 prop_schema["type"] = "array"
+            elif "anyOf" in prop_schema:
+                cls._collapse_nullable_anyof(prop_schema)
             else:
                 prop_schema["type"] = "string"
 

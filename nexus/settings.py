@@ -147,6 +147,8 @@ if TESTING and USE_SQLITE_FOR_TESTS:
         }
     }
 
+TEST_RUNNER = "nexus.db.test_runner.NexusTestRunner"
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -201,6 +203,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 week_duration = 60 * 60 * 24 * 7
 REDIS_MESSAGE_CACHE_KEY_DURATION = env.int("REDIS_MESSAGE_CACHE_KEY_DURATION", default=week_duration)
+REDIS_PENDING_TASK_KEY_DURATION = env.int("REDIS_PENDING_TASK_KEY_DURATION", default=3600)
 REDIS_URL = env.str("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 REDIS_READ_URL = env.str("REDIS_READ_URL", default=None)
 USE_REDIS_CACHE_CONTEXT = env.bool("USE_REDIS_CACHE_CONTEXT", default=False)

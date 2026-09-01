@@ -414,6 +414,16 @@ class LegacyPendingTasksTestCase(SimpleTestCase):
 
         self.assertEqual(result, task_id)
 
+    def test_store_pending_keys_use_ttl(self):
+        """Concat debounce keys must expire so they cannot leak forever."""
+        self.task_manager.store_pending_response(self.project_uuid, self.contact_urn, "msg")
+        self.task_manager.store_pending_task_id(self.project_uuid, self.contact_urn, "task-id")
+
+        response_key = f"response:{self.project_uuid}:{self.contact_urn}"
+        task_key = f"task:{self.project_uuid}:{self.contact_urn}"
+        self.assertEqual(self.mock_redis.ttls[response_key], 3600)
+        self.assertEqual(self.mock_redis.ttls[task_key], 3600)
+
     def test_get_pending_response_not_exists(self):
         """Test getting pending response when none exists."""
         result = self.task_manager.get_pending_response(self.project_uuid, self.contact_urn)
@@ -447,6 +457,17 @@ class LegacyPendingTasksTestCase(SimpleTestCase):
         result = self.task_manager.handle_pending_response(self.project_uuid, self.contact_urn, "Second")
 
         self.assertEqual(result, "First\nSecond")
-        # Should have cleared the pending response
         stored = self.task_manager.get_pending_response(self.project_uuid, self.contact_urn)
-        self.assertIsNone(stored)
+        self.assertEqual(stored, "First\nSecond")
+
+    def test_handle_pending_response_accumulates_four_sequential_messages(self):
+        """Rapid inputs must accumulate all messages, not only the last pair."""
+        messages = ["A", "B", "C", "D"]
+        final_message = None
+
+        for message in messages:
+            final_message = self.task_manager.handle_pending_response(self.project_uuid, self.contact_urn, message)
+
+        self.assertEqual(final_message, "A\nB\nC\nD")
+        stored = self.task_manager.get_pending_response(self.project_uuid, self.contact_urn)
+        self.assertEqual(stored, "A\nB\nC\nD")

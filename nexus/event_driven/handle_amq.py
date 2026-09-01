@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def handle_amq_consumers(channel: Channel) -> None:
+    # Project update events are still published only to the legacy RabbitMQ broker,
+    # so WeniEDAProjectUpdateConsumer is not registered here yet.
     queue_name = settings.PROJECT_AMQ_QUEUE_NAME
     channel.basic_consume(
         queue_name,
