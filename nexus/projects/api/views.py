@@ -525,9 +525,11 @@ class ConversationDetailProxyView(APIView):
 
     def _transform_response(self, response_data, request, project_uuid, conversation_uuid):
         """Transform response from conversations service to SupervisorPublicConversationsView format."""
-        topic = None
-        if response_data.get("classification") and isinstance(response_data["classification"], dict):
-            topic = response_data["classification"].get("topic")
+        topic = response_data.get("topic")
+        if topic is None:
+            classification = response_data.get("classification")
+            if isinstance(classification, dict):
+                topic = classification.get("topic")
 
         messages_data = response_data.get("messages", {})
         messages = {}

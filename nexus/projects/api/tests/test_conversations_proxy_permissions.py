@@ -180,6 +180,22 @@ class TestConversationDetailProxyViewPermissions(_PermissionTestBase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         mock_get.assert_not_called()
 
+    def test_flat_topic_unclassified_is_preserved(self, mock_get):
+        mock_get.return_value = _build_requests_response(
+            {
+                **CONVERSATION_DETAIL_RESPONSE,
+                "topic": "unclassified",
+                "classification": {"topic": None},
+            }
+        )
+
+        request = self.factory.get(self.url)
+        force_authenticate(request, user=self.authorized_user)
+        response = self.view(request, project_uuid=self.project_uuid, conversation_uuid=self.conversation_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["topic"], "unclassified")
+
 
 def _build_csv_export_response(content=b"conversation_uuid\n", day="2026-05-13", row_count=1):
     resp = mock.Mock()
