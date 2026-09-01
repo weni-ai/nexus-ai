@@ -30,6 +30,9 @@ class IntelligenceCreateObserver(EventObserver):
         self.intelligence_activity_message = intelligence_activity_message
 
     def perform(self, intelligence):
+        if intelligence.is_router:
+            return
+
         org = intelligence.org
         project_list = org.projects.all()
         user = intelligence.created_by
