@@ -71,15 +71,15 @@ class ConsumeKnowledgeBaseRetrievedReferencesTests(SimpleTestCase):
         pending = [{"text": "chunk", "filename": "a.docx"}]
         hooks_state.knowledge_base_retrieved_references = pending
 
-        consumed = consume_knowledge_base_retrieved_references(hooks_state, "joined text")
+        consumed = consume_knowledge_base_retrieved_references(hooks_state)
 
         self.assertEqual(consumed, pending)
         self.assertIsNone(hooks_state.knowledge_base_retrieved_references)
 
-    def test_falls_back_to_tool_result_string(self):
+    def test_falls_back_to_empty_list(self):
         hooks_state = HooksState(agents=[])
-        consumed = consume_knowledge_base_retrieved_references(hooks_state, "joined text")
-        self.assertEqual(consumed, "joined text")
+        consumed = consume_knowledge_base_retrieved_references(hooks_state)
+        self.assertEqual(consumed, [])
 
 
 class RetrieveKnowledgeBaseTests(SimpleTestCase):
@@ -131,7 +131,7 @@ class RetrieveKnowledgeBaseTests(SimpleTestCase):
     )
     @patch("inline_agents.backends.openai.knowledge_base.get_datasource_id", return_value="ds-id")
     @patch("inline_agents.backends.openai.knowledge_base.boto3.client")
-    def test_missing_results_do_not_store_references(self, mock_boto_client, _mock_ds):
+    def test_missing_results_store_empty_references(self, mock_boto_client, _mock_ds):
         mock_client = MagicMock()
         mock_boto_client.return_value = mock_client
         mock_client.retrieve.return_value = {}
@@ -147,4 +147,4 @@ class RetrieveKnowledgeBaseTests(SimpleTestCase):
         result = retrieve_knowledge_base(ctx, "unknown")
 
         self.assertEqual(result, NO_KNOWLEDGE_BASE_RESPONSE)
-        self.assertIsNone(hooks_state.knowledge_base_retrieved_references)
+        self.assertEqual(hooks_state.knowledge_base_retrieved_references, [])
