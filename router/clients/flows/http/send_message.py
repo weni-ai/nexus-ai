@@ -8,19 +8,18 @@ import requests
 
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
-from router.entities.mailroom import DEFAULT_IG_RESPONSE_TYPE, extract_ig_comment_broadcast_fields
+from router.entities.mailroom import extract_ig_comment_broadcast_fields
 
 logger = logging.getLogger(__name__)
 
 
 def ig_comment_fields_from_kwargs(kwargs: Dict) -> Dict[str, str]:
     """Prefer explicit kwargs from dispatch; fall back to message metadata."""
-    ig_comment_id = kwargs.get("ig_comment_id")
-    if ig_comment_id:
-        return {
-            "ig_comment_id": str(ig_comment_id),
-            "ig_response_type": str(kwargs.get("ig_response_type") or DEFAULT_IG_RESPONSE_TYPE),
-        }
+    if "ig_comment_id" in kwargs:
+        fields = {"ig_comment_id": kwargs["ig_comment_id"]}
+        if "ig_response_type" in kwargs:
+            fields["ig_response_type"] = kwargs["ig_response_type"]
+        return fields
     return extract_ig_comment_broadcast_fields(kwargs.get("metadata"))
 
 
