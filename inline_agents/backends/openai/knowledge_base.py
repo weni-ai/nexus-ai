@@ -40,12 +40,13 @@ def format_knowledge_base_retrieval_results(
     return "\n".join(texts), references
 
 
-def consume_knowledge_base_retrieved_references(hooks_state: Any, result: Any) -> Any:
+def consume_knowledge_base_retrieved_references(hooks_state: Any) -> list[dict[str, Any]]:
     pending = getattr(hooks_state, "knowledge_base_retrieved_references", None)
-    if pending is None:
-        return result
-    hooks_state.knowledge_base_retrieved_references = None
-    return pending
+    if hooks_state is not None:
+        hooks_state.knowledge_base_retrieved_references = None
+    if isinstance(pending, list):
+        return pending
+    return []
 
 
 def retrieve_knowledge_base(ctx: RunContextWrapper[Context], question: str) -> str:
@@ -82,6 +83,6 @@ def retrieve_knowledge_base(ctx: RunContextWrapper[Context], question: str) -> s
 
     hooks_state = getattr(ctx.context, "hooks_state", None)
     if hooks_state is not None:
-        hooks_state.knowledge_base_retrieved_references = references if retrieval_results else None
+        hooks_state.knowledge_base_retrieved_references = references
 
     return text

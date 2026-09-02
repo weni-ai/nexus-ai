@@ -972,7 +972,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
     async def _on_tool_end_knowledge_base(self, context, agent, tool, result, context_data, project_uuid, parameters):
         """Handle on_tool_end for knowledge base tool."""
-        retrieved_references = consume_knowledge_base_retrieved_references(self.hooks_state, result)
+        retrieved_references = consume_knowledge_base_retrieved_references(self.hooks_state)
         trace_data = {
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
