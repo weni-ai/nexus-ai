@@ -4,6 +4,38 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+DEFAULT_IG_RESPONSE_TYPE = "dm_comment"
+
+
+def extract_ig_comment_broadcast_fields(metadata: Optional[Dict] = None) -> Dict[str, str]:
+    """Return ig_comment_id / ig_response_type for Instagram comment replies.
+
+    Mailroom sends the comment under metadata.overwrite_message.ig_comment.
+    The outbound broadcast needs those two keys on msg; media is inbound-only.
+    """
+    if not isinstance(metadata, dict):
+        return {}
+
+    overwrite_message = metadata.get("overwrite_message")
+    if not isinstance(overwrite_message, dict):
+        return {}
+
+    ig_comment = overwrite_message.get("ig_comment")
+    if not isinstance(ig_comment, dict):
+        return {}
+
+    ig_comment_id = ig_comment.get("id")
+    if ig_comment_id is None or ig_comment_id == "":
+        return {}
+
+    ig_response_type = (
+        overwrite_message.get("ig_response_type") or ig_comment.get("ig_response_type") or DEFAULT_IG_RESPONSE_TYPE
+    )
+    return {
+        "ig_comment_id": str(ig_comment_id),
+        "ig_response_type": str(ig_response_type),
+    }
+
 
 class ContactField(BaseModel):
     key: str
