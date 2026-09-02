@@ -34,6 +34,31 @@ class DispatchIgCommentBroadcastTestCase(SimpleTestCase):
 
         kwargs = broadcast.send_direct_message.call_args.kwargs
         self.assertEqual(kwargs["ig_comment_id"], "30065221")
+        self.assertNotIn("ig_response_type", kwargs)
+
+    def test_repasses_ig_response_type_when_mailroom_sends_it(self):
+        broadcast = MagicMock()
+        message = message_factory(
+            project_uuid="proj",
+            text="overwrite message: ig_comment",
+            contact_urn="instagram:5467890213",
+            metadata={
+                "overwrite_message": {
+                    "ig_comment": {"id": "30065221"},
+                    "ig_response_type": "dm_comment",
+                }
+            },
+        )
+
+        dispatch(
+            message=message,
+            user_email="user@example.com",
+            llm_response="Obrigado pelo comentário!",
+            direct_message=broadcast,
+        )
+
+        kwargs = broadcast.send_direct_message.call_args.kwargs
+        self.assertEqual(kwargs["ig_comment_id"], "30065221")
         self.assertEqual(kwargs["ig_response_type"], "dm_comment")
 
     def test_omits_ig_fields_on_non_instagram_turns(self):
@@ -78,6 +103,24 @@ class SendMessageHTTPClientIgCommentTestCase(SimpleTestCase):
         self.assertEqual(body["ig_comment_id"], "30065221")
         self.assertEqual(body["ig_response_type"], "dm_comment")
         self.assertEqual(mock_post.call_args.args[0], "http://flows.example/mr/msg/send")
+
+    @patch("router.clients.flows.http.send_message.requests.post")
+    def test_mr_msg_send_does_not_invent_ig_response_type(self, mock_post):
+        mock_post.return_value.raise_for_status = MagicMock()
+        client = SendMessageHTTPClient("http://flows.example", "token")
+
+        client.send_direct_message(
+            "Obrigado pelo comentário!",
+            ["instagram:5467890213"],
+            "project-uuid",
+            "user@example.com",
+            full_chunks=[],
+            ig_comment_id="30065221",
+        )
+
+        body = json.loads(mock_post.call_args.kwargs["data"])
+        self.assertEqual(body["ig_comment_id"], "30065221")
+        self.assertNotIn("ig_response_type", body)
 
     @patch("router.clients.flows.http.send_message.requests.post")
     def test_mr_msg_send_omits_ig_fields_without_comment(self, mock_post):
