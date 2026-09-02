@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pendulum
 import pytest
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
@@ -995,3 +995,97 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
         self.assertEqual(result.text, _TEST_ERROR_MESSAGES["en-us"])
         grpc_session.close.assert_called()
         grpc_client.close.assert_called()
+
+
+class SetOpenAIClientTestCase(SimpleTestCase):
+    """Client resolution per model vendor.
+
+    aws_mantle must always point the Agents SDK at Mantle. A stored project or
+    manager key still wins; otherwise the pod credential chain mints a token.
+    openai without credentials leaves the process-wide default client in place.
+    """
+
+    def setUp(self):
+        self.backend = OpenAIBackend()
+
+    def call(self, credentials, vendor, minted_key="minted-bedrock-token"):
+        target = "inline_agents.backends.openai.backend"
+        with (
+            patch(f"{target}.AsyncOpenAI") as async_openai,
+            patch(f"{target}.set_default_openai_client") as set_client,
+            patch(f"{target}.set_default_openai_key") as set_key,
+            patch(
+                f"{target}.resolve_aws_mantle_api_key",
+                side_effect=lambda key, region=None: key or minted_key,
+            ) as resolve_key,
+        ):
+            self.backend._set_openai_client(credentials, vendor)
+            return async_openai, set_client, set_key, resolve_key
+
+    def test_mantle_without_credentials_uses_pod_token_and_default_base(self):
+        async_openai, set_client, _, resolve_key = self.call({}, "aws_mantle")
+
+        resolve_key.assert_called_once_with("", region="us-west-2")
+        async_openai.assert_called_once_with(
+            base_url="https://bedrock-mantle.us-west-2.api.aws/openai/v1",
+            api_key="minted-bedrock-token",
+        )
+        set_client.assert_called_once()
+
+    def test_mantle_project_key_wins_over_pod_token(self):
+        credentials = {
+            "api_key": "project-key",
+            "api_base": "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+        }
+
+        async_openai, set_client, _, resolve_key = self.call(credentials, "aws_mantle")
+
+        resolve_key.assert_called_once_with("project-key", region="us-east-1")
+        async_openai.assert_called_once_with(
+            base_url="https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+            api_key="project-key",
+        )
+        set_client.assert_called_once()
+
+    def test_mantle_partial_credentials_default_base_and_keep_key(self):
+        async_openai, _, _, resolve_key = self.call({"api_key": "project-key"}, "aws_mantle")
+
+        resolve_key.assert_called_once_with("project-key", region="us-west-2")
+        async_openai.assert_called_once_with(
+            base_url="https://bedrock-mantle.us-west-2.api.aws/openai/v1",
+            api_key="project-key",
+        )
+
+    def test_openai_without_credentials_keeps_default_client(self):
+        async_openai, set_client, set_key, resolve_key = self.call({}, "openai")
+
+        async_openai.assert_not_called()
+        set_client.assert_not_called()
+        set_key.assert_not_called()
+        resolve_key.assert_not_called()
+
+    def test_openai_with_base_url_builds_client(self):
+        credentials = {"api_key": "k", "api_base": "https://proxy.example/v1"}
+
+        async_openai, set_client, set_key, _ = self.call(credentials, "openai")
+
+        async_openai.assert_called_once_with(base_url="https://proxy.example/v1", api_key="k")
+        set_client.assert_called_once()
+        set_key.assert_not_called()
+
+    def test_openai_without_base_url_sets_only_the_key(self):
+        async_openai, set_client, set_key, _ = self.call({"api_key": "k"}, "openai")
+
+        async_openai.assert_not_called()
+        set_client.assert_not_called()
+        set_key.assert_called_once_with("k")
+
+    def test_unsupported_vendor_is_ignored(self):
+        credentials = {"api_key": "k", "api_base": "https://vertex.example/v1"}
+
+        async_openai, set_client, set_key, resolve_key = self.call(credentials, "vertex_ai")
+
+        async_openai.assert_not_called()
+        set_client.assert_not_called()
+        set_key.assert_not_called()
+        resolve_key.assert_not_called()
