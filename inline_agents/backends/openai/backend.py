@@ -20,6 +20,10 @@ from openai.types.shared import Reasoning
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
 from inline_agents.backends.openai.agent_entities import resolve_agent_model
+from inline_agents.backends.openai.bedrock_mantle_auth import (
+    region_from_mantle_base,
+    resolve_aws_mantle_api_key,
+)
 from inline_agents.backends.openai.components_response_merge import merge_streaming_components_response
 from inline_agents.backends.openai.components_tools import get_component_tools as get_component_tools_module
 from inline_agents.backends.openai.entities import FinalResponse
@@ -1238,18 +1242,28 @@ class OpenAIBackend(InlineAgentsBackend):
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
         normalized_vendor = model_vendor.lower()
-        if user_model_credentials and normalized_vendor in OPENAI_COMPATIBLE_MODEL_VENDORS:
-            api_key = user_model_credentials.get("api_key", "")
-            base_url = user_model_credentials.get("api_base", "")
-            if normalized_vendor == "aws_mantle" and not base_url:
+        if normalized_vendor not in OPENAI_COMPATIBLE_MODEL_VENDORS:
+            return
+
+        credentials = user_model_credentials or {}
+        api_key = credentials.get("api_key", "") or ""
+        base_url = credentials.get("api_base", "") or ""
+
+        if normalized_vendor == "aws_mantle":
+            # Platform 2.8 must hit Mantle even with an empty credential map. A stored
+            # project/manager key still wins; otherwise mint from the pod IAM chain.
+            if not base_url:
                 base_url = AWS_MANTLE_API_BASE
+            api_key = resolve_aws_mantle_api_key(api_key, region=region_from_mantle_base(base_url))
+        elif not credentials:
+            return
 
-            if base_url:
-                client = AsyncOpenAI(
-                    base_url=base_url,
-                    api_key=api_key,
-                )
-                set_default_openai_client(client)
-                return
+        if base_url:
+            client = AsyncOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+            )
+            set_default_openai_client(client)
+            return
 
-            set_default_openai_key(api_key)
+        set_default_openai_key(api_key)
