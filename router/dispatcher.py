@@ -5,6 +5,7 @@ from router.entities import (
     FlowDTO,
     Message,
 )
+from router.entities.mailroom import extract_ig_comment_broadcast_fields
 from router.flow_start import FlowStart
 
 
@@ -21,6 +22,7 @@ def dispatch(
     urns = [message.contact_urn]
 
     if direct_message:
+        ig_comment_fields = extract_ig_comment_broadcast_fields(getattr(message, "metadata", None))
         return direct_message.send_direct_message(
             llm_response,
             urns,
@@ -29,6 +31,7 @@ def dispatch(
             full_chunks=full_chunks,
             backend=backend,
             channel_uuid=getattr(message, "channel_uuid", ""),
+            **ig_comment_fields,
         )
 
     return flow_start.start_flow(

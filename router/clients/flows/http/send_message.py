@@ -8,8 +8,29 @@ import requests
 
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
+from router.entities.mailroom import DEFAULT_IG_RESPONSE_TYPE, extract_ig_comment_broadcast_fields
 
 logger = logging.getLogger(__name__)
+
+
+def ig_comment_fields_from_kwargs(kwargs: Dict) -> Dict[str, str]:
+    """Prefer explicit kwargs from dispatch; fall back to message metadata."""
+    ig_comment_id = kwargs.get("ig_comment_id")
+    if ig_comment_id:
+        return {
+            "ig_comment_id": str(ig_comment_id),
+            "ig_response_type": str(kwargs.get("ig_response_type") or DEFAULT_IG_RESPONSE_TYPE),
+        }
+    return extract_ig_comment_broadcast_fields(kwargs.get("metadata"))
+
+
+def apply_ig_comment_fields_to_broadcast_msgs(msgs: List, ig_fields: Dict[str, str]) -> List:
+    if not ig_fields:
+        return msgs
+    for item in msgs:
+        if isinstance(item, dict) and isinstance(item.get("msg"), dict):
+            item["msg"].update(ig_fields)
+    return msgs
 
 
 class SendMessageHTTPClient(DirectMessage):
@@ -21,9 +42,10 @@ class SendMessageHTTPClient(DirectMessage):
     def send_direct_message(
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ) -> None:
+        ig_fields = ig_comment_fields_from_kwargs(kwargs)
         if self.__use_grpc:
             # Use same format as whatsapp_broadcasts endpoint
-            msg = {"msg": {"text": text}}
+            msg = {"msg": {"text": text, **ig_fields}}
             channel_uuid = kwargs.get("channel_uuid", "")
             logger.info(
                 f"[SendMessageHTTPClient] Using GRPC stream endpoint - "
@@ -44,7 +66,7 @@ class SendMessageHTTPClient(DirectMessage):
 
         url = f"{self.__host}/mr/msg/send"
 
-        payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
+        payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text, **ig_fields}
         headers = {"Authorization": f"Token {self.__access_token}", "Content-Type": "application/json"}
 
         payload = json.dumps(payload).encode("utf-8")
@@ -138,6 +160,8 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             msgs = self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
         else:
             msgs = self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
+
+        apply_ig_comment_fields_to_broadcast_msgs(msgs, ig_comment_fields_from_kwargs(kwargs))
 
         for msg in msgs:
             response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)

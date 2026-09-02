@@ -10,6 +10,7 @@ _MAILROOM = importlib.util.module_from_spec(_SPEC)
 assert _SPEC and _SPEC.loader
 _SPEC.loader.exec_module(_MAILROOM)
 message_factory = _MAILROOM.message_factory
+extract_ig_comment_broadcast_fields = _MAILROOM.extract_ig_comment_broadcast_fields
 
 
 class MailroomMessageTest(TestCase):
@@ -73,6 +74,44 @@ class MailroomMessageTest(TestCase):
         message = message_factory(project_uuid="123", text="Hello", contact_urn="123", metadata={})
 
         self.assertEqual(message.metadata, {})
+
+    def test_extract_ig_comment_broadcast_fields(self):
+        metadata = {
+            "overwrite_message": {
+                "ig_comment": {
+                    "id": "30065221",
+                    "media": {"id": "180615383", "caption": "Summer sale post"},
+                }
+            }
+        }
+        self.assertEqual(
+            extract_ig_comment_broadcast_fields(metadata),
+            {"ig_comment_id": "30065221", "ig_response_type": "dm_comment"},
+        )
+
+    def test_extract_ig_comment_uses_mailroom_response_type_when_present(self):
+        metadata = {
+            "overwrite_message": {
+                "ig_comment": {"id": 30065221},
+                "ig_response_type": "comment",
+            }
+        }
+        self.assertEqual(
+            extract_ig_comment_broadcast_fields(metadata),
+            {"ig_comment_id": "30065221", "ig_response_type": "comment"},
+        )
+
+    def test_extract_ig_comment_skips_non_instagram_overwrite(self):
+        self.assertEqual(extract_ig_comment_broadcast_fields(None), {})
+        self.assertEqual(extract_ig_comment_broadcast_fields({}), {})
+        self.assertEqual(
+            extract_ig_comment_broadcast_fields({"overwrite_message": "plain string"}),
+            {},
+        )
+        self.assertEqual(
+            extract_ig_comment_broadcast_fields({"overwrite_message": {"ig_comment": {"media": {}}}}),
+            {},
+        )
 
     def test_metadata_serialization_without_metadata(self):
         message = message_factory(project_uuid="123", text="Hello", contact_urn="123")
