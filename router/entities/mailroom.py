@@ -5,6 +5,26 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 
+def extract_ig_comment_broadcast_fields(metadata: Optional[Dict] = None) -> Dict[str, str]:
+    """Copy mailroom Instagram comment fields onto the broadcast kwargs.
+
+    Existing overwrite_message can be a string; that path is unchanged.
+    If mailroom sent ig_comment, id is required — a broken payload must raise.
+    ig_response_type is forwarded only when mailroom sent it.
+    """
+    overwrite_message = (metadata or {}).get("overwrite_message")
+    if not isinstance(overwrite_message, dict) or "ig_comment" not in overwrite_message:
+        return {}
+
+    ig_comment = overwrite_message["ig_comment"]
+    fields = {"ig_comment_id": ig_comment["id"]}
+    if "ig_response_type" in overwrite_message:
+        fields["ig_response_type"] = overwrite_message["ig_response_type"]
+    elif "ig_response_type" in ig_comment:
+        fields["ig_response_type"] = ig_comment["ig_response_type"]
+    return fields
+
+
 class ContactField(BaseModel):
     key: str
     value: Any
