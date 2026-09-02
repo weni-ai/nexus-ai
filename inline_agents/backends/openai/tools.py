@@ -1,7 +1,5 @@
 from typing import TYPE_CHECKING, Any
 
-import boto3
-
 if TYPE_CHECKING:
     pass
 from agents import Agent, RunContextWrapper
@@ -9,7 +7,7 @@ from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
-from nexus.utils import get_datasource_id
+from inline_agents.backends.openai.knowledge_base import retrieve_knowledge_base
 
 
 class Supervisor(Agent):  # type: ignore[misc]
@@ -91,39 +89,4 @@ class Supervisor(Agent):  # type: ignore[misc]
             question (str): Natural-language query. Example: "What are your shipping policies?"
         """
 
-        client = boto3.client("bedrock-agent-runtime", region_name=settings.AWS_BEDROCK_REGION_NAME)
-        content_base_uuid: str | None = ctx.context.content_base.get("uuid")
-
-        retrieve_params = {
-            "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
-            "retrievalQuery": {"text": question},
-        }
-
-        combined_filter = {
-            "andAll": [
-                {"equals": {"key": "contentBaseUuid", "value": content_base_uuid}},
-                {
-                    "equals": {
-                        "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(ctx.context.project.get("uuid")),
-                    }
-                },
-            ]
-        }
-
-        if content_base_uuid:
-            retrieve_params["retrievalConfiguration"] = {
-                "vectorSearchConfiguration": {
-                    "filter": combined_filter,
-                }
-            }
-
-        response = client.retrieve(**retrieve_params)
-
-        if response.get("retrievalResults"):
-            all_results = []
-            for result in response["retrievalResults"]:
-                all_results.append(result["content"]["text"])
-            return "\n".join(all_results)
-
-        return "No response found in knowledge base."
+        return retrieve_knowledge_base(ctx, question)
