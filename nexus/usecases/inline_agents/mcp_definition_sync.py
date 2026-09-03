@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db import transaction
+
 from nexus.inline_agents.models import MCP, MCPConfigOption, MCPCredentialTemplate
 
 _TYPE_MAP = {
@@ -103,6 +105,7 @@ def _create_mcp_config_option_from_constant(mcp: MCP, name: str, value: Any) -> 
     )
 
 
+@transaction.atomic
 def sync_mcp_templates_from_agent_payload(
     mcp: MCP,
     credentials: dict[str, Any] | None,
