@@ -23,6 +23,7 @@ class HooksState:
         self.cumulative_usage = {"input": 0, "output": 0, "cache_read_input_tokens": 0}
         self.skip_outgoing_dispatch: bool = False
         self.message_conversation_log_uuid: str | None = None
+        self.knowledge_base_retrieved_references: list[dict[str, Any]] | None = None
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))

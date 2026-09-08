@@ -49,6 +49,7 @@ class IntelligenceCreateObserver(EventObserver):
             user=user,
             entity_name=intelligence.name,
             action="CREATE",
+            action_model="Intelligence",
             intelligence_activity_message=self.intelligence_activity_message,
         )
 
@@ -122,11 +123,14 @@ class ContentBaseAgentObserver(EventObserver):
             new_model_data = kwargs.get("new_agent_data")
             action_details = _update_comparison_fields(old_model_data, new_model_data)
         else:
-            action_details = kwargs.get("action_details", {"old": "", "new": content_base_agent.agent})
+            action_details = kwargs.get(
+                "action_details",
+                {"old": "", "new": getattr(content_base_agent, "name", None) or ""},
+            )
 
         if action_details != {}:
             dto = CreateRecentActivityDTO(
-                action_type="U",
+                action_type=action_type,
                 project=project,
                 created_by=user,
                 intelligence=intelligence,
@@ -210,7 +214,7 @@ class ContentBaseTextObserver(EventObserver):
             integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
             project = integrated_intelligence.project
             dto = CreateRecentActivityDTO(
-                action_type="U",
+                action_type=action_type,
                 project=project,
                 created_by=user,
                 intelligence=intelligence,
@@ -222,7 +226,7 @@ class ContentBaseTextObserver(EventObserver):
             project_list = org.projects.all()
             for project in project_list:
                 dto = CreateRecentActivityDTO(
-                    action_type="U",
+                    action_type=action_type,
                     project=project,
                     created_by=user,
                     intelligence=intelligence,
@@ -265,5 +269,6 @@ class ContentBaseObserver(EventObserver):
                 user=user,
                 entity_name=contentbase.title,
                 action=action_type,
+                action_model="ContentBase",
                 intelligence_activity_message=self.intelligence_activity_message,
             )

@@ -37,6 +37,13 @@ def _create_provider(model_vendor="openai", manager_agent=None):
                 {"id": "api_base", "label": "API base URL", "type": "TEXT"},
             ],
         },
+        "aws_mantle": {
+            "label": "AWS Mantle",
+            "credentials": [
+                {"id": "api_key", "label": "Bedrock API key", "type": "PASSWORD"},
+                {"id": "api_base", "label": "API base URL", "type": "TEXT"},
+            ],
+        },
         "gemini": {
             "label": "Google Gemini",
             "credentials": [
@@ -331,6 +338,60 @@ class TestManagerAgentRepositoryProjectCredentials(TestCase):
 
         creds = result["user_model_credentials"]
         self.assertEqual(creds["api_key"], "mgr-key-fallback")
+
+
+@override_settings(CREDENTIAL_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY)
+class TestAWSMantleProjectCredentials(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory(name="MantleProject")
+        self.manager = _create_manager(
+            model_vendor="aws_mantle",
+            foundation_model="openai.gpt-5.6-luna",
+            collaborators_foundation_model="openai.gpt-5.6-luna",
+            override_collaborators_foundation_model=True,
+            manager_extra_args={"store": False},
+            collaborator_extra_args={"verbosity": "low"},
+        )
+        self.project.manager_agent = self.manager
+        self.project.save()
+        self.provider = _create_provider("aws_mantle", manager_agent=self.manager)
+
+    def test_configures_luna_for_manager_and_collaborators(self):
+        api_base = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=self.provider,
+            credentials=[
+                {
+                    "id": "api_key",
+                    "type": "PASSWORD",
+                    "label": "Bedrock API key",
+                    "value": encrypt_value("bedrock-api-key"),
+                },
+                {"id": "api_base", "type": "TEXT", "label": "API base URL", "value": api_base},
+            ],
+            is_active=True,
+        )
+
+        result = ManagerAgentRepository().get_supervisor(
+            supervisor_agent_uuid=str(self.manager.uuid),
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(result["foundation_model"], "openai.gpt-5.6-luna")
+        self.assertEqual(result["model_vendor"], "aws_mantle")
+        self.assertEqual(result["user_model_credentials"]["api_key"], "bedrock-api-key")
+        self.assertEqual(result["user_model_credentials"]["api_base"], api_base)
+        self.assertEqual(
+            result["collaborator_configurations"]["collaborators_foundation_model"],
+            "openai.gpt-5.6-luna",
+        )
+        self.assertTrue(result["collaborator_configurations"]["override_collaborators_foundation_model"])
+        self.assertEqual(result["model_settings"]["manager_extra_args"], {"store": False})
+        self.assertEqual(
+            result["collaborator_configurations"]["collaborator_extra_args"],
+            {"verbosity": "low"},
+        )
 
 
 class TestEngineSourceLogic(TestCase):

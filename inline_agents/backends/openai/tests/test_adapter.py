@@ -1,4 +1,5 @@
 from typing import Optional
+from unittest.mock import patch
 
 from django.test import TestCase
 from pydantic import BaseModel, ValidationError
@@ -297,6 +298,115 @@ class TestCreateFunctionArgsClass(TestCase):
         self.assertEqual(field_info.description, "Custom field")
 
 
+class TestFunctionToolSchema(TestCase):
+    """Schema handed to OpenAI for action-group tools.
+
+    Every property lands in ``required`` under strict mode, so the model always has to emit a
+    value for it. A property that declares both a top-level ``type`` and a conflicting ``anyOf``
+    has no value satisfying both, and the model cannot produce the tool call at all.
+    """
+
+    def build_schema(self, parameters: dict) -> dict:
+        model_class = OpenAITeamAdapter.create_function_args_class(
+            {"name": "TestModel", "parameters": parameters}
+        )
+        schema = model_class.model_json_schema()
+        OpenAITeamAdapter._clean_schema(schema)
+        return schema
+
+    def optional(self, field_type: str) -> dict:
+        return {"field": {"type": field_type, "description": "A field", "required": False}}
+
+    def test_no_scalar_property_declares_type_and_anyof_together(self):
+        parameters = {
+            name: {"type": name, "description": name, "required": False}
+            for name in ("string", "integer", "number", "boolean")
+        }
+
+        schema = self.build_schema(parameters)
+
+        for name, prop in schema["properties"].items():
+            with self.subTest(field=name):
+                self.assertFalse(
+                    "type" in prop and "anyOf" in prop,
+                    f"{name} declares both type and anyOf: {prop}",
+                )
+
+    def test_optional_integer_keeps_integer_type(self):
+        prop = self.build_schema(self.optional("integer"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "integer")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_number_keeps_number_type(self):
+        prop = self.build_schema(self.optional("number"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "number")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_boolean_keeps_boolean_type(self):
+        prop = self.build_schema(self.optional("boolean"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "boolean")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_string_stays_non_nullable_string(self):
+        """Lambda payloads have always received a string here; null must stay unreachable."""
+        prop = self.build_schema(self.optional("string"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "string")
+        self.assertNotIn("anyOf", prop)
+
+    def test_optional_array_keeps_previous_shape(self):
+        """Arrays keep both keywords because together they still describe a usable value.
+
+        ``array`` and ``anyOf: [array, null]`` intersect to ``array``, so strict mode compiles a
+        grammar the model can satisfy. That is why optional array params call successfully today,
+        unlike ``string`` and ``anyOf: [integer, null]``, whose intersection is empty. Leaving
+        this shape alone keeps the patch limited to the properties that are actually broken.
+        """
+        prop = self.build_schema(self.optional("array"))["properties"]["field"]
+
+        self.assertEqual(prop["type"], "array")
+        self.assertIn("anyOf", prop)
+
+    def test_non_collapsible_anyof_is_left_untouched(self):
+        """An anyOf that is not a nullable scalar keeps its own declaration.
+
+        Injecting a top-level type here would rebuild the same contradiction, and for a
+        multi-type union it would also force one branch of the union onto the model.
+        """
+        prop = self.build_schema(self.optional("object"))["properties"]["field"]
+
+        self.assertIn("anyOf", prop)
+        self.assertNotIn("type", prop)
+
+    def test_required_properties_keep_declared_types(self):
+        parameters = {
+            name: {"type": name, "description": name, "required": True}
+            for name in ("string", "integer", "number", "boolean")
+        }
+
+        schema = self.build_schema(parameters)
+
+        for name in parameters:
+            with self.subTest(field=name):
+                self.assertEqual(schema["properties"][name]["type"], name)
+
+    def test_descriptions_preserved_and_every_property_required(self):
+        """Strict mode requires every property, which is why one broken field blocks the call."""
+        parameters = {
+            "year": {"type": "integer", "description": "Release year", "required": False},
+            "item_id": {"type": "string", "description": "JIRA key", "required": True},
+        }
+
+        schema = self.build_schema(parameters)
+
+        self.assertEqual(schema["properties"]["year"]["description"], "Release year")
+        self.assertEqual(schema["properties"]["item_id"]["description"], "JIRA key")
+        self.assertEqual(sorted(schema["required"]), ["item_id", "year"])
+
+
 class TestToExternalNoneAgentData(TestCase):
     def test_agent_data_none_normalized_to_empty_dict(self):
         agent_data = None
@@ -435,3 +545,39 @@ class TestOpenAIDataLakeEventAdapterDataLakeEvents(TestCase):
         self.assertEqual(len(self.mock_service.sent_events_async), 1)
         self.assertEqual(self.mock_service.sent_events_async[0]["key"], "tool_result")
         self.assertEqual(len(self.mock_service.sent_events_sync), 0)
+
+
+class TestOpenAITeamAdapterGetContext(TestCase):
+    @patch.object(OpenAITeamAdapter, "_get_credentials", return_value={"api_key": "secret"})
+    def test_get_context_includes_vtex_fields(self, _mock_credentials):
+        context = OpenAITeamAdapter._get_context(
+            project_uuid="proj-123",
+            contact_urn="tel:123",
+            auth_token="token",
+            channel_uuid="ch-1",
+            contact_name="Ana",
+            content_base_uuid="cb-1",
+            contact_fields="{}",
+            vtex_account="mystore",
+            vtex_host_store="https://www.mystore.com.br",
+            storefront_type="vtex_io",
+        )
+        self.assertEqual(context.project["uuid"], "proj-123")
+        self.assertEqual(context.project["vtex_account"], "mystore")
+        self.assertEqual(context.project["vtex_host_store"], "https://www.mystore.com.br")
+        self.assertEqual(context.project["storefront_type"], "vtex_io")
+
+    @patch.object(OpenAITeamAdapter, "_get_credentials", return_value={})
+    def test_get_context_vtex_fields_default_to_none(self, _mock_credentials):
+        context = OpenAITeamAdapter._get_context(
+            project_uuid="proj-123",
+            contact_urn="tel:123",
+            auth_token="token",
+            channel_uuid="ch-1",
+            contact_name="Ana",
+            content_base_uuid="cb-1",
+            contact_fields="{}",
+        )
+        self.assertIsNone(context.project["vtex_account"])
+        self.assertIsNone(context.project["vtex_host_store"])
+        self.assertIsNone(context.project["storefront_type"])

@@ -11,6 +11,7 @@ import openai
 import pendulum
 import sentry_sdk
 from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
+from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from langfuse import get_client
 from openai import AsyncOpenAI
@@ -18,6 +19,7 @@ from openai.types.shared import Reasoning
 
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
+from inline_agents.backends.openai.agent_entities import resolve_agent_model
 from inline_agents.backends.openai.components_response_merge import merge_streaming_components_response
 from inline_agents.backends.openai.components_tools import get_component_tools as get_component_tools_module
 from inline_agents.backends.openai.entities import FinalResponse
@@ -61,6 +63,9 @@ from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
+
+AWS_MANTLE_API_BASE = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+OPENAI_COMPATIBLE_MODEL_VENDORS = frozenset({"openai", "aws_mantle"})
 
 
 def _is_final_out_debug(msg: str) -> None:
@@ -438,6 +443,9 @@ class OpenAIBackend(InlineAgentsBackend):
         instructions_cached = kwargs.pop("instructions", None)
         agent_data_cached = kwargs.pop("agent_data", None)
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
+        vtex_account_cached = kwargs.pop("vtex_account", None)
+        vtex_host_store_cached = kwargs.pop("vtex_host_store", None)
+        storefront_type_cached = kwargs.pop("storefront_type", None)
 
         if supervisor_agent_uuid:
             external_team = self.team_adapter.to_external_enhanced(
@@ -473,6 +481,9 @@ class OpenAIBackend(InlineAgentsBackend):
                 manager_pipeline_version=manager_pipeline_version,
                 channel_type=channel_type,
                 prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -511,6 +522,9 @@ class OpenAIBackend(InlineAgentsBackend):
                 skip_conversation_sqs=skip_conversation_sqs,
                 channel_type=channel_type,
                 prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
 
         client = self._get_client()
@@ -751,16 +765,26 @@ class OpenAIBackend(InlineAgentsBackend):
         context,
         formatter_instructions: str = "",
         formatter_agent_configurations=None,
+        user_model_credentials: Optional[Dict[str, Any]] = None,
     ):
         formatter_agent = self._create_formatter_agent(
-            supervisor_hooks, formatter_instructions, formatter_agent_configurations
+            supervisor_hooks,
+            formatter_instructions,
+            formatter_agent_configurations,
+            user_model_credentials=user_model_credentials,
         )
         formatter_result = await self._run_formatter_agent(
             formatter_agent, final_response, session, context, formatter_agent_configurations
         )
         return formatter_result
 
-    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions="", formatter_agent_configurations=None):
+    def _create_formatter_agent(
+        self,
+        supervisor_hooks,
+        formatter_instructions="",
+        formatter_agent_configurations=None,
+        user_model_credentials: Optional[Dict[str, Any]] = None,
+    ):
         def custom_tool_handler(context, tool_results):
             if tool_results:
                 first_result = tool_results[0]
@@ -796,27 +820,34 @@ class OpenAIBackend(InlineAgentsBackend):
 
         supervisor_hooks.save_components_trace = True
 
-        formatter_agent = Agent(
+        credentials = user_model_credentials or {}
+        resolved_model = resolve_agent_model(formatter_agent_model, credentials)
+
+        model_settings_kwargs: Dict[str, Any] = {
+            "tool_choice": "required",
+            "parallel_tool_calls": False,
+        }
+        if isinstance(resolved_model, LitellmModel):
+            model_settings_kwargs["include_usage"] = True
+            api_version = credentials.get("api_version")
+            if api_version:
+                model_settings_kwargs["extra_args"] = {"api_version": api_version}
+
+        if formatter_reasoning_effort:
+            model_settings_kwargs["reasoning"] = Reasoning(
+                effort=formatter_reasoning_effort,
+                summary=formatter_reasoning_summary,
+            )
+
+        return Agent(
             name="Response Formatter Agent",
             instructions=formatter_instructions_resolved,
-            model=formatter_agent_model,
+            model=resolved_model,
             tools=tools,
             hooks=supervisor_hooks,
             tool_use_behavior=custom_tool_handler,
-            model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
+            model_settings=ModelSettings(**model_settings_kwargs),
         )
-
-        if formatter_reasoning_effort:
-            formatter_agent.model_settings = ModelSettings(
-                tool_choice="required",
-                parallel_tool_calls=False,
-                reasoning=Reasoning(
-                    effort=formatter_reasoning_effort,
-                    summary=formatter_reasoning_summary,
-                ),
-            )
-
-        return formatter_agent
 
     async def _run_formatter_agent(
         self, formatter_agent, final_response, session, context, formatter_agent_configurations
@@ -983,6 +1014,7 @@ class OpenAIBackend(InlineAgentsBackend):
                                 external_team["context"],
                                 formatter_agent_instructions,
                                 formatter_config,
+                                user_model_credentials=user_model_credentials,
                             )
                         except Exception as formatter_error:
                             logger.error(
@@ -1035,6 +1067,7 @@ class OpenAIBackend(InlineAgentsBackend):
                             external_team["context"],
                             formatter_agent_instructions,
                             formatter_config,
+                            user_model_credentials=user_model_credentials,
                         )
                         final_response = formatted_response
                     except Exception as formatter_error:
@@ -1204,11 +1237,14 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.capture_exception(exception)
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
-        if user_model_credentials and model_vendor.lower() == "openai":
+        normalized_vendor = model_vendor.lower()
+        if user_model_credentials and normalized_vendor in OPENAI_COMPATIBLE_MODEL_VENDORS:
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
+            if normalized_vendor == "aws_mantle" and not base_url:
+                base_url = AWS_MANTLE_API_BASE
 
-            if user_model_credentials.get("api_base", ""):
+            if base_url:
                 client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,

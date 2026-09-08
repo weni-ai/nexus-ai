@@ -727,6 +727,7 @@ class ManagerAgentAdmin(admin.ModelAdmin):
                     "model_has_reasoning",
                     "reasoning_effort",
                     "reasoning_summary",
+                    "reasoning_mode",
                     "manager_extra_args",
                 ),
                 "classes": ("collapse",),

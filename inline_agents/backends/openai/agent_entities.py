@@ -3,7 +3,6 @@ import json
 import logging
 from typing import Any, Dict, List
 
-import boto3
 from agents import Agent, ModelSettings, RunContextWrapper, function_tool
 from agents.agent import FunctionToolResult, ToolsToFinalOutputResult
 from agents.extensions.models.litellm_model import LitellmModel
@@ -11,7 +10,7 @@ from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
-from nexus.utils import get_datasource_id
+from inline_agents.backends.openai.knowledge_base import retrieve_knowledge_base
 
 logger = logging.getLogger(__name__)
 
@@ -116,25 +115,48 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
-class AgentModel:
-    def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
-        if "litellm" in model:
-            cleaned_model = model.replace("litellm/", "")
-            kwargs = {
-                "model": cleaned_model,
-            }
+def build_reasoning_settings(
+    *,
+    model_has_reasoning: bool = False,
+    reasoning_effort: str | None = None,
+    reasoning_summary: str | None = None,
+    reasoning_mode: str | None = None,
+) -> Reasoning | None:
+    """Build Responses API reasoning settings, omitting blank mode."""
+    kwargs: Dict[str, Any] = {}
+    if model_has_reasoning and reasoning_effort:
+        kwargs["effort"] = reasoning_effort
+        kwargs["summary"] = reasoning_summary
+    if reasoning_mode:
+        kwargs["mode"] = reasoning_mode
+    if not kwargs:
+        return None
+    return Reasoning(**kwargs)
 
-            if "vertex" in model:
-                return LitellmModel(**kwargs)
 
-            if user_model_credentials.get("api_key"):
-                kwargs["api_key"] = user_model_credentials.get("api_key")
-            if user_model_credentials.get("api_base"):
-                kwargs["base_url"] = user_model_credentials.get("api_base")
-
-            return LitellmModel(**kwargs)
+def resolve_agent_model(model: str, user_model_credentials: Dict[str, Any] | None) -> LitellmModel | str:
+    """Return LitellmModel when model is litellm-prefixed; otherwise return the model string unchanged."""
+    if not model or "litellm" not in model:
         return model
 
+    credentials = user_model_credentials or {}
+    cleaned_model = model.replace("litellm/", "")
+    kwargs: Dict[str, Any] = {"model": cleaned_model}
+
+    if "vertex" in model:
+        return LitellmModel(**kwargs)
+
+    api_key = credentials.get("api_key")
+    if api_key:
+        kwargs["api_key"] = api_key
+    api_base = credentials.get("api_base")
+    if api_base:
+        kwargs["base_url"] = api_base
+
+    return LitellmModel(**kwargs)
+
+
+class AgentModel:
     def custom_tool_handler(
         self, context: RunContextWrapper[Any], tool_results: List[FunctionToolResult]
     ) -> ToolsToFinalOutputResult:
@@ -175,7 +197,7 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
         else:
             model_name = foundation_model
 
-        model = self.get_model(model_name, user_model_credentials)
+        model = resolve_agent_model(model_name, user_model_credentials)
         model_settings_kw = dict(model_settings)
         if isinstance(model, LitellmModel):
             model_settings_kw["include_usage"] = True
@@ -210,12 +232,13 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         model_has_reasoning: bool = False,
         reasoning_effort: str = "",
         reasoning_summary: str = "",
+        reasoning_mode: str | None = None,
         parallel_tool_calls: bool = False,
         extra_args: dict | None = None,
     ):
         tools.extend(self.function_tools())
 
-        model = self.get_model(model, user_model_credentials)
+        model = resolve_agent_model(model, user_model_credentials)
 
         model_settings_kwargs: Dict[str, Any] = {
             "parallel_tool_calls": parallel_tool_calls,
@@ -226,8 +249,14 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         if isinstance(model, LitellmModel):
             model_settings_kwargs["include_usage"] = True
 
-        if model_has_reasoning and reasoning_effort:
-            model_settings_kwargs["reasoning"] = Reasoning(effort=reasoning_effort, summary=reasoning_summary)
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=model_has_reasoning,
+            reasoning_effort=reasoning_effort,
+            reasoning_summary=reasoning_summary,
+            reasoning_mode=reasoning_mode,
+        )
+        if reasoning is not None:
+            model_settings_kwargs["reasoning"] = reasoning
 
         super().__init__(
             name=name,
@@ -248,39 +277,4 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
             question (str): Natural-language query. Example: "What are your shipping policies?"
         """
 
-        client = boto3.client("bedrock-agent-runtime", region_name=settings.AWS_BEDROCK_REGION_NAME)
-        content_base_uuid: str | None = ctx.context.content_base.get("uuid")
-
-        retrieve_params = {
-            "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
-            "retrievalQuery": {"text": question},
-        }
-
-        combined_filter = {
-            "andAll": [
-                {"equals": {"key": "contentBaseUuid", "value": content_base_uuid}},
-                {
-                    "equals": {
-                        "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(ctx.context.project.get("uuid")),
-                    }
-                },
-            ]
-        }
-
-        if content_base_uuid:
-            retrieve_params["retrievalConfiguration"] = {
-                "vectorSearchConfiguration": {
-                    "filter": combined_filter,
-                }
-            }
-
-        response = client.retrieve(**retrieve_params)
-
-        if response.get("retrievalResults"):
-            all_results = []
-            for result in response["retrievalResults"]:
-                all_results.append(result["content"]["text"])
-            return "\n".join(all_results)
-
-        return "No response found in knowledge base."
+        return retrieve_knowledge_base(ctx, question)

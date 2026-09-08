@@ -194,9 +194,10 @@ class MultiAgentViewTestCase(TestCase):
         mock_publish.assert_not_called()
 
     @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
-    def test_patch_inline_switch_true_to_false_does_not_publish_eda(self, mock_publish):
+    def test_patch_inline_switch_true_to_false_publishes_eda(self, mock_publish):
         self.project.inline_agent_switch = True
-        self.project.save(update_fields=["inline_agent_switch"])
+        self.project.agents_backend = "OpenAIBackend"
+        self.project.save(update_fields=["inline_agent_switch", "agents_backend"])
 
         client = APIClient()
         client.force_authenticate(user=self.user_weni)
@@ -208,7 +209,14 @@ class MultiAgentViewTestCase(TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        mock_publish.assert_not_called()
+        mock_publish.assert_called_once_with(
+            project_uuid=str(self.project.uuid),
+            user_email=self.user_weni.email,
+            is_multi_agents=False,
+        )
+        self.project.refresh_from_db()
+        self.assertFalse(self.project.inline_agent_switch)
+        self.assertEqual(self.project.agents_backend, "BedrockBackend")
 
     @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
     def test_patch_multi_agents_invalid_type_returns_400(self, mock_publish):

@@ -84,6 +84,7 @@ class ManagerAgent(models.Model):
     collaborator_max_tokens = models.PositiveIntegerField(default=2048, null=True, blank=True)
     reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
     reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
+    reasoning_mode = models.CharField(max_length=50, blank=True, null=True)
     parallel_tool_calls = models.BooleanField(default=False)
     tools = models.JSONField(null=True, blank=True)
     knowledge_bases = models.JSONField(null=True, blank=True)

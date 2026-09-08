@@ -34,7 +34,10 @@ app.conf.task_routes = {
 
 app.conf.task_annotations = {"router.tasks.invoke.start_inline_agents": {"rate_limit": rate_limit}}
 
-app.conf.imports = ("nexus.usecases.intelligences.lambda_usecase",)
+app.conf.imports = (
+    "nexus.usecases.intelligences.lambda_usecase",
+    "nexus.event_domain.recent_activity.tasks",
+)
 
 
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
