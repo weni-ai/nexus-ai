@@ -5,6 +5,16 @@ class ProjectDoesNotExist(Exception):
     pass
 
 
+class ManagerChangeNotAllowedForLiveDeskCopilot(Exception):
+    """Raised when trying to change the manager of a Live Desk copilot project."""
+
+    default_message = "Manager version cannot be changed for Live Desk copilot projects"
+
+    def __init__(self, message: str | None = None):
+        self.message = message or self.default_message
+        super().__init__(self.message)
+
+
 class ProjectAuthorizationDenied(APIException):
     status_code = 403
     default_detail = "You do not have permission to perform this action."

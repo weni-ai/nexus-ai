@@ -135,6 +135,7 @@ class ProjectsUseCase:
             agents_backend=backend,
             manager_agent=manager_agent,
             inline_agent_switch=project_dto.inline_agent_switch,
+            is_live_desk_copilot=project_dto.is_live_desk_copilot,
         )
 
         self.create_brain_project_base(project_dto=project_dto, user_email=user_email, project=project)

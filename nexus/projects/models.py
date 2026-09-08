@@ -85,6 +85,10 @@ class Project(BaseModel, SoftDeleteModel):
     audio_orchestration_welcome_message = models.TextField(null=True, blank=True)
     api_error_message = models.TextField(null=True, blank=True)
     manager_agent = models.ForeignKey("inline_agents.ManagerAgent", on_delete=models.SET_NULL, null=True, blank=True)
+    is_live_desk_copilot = models.BooleanField(
+        default=False,
+        help_text="When True, this project is a Live Desk sales assistant copilot and cannot change manager version",
+    )
 
     # Synced from Connect EDA (projects.topic / update-projects.topic)
     vtex_account = models.CharField(max_length=255, null=True, blank=True, unique=True)
