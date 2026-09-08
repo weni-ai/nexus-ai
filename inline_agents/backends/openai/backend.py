@@ -766,12 +766,14 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_instructions: str = "",
         formatter_agent_configurations=None,
         user_model_credentials: Optional[Dict[str, Any]] = None,
+        model_vendor: str = "",
     ):
         formatter_agent = self._create_formatter_agent(
             supervisor_hooks,
             formatter_instructions,
             formatter_agent_configurations,
             user_model_credentials=user_model_credentials,
+            model_vendor=model_vendor,
         )
         formatter_result = await self._run_formatter_agent(
             formatter_agent, final_response, session, context, formatter_agent_configurations
@@ -784,6 +786,7 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_instructions="",
         formatter_agent_configurations=None,
         user_model_credentials: Optional[Dict[str, Any]] = None,
+        model_vendor: str = "",
     ):
         def custom_tool_handler(context, tool_results):
             if tool_results:
@@ -821,17 +824,17 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor_hooks.save_components_trace = True
 
         credentials = user_model_credentials or {}
-        resolved_model = resolve_agent_model(formatter_agent_model, credentials)
-
+        resolved_model = resolve_agent_model(formatter_agent_model, credentials, model_vendor=model_vendor)
         model_settings_kwargs: Dict[str, Any] = {
             "tool_choice": "required",
             "parallel_tool_calls": False,
         }
-        if isinstance(resolved_model, LitellmModel):
+        if not isinstance(resolved_model, str):
             model_settings_kwargs["include_usage"] = True
-            api_version = credentials.get("api_version")
-            if api_version:
-                model_settings_kwargs["extra_args"] = {"api_version": api_version}
+            if isinstance(resolved_model, LitellmModel):
+                api_version = credentials.get("api_version")
+                if api_version:
+                    model_settings_kwargs["extra_args"] = {"api_version": api_version}
 
         if formatter_reasoning_effort:
             model_settings_kwargs["reasoning"] = Reasoning(
@@ -1015,6 +1018,7 @@ class OpenAIBackend(InlineAgentsBackend):
                                 formatter_agent_instructions,
                                 formatter_config,
                                 user_model_credentials=user_model_credentials,
+                                model_vendor=model_vendor,
                             )
                         except Exception as formatter_error:
                             logger.error(
@@ -1068,6 +1072,7 @@ class OpenAIBackend(InlineAgentsBackend):
                             formatter_agent_instructions,
                             formatter_config,
                             user_model_credentials=user_model_credentials,
+                            model_vendor=model_vendor,
                         )
                         final_response = formatted_response
                     except Exception as formatter_error:
