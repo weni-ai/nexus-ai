@@ -3,10 +3,9 @@
 Usage:
     poetry run python manage.py seed_whirlpool_model_provider
 
-Then activate credentials for a project via the model-providers API with:
-    client_id / client_secret (and optional token_url, generate_content_url, api_base).
-
-Local fallback: WHIRLPOOL_CLIENT_ID / WHIRLPOOL_CLIENT_SECRET env vars.
+Activate a project only from Django admin or the Django shell (not the
+model-providers API): client_id / client_secret plus token_url and
+generate_content_url (or api_base).
 """
 
 from django.core.management.base import BaseCommand
@@ -42,7 +41,7 @@ class Command(BaseCommand):
                 "override_collaborators_foundation_model": True,
                 "default_instructions_for_collaborators": "",
                 "default": False,
-                "public": True,
+                "public": False,
                 "release_date": timezone.now(),
             },
         )
@@ -69,6 +68,6 @@ class Command(BaseCommand):
             )
         )
         self.stdout.write(
-            "Assign this provider to a project and set client_id/client_secret "
-            "(or use WHIRLPOOL_CLIENT_ID / WHIRLPOOL_CLIENT_SECRET)."
+            "Assign this provider from Django admin or shell only. "
+            "Set per-project client_id, client_secret, token_url, and generate_content_url."
         )

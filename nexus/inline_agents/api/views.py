@@ -38,7 +38,15 @@ from nexus.inline_agents.api.services.official_catalog import (
     bump_official_catalog_cache_generation,
     list_official_catalog_page,
 )
-from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
+from nexus.inline_agents.backends.openai.models import (
+    API_HIDDEN_MODEL_VENDORS,
+    ManagerAgent,
+    ModelProvider,
+    ProjectModelProvider,
+    api_visible_model_providers,
+    is_api_hidden_model_vendor,
+    project_has_api_visible_own_engine,
+)
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentGroup, IntegratedAgent
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
@@ -1358,8 +1366,15 @@ class AgentBuilderAudio(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+class ApiHiddenProviderChangeNotAllowed(Exception):
+    """Raised when the API tries to change an admin-only custom provider."""
+
+
 def set_project_manager_agent(project_uuid, manager_identifier: str):
     project = get_project_by_uuid(project_uuid)
+
+    if is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)):
+        raise ApiHiddenProviderChangeNotAllowed()
 
     try:
         manager_id = int(manager_identifier)
@@ -1372,6 +1387,8 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
         pass
 
     manager = ManagerAgent.objects.get(uuid=manager_identifier)
+    if is_api_hidden_model_vendor(manager.model_vendor):
+        raise ManagerAgent.DoesNotExist()
     project.manager_agent = manager
     project.save()
     notify_async(event="cache_invalidation:project", project=project)
@@ -1379,7 +1396,11 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
 
 
 def get_public_managers(limit: int = 2):
-    return ManagerAgent.objects.filter(public=True).order_by("-created_on")[:limit]
+    return (
+        ManagerAgent.objects.filter(public=True)
+        .exclude(model_vendor__in=list(API_HIDDEN_MODEL_VENDORS))
+        .order_by("-created_on")[:limit]
+    )
 
 
 class AgentManagersView(APIView):
@@ -1395,6 +1416,8 @@ class AgentManagersView(APIView):
             manager_agent_uuid = set_project_manager_agent(project_uuid, str(manager_uuid))
         except ManagerAgent.DoesNotExist:
             return Response(data={"error": "Manager agent not found"}, status=404)
+        except ApiHiddenProviderChangeNotAllowed:
+            return Response(data={"error": "This provider cannot be changed via API"}, status=403)
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
         except ValueError:
@@ -1459,6 +1482,9 @@ class AgentManagersView(APIView):
 
         current_manager: ManagerAgent | None = project.manager_agent
 
+        if current_manager and is_api_hidden_model_vendor(current_manager.model_vendor):
+            return Response(data=data)
+
         if current_manager:
             current_manager_id = str(current_manager.uuid)
             if not current_manager.public:
@@ -1488,14 +1514,17 @@ class ProjectModelProvidersView(APIView):
             return Response(data={"error": "Project not found"}, status=404)
 
         current = None
-        providers = ModelProvider.objects.select_related("manager_agent").all()
+        providers = api_visible_model_providers()
         providers_data = ModelProviderSerializer(providers, many=True).data
 
         try:
             project_provider = ProjectModelProvider.objects.select_related("provider", "provider__manager_agent").get(
                 project=project, is_active=True
             )
+        except ProjectModelProvider.DoesNotExist:
+            project_provider = None
 
+        if project_provider and not is_api_hidden_model_vendor(project_provider.provider.model_vendor):
             provider_schema = project_provider.provider.credentials
             if not isinstance(provider_schema, list):
                 provider_schema = []
@@ -1511,8 +1540,6 @@ class ProjectModelProvidersView(APIView):
                     "credentials": project_provider.masked_credentials(provider_schema),
                 }
             ).data
-        except ProjectModelProvider.DoesNotExist:
-            current = None
 
         return Response(data={"current": current, "providers": providers_data})
 
@@ -1533,8 +1560,19 @@ class ProjectModelProvidersView(APIView):
         except (ModelProvider.DoesNotExist, ValueError):
             return Response(data={"error": "Provider not found"}, status=404)
 
+        if is_api_hidden_model_vendor(provider.model_vendor):
+            return Response(data={"error": "Provider not found"}, status=404)
+
         if not provider.manager_agent:
             return Response(data={"error": "Provider has no associated manager agent"}, status=400)
+
+        active_hidden = (
+            ProjectModelProvider.objects.filter(project=project, is_active=True)
+            .select_related("provider")
+            .first()
+        )
+        if active_hidden and is_api_hidden_model_vendor(active_hidden.provider.model_vendor):
+            return Response(data={"error": "This provider cannot be changed via API"}, status=403)
 
         ProjectModelProvider.objects.filter(project=project, is_active=True).exclude(provider=provider).update(
             is_active=False
@@ -1559,6 +1597,14 @@ class ProjectModelProvidersView(APIView):
             project = get_project_by_uuid(project_uuid)
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
+
+        active = (
+            ProjectModelProvider.objects.filter(project=project, is_active=True).select_related("provider").first()
+        )
+        if not active:
+            return Response(data={"error": "No active credentials found"}, status=404)
+        if is_api_hidden_model_vendor(active.provider.model_vendor):
+            return Response(data={"error": "This provider cannot be changed via API"}, status=403)
 
         updated = ProjectModelProvider.objects.filter(
             project=project,
@@ -1585,13 +1631,6 @@ class ProjectEngineSourceView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        has_own = (
-            ProjectModelProvider.objects.filter(
-                project=project,
-                is_active=True,
-            )
-            .exclude(credentials=[])
-            .exists()
-        )
+        has_own = project_has_api_visible_own_engine(project)
 
         return Response(data={"engine_source": "OWN" if has_own else "STANDARD"})
