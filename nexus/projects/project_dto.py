@@ -15,6 +15,7 @@ class ProjectCreationDTO:
     brain_on: bool = False
     indexer_database: str = Project.BEDROCK
     inline_agent_switch: bool = True
+    is_live_desk_copilot: bool = False
 
 
 @dataclass

@@ -51,7 +51,7 @@ from nexus.inline_agents.backends.openai.models import OpenAISupervisor as Depre
 from nexus.inline_agents.models import MCP, Agent, AgentGroup, IntegratedAgent
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.api.serializers import ProjectMinimalSerializer
-from nexus.projects.exceptions import ProjectDoesNotExist
+from nexus.projects.exceptions import ManagerChangeNotAllowedForLiveDeskCopilot, ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
@@ -1381,6 +1381,8 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
     try:
         manager_id = int(manager_identifier)
         if DeprecatedManagerAgent.objects.filter(id=manager_id).exists():
+            if project.is_live_desk_copilot:
+                raise ManagerChangeNotAllowedForLiveDeskCopilot()
             project.manager_agent = None
             project.save()
             notify_async(event="cache_invalidation:project", project=project)
@@ -1391,6 +1393,12 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
     manager = ManagerAgent.objects.get(uuid=manager_identifier)
     if is_api_hidden_model_vendor(manager.model_vendor):
         raise ManagerAgent.DoesNotExist()
+
+    if project.is_live_desk_copilot:
+        if project.manager_agent_id == manager.id:
+            return str(manager.uuid)
+        raise ManagerChangeNotAllowedForLiveDeskCopilot()
+
     project.manager_agent = manager
     project.save()
     notify_async(event="cache_invalidation:project", project=project)
@@ -1416,6 +1424,8 @@ class AgentManagersView(APIView):
 
         try:
             manager_agent_uuid = set_project_manager_agent(project_uuid, str(manager_uuid))
+        except ManagerChangeNotAllowedForLiveDeskCopilot as e:
+            return Response(data={"error": e.message}, status=403)
         except ManagerAgent.DoesNotExist:
             return Response(data={"error": "Manager agent not found"}, status=404)
         except ApiHiddenProviderChangeNotAllowed:
@@ -1489,7 +1499,7 @@ class AgentManagersView(APIView):
 
         if current_manager:
             current_manager_id = str(current_manager.uuid)
-            if not current_manager.public:
+            if project.is_live_desk_copilot or not current_manager.public:
                 data = {
                     "serverTime": str(pendulum.now()),
                     "new": {"id": str(current_manager.uuid), "label": current_manager.name},
@@ -1569,12 +1579,16 @@ class ProjectModelProvidersView(APIView):
             return Response(data={"error": "Provider has no associated manager agent"}, status=400)
 
         active_hidden = (
-            ProjectModelProvider.objects.filter(project=project, is_active=True)
-            .select_related("provider")
-            .first()
+            ProjectModelProvider.objects.filter(project=project, is_active=True).select_related("provider").first()
         )
         if active_hidden and is_api_hidden_model_vendor(active_hidden.provider.model_vendor):
             return Response(data={"error": "This provider cannot be changed via API"}, status=403)
+
+        if project.is_live_desk_copilot and project.manager_agent_id != provider.manager_agent_id:
+            return Response(
+                data={"error": ManagerChangeNotAllowedForLiveDeskCopilot().message},
+                status=403,
+            )
 
         ProjectModelProvider.objects.filter(project=project, is_active=True).exclude(provider=provider).update(
             is_active=False
@@ -1600,9 +1614,13 @@ class ProjectModelProvidersView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        active = (
-            ProjectModelProvider.objects.filter(project=project, is_active=True).select_related("provider").first()
-        )
+        if project.is_live_desk_copilot:
+            return Response(
+                data={"error": ManagerChangeNotAllowedForLiveDeskCopilot().message},
+                status=403,
+            )
+
+        active = ProjectModelProvider.objects.filter(project=project, is_active=True).select_related("provider").first()
         if not active:
             return Response(data={"error": "No active credentials found"}, status=404)
         if is_api_hidden_model_vendor(active.provider.model_vendor):
