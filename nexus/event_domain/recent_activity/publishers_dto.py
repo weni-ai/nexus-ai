@@ -11,3 +11,4 @@ class RecentActivitiesDTO:
     entity_name: str
     action: str
     entity: str = "NEXUS"
+    action_model: str = "Intelligence"

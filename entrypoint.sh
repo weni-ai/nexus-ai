@@ -76,6 +76,9 @@ elif [[ "healthcheck-celery-worker" == "$1" ]]; then
     echo "${HEALTHCHECK_OUT}"
     grep -F -qs "${celery_queue}@${HOSTNAME}: OK" <<< "${HEALTHCHECK_OUT}" || exit 1
     exit 0
+elif [[ "edaconsume-amq" == "$1" ]]; then
+    shift 1
+    do_gosu "${APP_USER}:${APP_GROUP}" exec python manage.py edaconsume_amq "$@"
 fi
 
 exec "$@"

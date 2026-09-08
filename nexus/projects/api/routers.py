@@ -1,5 +1,7 @@
 from django.urls import path
 
+from .project_api_token_views import ProjectApiTokenCreateView
+from .projects_agents_views import ProjectsAgentsView
 from .resolution_criteria_views import (
     AIResolutionCriteriaDetailView,
     AIResolutionCriteriaListCreateView,
@@ -17,6 +19,7 @@ from .views import (
     OpenSupportTicketView,
     ProjectGuardrailsConfigView,
     ProjectPromptCreationConfigurationsViewset,
+    ProjectPromptInjectionFilterView,
     ProjectUpdateViewset,
 )
 
@@ -29,6 +32,11 @@ urlpatterns = [
     ),
     path("<project_uuid>/agents-backend", AgentsBackendView.as_view(), name="agents-backend"),
     path("<project_uuid>/human-support", EnableHumanSupportView.as_view(), name="enable-human-support"),
+    path(
+        "<project_uuid>/api-tokens/",
+        ProjectApiTokenCreateView.as_view(),
+        name="project-api-token-create",
+    ),
     path(
         "<project_uuid>/ai-resolution-criteria/",
         AIResolutionCriteriaListCreateView.as_view(),
@@ -50,12 +58,18 @@ urlpatterns = [
         name="project-guardrails-config",
     ),
     path(
+        "<project_uuid>/prompt-injection-filter/",
+        ProjectPromptInjectionFilterView.as_view(),
+        name="project-prompt-injection-filter",
+    ),
+    path(
         "<project_uuid>/improvements/open-support-ticket/",
         OpenSupportTicketView.as_view(),
         name="improvements-open-support-ticket",
     ),
     path("<project_uuid>/ab-project-details", AgentBuilderProjectDetailsView.as_view(), name="ab-project-details"),
     path("v2/projects/resolution-rate", ProjectsResolutionRateView.as_view(), name="projects-resolution-rate-v2"),
+    path("v2/projects/agents", ProjectsAgentsView.as_view(), name="projects-agents-v2"),
     path("v2/<project_uuid>/conversations", ConversationsProxyView.as_view(), name="conversations-proxy-v2"),
     path(
         "v2/<project_uuid>/conversations/export",

@@ -71,3 +71,12 @@ class GuardrailsConfigUpdateSerializer(serializers.Serializer):
         if "category_states" not in attrs and "blocking_message" not in attrs:
             raise serializers.ValidationError("At least one of category_states or blocking_message is required.")
         return attrs
+
+
+class PromptInjectionFilterResponseSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField()
+    writable = serializers.BooleanField()
+
+
+class PromptInjectionFilterUpdateSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField(required=True)

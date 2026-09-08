@@ -252,3 +252,37 @@ class CachedProjectDataTestCase(SimpleTestCase):
         self.assertEqual(result.project_dict, project_dict)
         self.assertEqual(result.content_base_dict, content_base_dict)
         self.assertEqual(result.team, team)
+
+
+class PreGenerationProjectToDictTestCase(SimpleTestCase):
+    @patch("router.services.pre_generation_service.manager_pipeline_version_from_project", return_value="new")
+    def test_project_to_dict_includes_vtex_fields(self, _mock_pipeline):
+        from router.services.pre_generation_service import PreGenerationService
+
+        project = MagicMock()
+        project.uuid = "proj-123"
+        project.agents_backend = "OpenAIBackend"
+        project.use_components = False
+        project.rationale_switch = False
+        project.use_prompt_creation_configurations = False
+        project.conversation_turns_to_include = 10
+        project.exclude_previous_thinking_steps = True
+        project.default_supervisor_foundation_model = None
+        project.human_support = False
+        project.human_support_prompt = None
+        project.default_formatter_foundation_model = None
+        project.formatter_instructions = None
+        project.formatter_reasoning_effort = None
+        project.formatter_reasoning_summary = None
+        project.formatter_send_only_assistant_message = False
+        project.formatter_tools_descriptions = None
+        project.manager_agent = None
+        project.vtex_account = "mystore"
+        project.vtex_host_store = "https://www.mystore.com.br"
+        project.storefront_type = "vtex_io"
+
+        result = PreGenerationService()._project_to_dict(project)
+
+        self.assertEqual(result["vtex_account"], "mystore")
+        self.assertEqual(result["vtex_host_store"], "https://www.mystore.com.br")
+        self.assertEqual(result["storefront_type"], "vtex_io")

@@ -7,7 +7,7 @@ from nexus.event_driven.signals import message_finished, message_started
 from nexus.projects.models import Project
 from router.entities import DBCon
 from router.tasks import start_route
-from router.tasks.invoke import start_inline_agents
+from router.tasks.inline_agent_enqueue import enqueue_start_inline_agents
 
 from .http_bodies import MessageHTTPBody
 
@@ -46,7 +46,7 @@ def messages(request: Request, message: MessageHTTPBody):
 
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")
-            start_inline_agents.delay(message.dict(), user_email=message.user_email or "")
+            enqueue_start_inline_agents(message.dict(), user_email=message.user_email or "")
         else:
             start_route.delay(message.dict())
 

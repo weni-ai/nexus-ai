@@ -83,6 +83,9 @@ class CachedProjectData:
             "agent_data": self.agent_data,
             "formatter_agent_configurations": self.formatter_agent_configurations,
             "guardrails_config": self.guardrails_config,
+            "prompt_injection_filter_enabled": bool(
+                (self.guardrails_config or {}).get("prompt_injection_filter_enabled", False)
+            ),
             "default_instructions_for_collaborators": (
                 self.inline_agent_config_dict.get("default_instructions_for_collaborators")
                 if self.inline_agent_config_dict
@@ -90,4 +93,7 @@ class CachedProjectData:
             ),
             "supervisor_agent_uuid": self.project_dict.get("supervisor_agent_uuid"),
             "manager_pipeline_version": manager_pipeline_version,
+            "vtex_account": self.project_dict.get("vtex_account"),
+            "vtex_host_store": self.project_dict.get("vtex_host_store"),
+            "storefront_type": self.project_dict.get("storefront_type"),
         }

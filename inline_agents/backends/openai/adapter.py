@@ -22,6 +22,17 @@ from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
+from inline_agents.backends.openai.prompts_progressive_feedback import (
+    get_progressive_feedback_orchestration_instruction,
+    inject_progressive_feedback_instruction,
+    log_progressive_feedback_orchestration_decision,
+    should_inject_progressive_feedback_instruction,
+)
+from inline_agents.backends.openai.prompts_prompt_injection_filter import (
+    get_prompt_injection_filter_block,
+    inject_prompt_injection_filter,
+    should_inject_prompt_injection_filter,
+)
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentConstant,
@@ -223,6 +234,10 @@ class OpenAITeamAdapter(TeamAdapter):
         skip_conversation_sqs: bool = False,
         manager_pipeline_version: Optional[str] = None,
         channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -260,6 +275,8 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            manager_foundation_model=supervisor.get("foundation_model") or "",
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -314,6 +331,7 @@ class OpenAITeamAdapter(TeamAdapter):
             model_has_reasoning=supervisor_model_settings.get("model_has_reasoning", False),
             reasoning_effort=supervisor_model_settings.get("reasoning_effort", ""),
             reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
+            reasoning_mode=supervisor_model_settings.get("reasoning_mode") or None,
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
             extra_args=supervisor_model_settings.get("manager_extra_args") or {},
             model_vendor=supervisor.get("model_vendor", ""),
@@ -334,6 +352,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                vtex_account=vtex_account,
+                vtex_host_store=vtex_host_store,
+                storefront_type=storefront_type,
             ),
             "user_model_credentials": user_model_credentials,
             "model_vendor": supervisor.get("model_vendor", ""),
@@ -372,11 +393,15 @@ class OpenAITeamAdapter(TeamAdapter):
         use_components: bool = False,
         skip_conversation_sqs: bool = False,
         channel_type: str = "",
+        prompt_injection_filter_enabled: bool = False,
         # Cached data parameters (optional, used to avoid database queries)
         content_base_uuid: str = None,
         business_rules: str = None,
         instructions: list[str] = None,
         agent_data: dict = None,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
@@ -429,6 +454,8 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            manager_foundation_model=supervisor.get("foundation_model") or "",
+            prompt_injection_filter_enabled=prompt_injection_filter_enabled,
         )
 
         for agent in agents:
@@ -519,6 +546,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 input_text=input_text,
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
+                vtex_account=vtex_account,
+                vtex_host_store=vtex_host_store,
+                storefront_type=storefront_type,
             ),
         }
 
@@ -536,6 +566,9 @@ class OpenAITeamAdapter(TeamAdapter):
         session: Optional[Any] = None,
         input_text: str = "",
         hooks_state: Optional[HooksState] = None,
+        vtex_account: Optional[str] = None,
+        vtex_host_store: Optional[str] = None,
+        storefront_type: Optional[str] = None,
     ) -> Context:
         if globals_dict is None:
             globals_dict = {}
@@ -547,7 +580,14 @@ class OpenAITeamAdapter(TeamAdapter):
 
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
-        project = {"uuid": project_uuid, "auth_token": auth_token, "flows_url": settings.FLOWS_REST_ENDPOINT}
+        project = {
+            "uuid": project_uuid,
+            "auth_token": auth_token,
+            "flows_url": settings.FLOWS_REST_ENDPOINT,
+            "vtex_account": vtex_account,
+            "vtex_host_store": vtex_host_store,
+            "storefront_type": storefront_type,
+        }
         content_base = {"uuid": content_base_uuid}
 
         return Context(
@@ -1041,12 +1081,41 @@ class OpenAITeamAdapter(TeamAdapter):
 
                 cls._clean_schema(option)
 
+    # Only scalars are collapsed. Object and array options carry nested keywords such as
+    # additionalProperties that strict mode constrains differently at property level, so they
+    # keep the previous handling.
+    _COLLAPSIBLE_SCALAR_TYPES = frozenset({"string", "integer", "number", "boolean"})
+
+    @classmethod
+    def _collapse_nullable_anyof(cls, prop_schema: dict):
+        """Rewrite an Optional[scalar] schema as a plain {"type": scalar} schema.
+
+        Pydantic renders optional fields as ``anyOf: [{type: T}, {type: "null"}]`` with no
+        top-level ``type``. Injecting ``type: "string"`` on top of that produces a schema whose
+        two constraints cannot both hold when T is not a string, and OpenAI strict mode compiles
+        it into a grammar with no valid value, so the model cannot emit the tool call.
+        Collapsing to T keeps the existing non-nullable contract that Lambda payloads rely on.
+        """
+        options = [
+            option
+            for option in prop_schema.get("anyOf", [])
+            if isinstance(option, dict) and option.get("type") != "null"
+        ]
+        if len(options) == 1 and options[0].get("type") in cls._COLLAPSIBLE_SCALAR_TYPES:
+            prop_schema.pop("anyOf")
+            prop_schema.update(options[0])
+        # Any other anyOf keeps its own declaration. Adding a top-level type here would rebuild
+        # the contradiction this method exists to remove, and for a multi-type union it also
+        # narrows the model to the injected type instead of the ones the union declares.
+
     @classmethod
     def _fix_property_schema(cls, prop_schema: Any):
         """Helper to fix the type of a single property's schema"""
         if isinstance(prop_schema, dict) and "type" not in prop_schema:
             if cls._is_array_schema(prop_schema):
                 prop_schema["type"] = "array"
+            elif "anyOf" in prop_schema:
+                cls._collapse_nullable_anyof(prop_schema)
             else:
                 prop_schema["type"] = "string"
 
@@ -1107,6 +1176,8 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_type: str = "",
         preview: bool = False,
         preview_websocket: bool = False,
+        manager_foundation_model: str = "",
+        prompt_injection_filter_enabled: bool = False,
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1164,13 +1235,6 @@ class OpenAITeamAdapter(TeamAdapter):
 
         rendered_content = template.render(context_object)
 
-        from inline_agents.backends.openai.prompts_progressive_feedback import (
-            get_progressive_feedback_orchestration_instruction,
-            inject_progressive_feedback_instruction,
-            log_progressive_feedback_orchestration_decision,
-            should_inject_progressive_feedback_instruction,
-        )
-
         if should_inject_progressive_feedback_instruction(
             rationale_switch,
             turn_off_rationale,
@@ -1178,6 +1242,7 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_type=channel_type,
             preview=preview,
             preview_websocket=preview_websocket,
+            manager_foundation_model=manager_foundation_model,
         ):
             progressive_feedback_instruction = get_progressive_feedback_orchestration_instruction()
             if progressive_feedback_instruction:
@@ -1195,6 +1260,7 @@ class OpenAITeamAdapter(TeamAdapter):
                     turn_off_rationale=turn_off_rationale,
                     injected=True,
                     instruction_preview=progressive_feedback_instruction[:120],
+                    manager_foundation_model=manager_foundation_model,
                 )
             else:
                 log_progressive_feedback_orchestration_decision(
@@ -1206,6 +1272,7 @@ class OpenAITeamAdapter(TeamAdapter):
                     rationale_switch=rationale_switch,
                     turn_off_rationale=turn_off_rationale,
                     injected=False,
+                    manager_foundation_model=manager_foundation_model,
                 )
         else:
             log_progressive_feedback_orchestration_decision(
@@ -1217,6 +1284,13 @@ class OpenAITeamAdapter(TeamAdapter):
                 rationale_switch=rationale_switch,
                 turn_off_rationale=turn_off_rationale,
                 injected=False,
+                manager_foundation_model=manager_foundation_model,
+            )
+
+        if should_inject_prompt_injection_filter(prompt_injection_filter_enabled):
+            rendered_content = inject_prompt_injection_filter(
+                rendered_content,
+                get_prompt_injection_filter_block(),
             )
 
         return rendered_content

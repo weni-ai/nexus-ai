@@ -11,6 +11,7 @@ import openai
 import pendulum
 import sentry_sdk
 from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
+from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from langfuse import get_client
 from openai import AsyncOpenAI
@@ -18,6 +19,7 @@ from openai.types.shared import Reasoning
 
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
+from inline_agents.backends.openai.agent_entities import resolve_agent_model
 from inline_agents.backends.openai.components_response_merge import merge_streaming_components_response
 from inline_agents.backends.openai.components_tools import get_component_tools as get_component_tools_module
 from inline_agents.backends.openai.entities import FinalResponse
@@ -61,6 +63,9 @@ from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
+
+AWS_MANTLE_API_BASE = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+OPENAI_COMPATIBLE_MODEL_VENDORS = frozenset({"openai", "aws_mantle"})
 
 
 def _is_final_out_debug(msg: str) -> None:
@@ -307,22 +312,9 @@ class OpenAIBackend(InlineAgentsBackend):
         manager_pipeline_version = kwargs.pop("manager_pipeline_version", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
         injected_context = kwargs.pop("injected_context", None)
+        prompt_injection_filter_enabled = bool(kwargs.pop("prompt_injection_filter_enabled", False))
+        kwargs.pop("guardrails_config", None)
         rationale_switch = rationale_switch_cached
-        progressive_feedback_enabled = rationale_switch and supports_progressive_feedback(
-            contact_urn,
-            channel_type,
-            preview=preview,
-            preview_websocket=preview_websocket,
-        )
-        if rationale_switch and not progressive_feedback_enabled:
-            logger.info(
-                "[ProgressiveFeedback] Disabled for non-webchat channel project_uuid=%s "
-                "channel_from_urn=%s contact_urn=%s channel_type=%s",
-                project_uuid,
-                channel_hint_from_contact_urn(contact_urn),
-                contact_urn,
-                channel_type or None,
-            )
         if manager_pipeline_version is not None:
             logger.debug(
                 "[OpenAIBackend] manager_pipeline_version=%s project_uuid=%s",
@@ -347,6 +339,28 @@ class OpenAIBackend(InlineAgentsBackend):
             supervisor_agent_uuid=supervisor_agent_uuid,
             project_uuid=project_uuid,
         )
+        from inline_agents.backends.openai.prompts_progressive_feedback import is_gpt_foundation_model
+
+        progressive_feedback_enabled = (
+            rationale_switch
+            and is_gpt_foundation_model(supervisor.get("foundation_model") or "")
+            and supports_progressive_feedback(
+                contact_urn,
+                channel_type,
+                preview=preview,
+                preview_websocket=preview_websocket,
+            )
+        )
+        if rationale_switch and not progressive_feedback_enabled:
+            logger.info(
+                "[ProgressiveFeedback] Disabled project_uuid=%s channel_from_urn=%s "
+                "contact_urn=%s channel_type=%s manager_foundation_model=%r",
+                project_uuid,
+                channel_hint_from_contact_urn(contact_urn),
+                contact_urn,
+                channel_type or None,
+                supervisor.get("foundation_model"),
+            )
         if supervisor_agent_uuid:
             formatter_agent_configurations = (
                 supervisor.get("formatter_agent_configurations") or formatter_agent_configurations
@@ -429,6 +443,9 @@ class OpenAIBackend(InlineAgentsBackend):
         instructions_cached = kwargs.pop("instructions", None)
         agent_data_cached = kwargs.pop("agent_data", None)
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
+        vtex_account_cached = kwargs.pop("vtex_account", None)
+        vtex_host_store_cached = kwargs.pop("vtex_host_store", None)
+        storefront_type_cached = kwargs.pop("storefront_type", None)
 
         if supervisor_agent_uuid:
             external_team = self.team_adapter.to_external_enhanced(
@@ -463,6 +480,10 @@ class OpenAIBackend(InlineAgentsBackend):
                 skip_conversation_sqs=skip_conversation_sqs,
                 manager_pipeline_version=manager_pipeline_version,
                 channel_type=channel_type,
+                prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -500,6 +521,10 @@ class OpenAIBackend(InlineAgentsBackend):
                 use_components=use_components_cached,
                 skip_conversation_sqs=skip_conversation_sqs,
                 channel_type=channel_type,
+                prompt_injection_filter_enabled=prompt_injection_filter_enabled,
+                vtex_account=vtex_account_cached,
+                vtex_host_store=vtex_host_store_cached,
+                storefront_type=storefront_type_cached,
             )
 
         client = self._get_client()
@@ -798,19 +823,18 @@ class OpenAIBackend(InlineAgentsBackend):
 
         supervisor_hooks.save_components_trace = True
 
-        from inline_agents.backends.openai.agent_entities import AgentModel
-
-        resolved_model = AgentModel().get_model(
-            formatter_agent_model,
-            user_model_credentials or {},
-            model_vendor=model_vendor,
-        )
+        credentials = user_model_credentials or {}
+        resolved_model = resolve_agent_model(formatter_agent_model, credentials, model_vendor=model_vendor)
         model_settings_kwargs: Dict[str, Any] = {
             "tool_choice": "required",
             "parallel_tool_calls": False,
         }
         if not isinstance(resolved_model, str):
             model_settings_kwargs["include_usage"] = True
+            if isinstance(resolved_model, LitellmModel):
+                api_version = credentials.get("api_version")
+                if api_version:
+                    model_settings_kwargs["extra_args"] = {"api_version": api_version}
 
         if formatter_reasoning_effort:
             model_settings_kwargs["reasoning"] = Reasoning(
@@ -818,7 +842,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 summary=formatter_reasoning_summary,
             )
 
-        formatter_agent = Agent(
+        return Agent(
             name="Response Formatter Agent",
             instructions=formatter_instructions_resolved,
             model=resolved_model,
@@ -827,8 +851,6 @@ class OpenAIBackend(InlineAgentsBackend):
             tool_use_behavior=custom_tool_handler,
             model_settings=ModelSettings(**model_settings_kwargs),
         )
-
-        return formatter_agent
 
     async def _run_formatter_agent(
         self, formatter_agent, final_response, session, context, formatter_agent_configurations
@@ -1220,11 +1242,14 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.capture_exception(exception)
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
-        if user_model_credentials and model_vendor.lower() == "openai":
+        normalized_vendor = model_vendor.lower()
+        if user_model_credentials and normalized_vendor in OPENAI_COMPATIBLE_MODEL_VENDORS:
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
+            if normalized_vendor == "aws_mantle" and not base_url:
+                base_url = AWS_MANTLE_API_BASE
 
-            if user_model_credentials.get("api_base", ""):
+            if base_url:
                 client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,

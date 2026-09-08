@@ -233,6 +233,67 @@ class TestFormatterAgentNoneHandling(TestCase):
         self.assertEqual(formatter_agent_configurations.get("formatter_instructions"), "Custom instructions")
 
 
+class TestFormatterAgentLitellmCredentials(TestCase):
+    def setUp(self):
+        from agents import AgentHooks
+
+        self.backend = OpenAIBackend()
+        self.hooks = AgentHooks()
+
+    @patch("inline_agents.backends.openai.backend.get_component_tools_module", return_value=[])
+    def test_create_formatter_agent_litellm_with_credentials(self, _mock_tools):
+        from agents.extensions.models.litellm_model import LitellmModel
+
+        credentials = {
+            "api_key": "azure-key",
+            "api_base": "https://example.openai.azure.com/",
+            "api_version": "2024-08-01-preview",
+        }
+        agent = self.backend._create_formatter_agent(
+            self.hooks,
+            formatter_agent_configurations={"formatter_foundation_model": "litellm/azure/gpt-4.1"},
+            user_model_credentials=credentials,
+        )
+
+        self.assertIsInstance(agent.model, LitellmModel)
+        self.assertEqual(agent.model.model, "azure/gpt-4.1")
+        self.assertEqual(agent.model.api_key, "azure-key")
+        self.assertEqual(agent.model.base_url, "https://example.openai.azure.com/")
+        self.assertEqual(agent.model_settings.extra_args, {"api_version": "2024-08-01-preview"})
+        self.assertTrue(agent.model_settings.include_usage)
+        self.assertTrue(self.hooks.save_components_trace)
+
+    @patch("inline_agents.backends.openai.backend.get_component_tools_module", return_value=[])
+    def test_create_formatter_agent_litellm_without_api_version(self, _mock_tools):
+        from agents.extensions.models.litellm_model import LitellmModel
+
+        credentials = {
+            "api_key": "azure-key",
+            "api_base": "https://example.openai.azure.com/",
+            "api_version": None,
+        }
+        agent = self.backend._create_formatter_agent(
+            self.hooks,
+            formatter_agent_configurations={"formatter_foundation_model": "litellm/azure/gpt-4.1"},
+            user_model_credentials=credentials,
+        )
+
+        self.assertIsInstance(agent.model, LitellmModel)
+        self.assertEqual(agent.model.api_key, "azure-key")
+        self.assertIsNone(agent.model_settings.extra_args)
+
+    @patch("inline_agents.backends.openai.backend.get_component_tools_module", return_value=[])
+    def test_create_formatter_agent_non_litellm_keeps_string(self, _mock_tools):
+        agent = self.backend._create_formatter_agent(
+            self.hooks,
+            formatter_agent_configurations={"formatter_foundation_model": "gpt-4o"},
+            user_model_credentials={"api_key": "sk-test"},
+        )
+
+        self.assertEqual(agent.model, "gpt-4o")
+        self.assertFalse(agent.model_settings.include_usage)
+
+
 class TestFormatterAgentSkip(TestCase):
     def test_formatter_not_needed_when_use_components_false(self):
         use_components = False
@@ -412,7 +473,18 @@ class ManagerAgentRepositoryTestCase(TestCase):
         self.assertEqual(result["model_settings"]["model_has_reasoning"], self.manager_agent.model_has_reasoning)
         self.assertEqual(result["model_settings"]["reasoning_effort"], self.manager_agent.reasoning_effort)
         self.assertEqual(result["model_settings"]["reasoning_summary"], self.manager_agent.reasoning_summary)
+        self.assertIsNone(result["model_settings"]["reasoning_mode"])
         self.assertEqual(result["model_settings"]["parallel_tool_calls"], self.manager_agent.parallel_tool_calls)
+
+    def test_get_supervisor_includes_reasoning_mode_when_set(self):
+        self.manager_agent.reasoning_mode = "minimal"
+        self.manager_agent.save()
+
+        result = self.repository.get_supervisor(
+            supervisor_agent_uuid=str(self.manager_agent.uuid),
+        )
+
+        self.assertEqual(result["model_settings"]["reasoning_mode"], "minimal")
 
     def test_get_supervisor_max_tokens_structure(self):
         """Test get_supervisor includes correct max_tokens structure."""

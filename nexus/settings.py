@@ -76,7 +76,7 @@ INSTALLED_APPS = [
     "nexus.agents",
     "nexus.inline_agents",
     "nexus.reports",
-    "nexus.analytics",
+    "nexus.analytics.apps.AnalyticsConfig",
     "weni.feature_flags",
     # Observer registration - MUST be last to ensure all apps are loaded first
     "nexus.observers",
@@ -147,6 +147,8 @@ if TESTING and USE_SQLITE_FOR_TESTS:
         }
     }
 
+TEST_RUNNER = "nexus.db.test_runner.NexusTestRunner"
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -201,6 +203,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 week_duration = 60 * 60 * 24 * 7
 REDIS_MESSAGE_CACHE_KEY_DURATION = env.int("REDIS_MESSAGE_CACHE_KEY_DURATION", default=week_duration)
+REDIS_PENDING_TASK_KEY_DURATION = env.int("REDIS_PENDING_TASK_KEY_DURATION", default=3600)
 REDIS_URL = env.str("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 REDIS_READ_URL = env.str("REDIS_READ_URL", default=None)
 USE_REDIS_CACHE_CONTEXT = env.bool("USE_REDIS_CACHE_CONTEXT", default=False)
@@ -305,6 +308,16 @@ if USE_EDA:
     EDA_BROKER_USER = env("EDA_BROKER_USER", default="guest")
     EDA_BROKER_PASSWORD = env("EDA_BROKER_PASSWORD", default="guest")
     EDA_WAIT_TIME_RETRY = env("EDA_WAIT_TIME_RETRY", default=5)
+
+    AMQ_BROKER_HOST = env.str("AMQ_BROKER_HOST", default="localhost")
+    AMQ_BROKER_USER = env.str("AMQ_BROKER_USER", default="guest")
+    AMQ_BROKER_PASSWORD = env.str("AMQ_BROKER_PASSWORD", default="guest")
+    AMQ_VIRTUAL_HOST = env.str("AMQ_VIRTUAL_HOST", default="/")
+    AMQ_BROKER_PORT = env.int("AMQ_BROKER_PORT", default=5671)
+    AMQ_BROKER_SSL_SERVER_HOSTNAME = env.str("AMQ_BROKER_SSL_SERVER_HOSTNAME", default=None)
+    AMQ_BROKER_HEARTBEAT = env.int("AMQ_BROKER_HEARTBEAT", default=300)
+
+    PROJECT_AMQ_QUEUE_NAME = env.str("PROJECT_AMQ_QUEUE_NAME", default="nexus-ai.projects.queue")
 
 RABBITMQ_DEFAULT_USER = env.str("RABBITMQ_DEFAULT_USER")
 RABBITMQ_DEFAULT_PASS = env.str("RABBITMQ_DEFAULT_PASS")
@@ -488,6 +501,17 @@ HC_ZEROSHOT_URL = env.str("HC_ZEROSHOT_URL", "")
 HC_GOLFINHO_URL = env.str("HC_GOLFINHO_URL", "")
 HC_WENI_TOKEN = env.str("HC_WENI_TOKEN", "")
 PROMETHEUS_AUTH_TOKEN = env.str("PROMETHEUS_AUTH_TOKEN", "")
+INLINE_AGENT_LATENCY_API_TOKEN = env.str("INLINE_AGENT_LATENCY_API_TOKEN", "")
+
+# Inline agent latency persistence (Plan B)
+INLINE_AGENT_LATENCY_ENABLED = env.bool("INLINE_AGENT_LATENCY_ENABLED", True)
+INLINE_AGENT_LATENCY_TARGET_MS_LOW = env.int("INLINE_AGENT_LATENCY_TARGET_MS_LOW", 15000)
+INLINE_AGENT_LATENCY_TARGET_MS_HIGH = env.int("INLINE_AGENT_LATENCY_TARGET_MS_HIGH", 20000)
+INLINE_AGENT_LATENCY_OUTLIER_MS = env.int("INLINE_AGENT_LATENCY_OUTLIER_MS", 30000)
+INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS = env.int("INLINE_AGENT_LATENCY_BROKER_OUTLIER_MS", 2000)
+INLINE_AGENT_LATENCY_SAMPLE_RATE = env.float("INLINE_AGENT_LATENCY_SAMPLE_RATE", 0.001)
+INLINE_AGENT_LATENCY_ELEVATED_MS = env.int("INLINE_AGENT_LATENCY_ELEVATED_MS", 15000)
+INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE = env.float("INLINE_AGENT_LATENCY_ELEVATED_SAMPLE_RATE", 0.01)
 
 
 # Extra models
@@ -608,6 +632,7 @@ SUPERVISOR_SERVICE_AVAILABLE_PROJECTS = env.list("SUPERVISOR_SERVICE_AVAILABLE_P
 
 REPORT_RECIPIENT_EMAILS = env.list("REPORT_RECIPIENT_EMAILS", [])
 VTEX_SUPPORT_EMAIL = env.str("VTEX_SUPPORT_EMAIL", default="")
+VTEX_SUPPORT_FROM_EMAIL = env.str("VTEX_SUPPORT_FROM_EMAIL", default="nexus@weni.ai")
 OFFICIAL_SMART_AGENT_EDITORS = env.list("OFFICIAL_SMART_AGENT_EDITORS", default=[])
 
 envvar_EMAIL_HOST = env.str("EMAIL_HOST")
@@ -762,22 +787,17 @@ GUARDRAILS_DEFAULT_BLOCKING_MESSAGES = env.json(
     },
 )
 
-# Baseline policies applied to every pool Guardrail (Models guidance). Not project-configurable.
-GUARDRAILS_BEDROCK_CONTENT_FILTERS = [
-    {"type": "SEXUAL", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "VIOLENCE", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "HATE", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "MISCONDUCT", "inputStrength": "HIGH", "outputStrength": "HIGH"},
-    {"type": "PROMPT_ATTACK", "inputStrength": "HIGH", "outputStrength": "NONE"},
-    {"type": "INSULTS", "inputStrength": "MEDIUM", "outputStrength": "MEDIUM"},
-]
+GUARDRAILS_BEDROCK_CONTENT_FILTERS = []
 
-GUARDRAILS_BEDROCK_PII_ENTITIES = [
-    {"type": "EMAIL", "action": "BLOCK"},
-    {"type": "PHONE", "action": "BLOCK"},
-    {"type": "CREDIT_DEBIT_CARD_NUMBER", "action": "BLOCK"},
-    {"type": "ADDRESS", "action": "ANONYMIZE"},
-]
+GUARDRAILS_BEDROCK_PII_ENTITIES = []
+
+GUARDRAILS_BEDROCK_TOPIC_TIER = env.str("GUARDRAILS_BEDROCK_TOPIC_TIER", default="STANDARD")
+GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER = env.str(
+    "GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER",
+    default="",
+)
+
+GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT = env.str("GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT", default="")
 
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")

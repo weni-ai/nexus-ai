@@ -74,6 +74,9 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "human_support_prompt": proj.human_support_prompt,
                     "manager_pipeline_version": manager_pipeline_version_from_project(proj),
                     "supervisor_agent_uuid": proj.manager_agent.uuid if proj.manager_agent else None,
+                    "vtex_account": proj.vtex_account,
+                    "vtex_host_store": proj.vtex_host_store,
+                    "storefront_type": proj.storefront_type,
                 }
 
             def _content_base_to_dict(cb):

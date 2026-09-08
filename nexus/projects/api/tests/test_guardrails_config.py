@@ -54,6 +54,7 @@ class ProjectGuardrailsConfigAPITestCase(TestCase):
         self.assertEqual(len(response.data["categories"]), len(ProjectGuardrailsConfigUseCase.catalog_slugs()))
         self.assertTrue(all(category["blocked"] for category in response.data["categories"]))
         self.assertTrue(all(set(category.keys()) == {"slug", "blocked"} for category in response.data["categories"]))
+        self.assertNotIn("prompt_injection_filter_enabled", response.data)
         self.assertTrue(ProjectGuardrailsConfig.objects.filter(project=self.project).exists())
 
     def test_get_keeps_backfilled_unblocked_config(self):

@@ -115,7 +115,7 @@ def send_improvement_support_ticket(
     email = EmailMessage(
         subject=subject,
         body=body,
-        from_email=settings.DEFAULT_FROM_EMAIL,
+        from_email=settings.VTEX_SUPPORT_FROM_EMAIL,
         to=[support_email],
         reply_to=[user_email],
         connection=connection,

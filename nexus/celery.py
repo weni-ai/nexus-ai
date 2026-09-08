@@ -34,7 +34,10 @@ app.conf.task_routes = {
 
 app.conf.task_annotations = {"router.tasks.invoke.start_inline_agents": {"rate_limit": rate_limit}}
 
-app.conf.imports = ("nexus.usecases.intelligences.lambda_usecase",)
+app.conf.imports = (
+    "nexus.usecases.intelligences.lambda_usecase",
+    "nexus.event_domain.recent_activity.tasks",
+)
 
 
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
@@ -97,3 +100,7 @@ def setup_logfire_and_langfuse(sender, **kwargs):
                 logger.error("Langfuse authentication failed. Check credentials and host.")
         except Exception:
             logger.exception("Failed to connect to Langfuse, worker will continue without it.")
+
+
+# Phase 0: Celery lifecycle timestamps for start_inline_agents latency metrics.
+import nexus.celery_latency_signals  # noqa: F401, E402

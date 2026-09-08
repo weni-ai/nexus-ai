@@ -221,7 +221,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 
     def get_instructions(self, obj):
         instructions = []
-        for instruction in obj.instructions.all():
+        for instruction in obj.instructions.all().order_by("id"):
             instructions.append(
                 {
                     "id": instruction.id,

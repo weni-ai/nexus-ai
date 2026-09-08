@@ -61,7 +61,7 @@ from nexus.usecases.intelligences.exceptions import (
 from router.entities import Message as UserMessage
 from router.entities import message_factory
 from router.services.manager_pipeline_version import is_legacy_manager_uuid, manager_pipeline_version_from_project
-from router.tasks.invoke import start_inline_agents
+from router.tasks.inline_agent_enqueue import enqueue_start_inline_agents
 from router.tasks.tasks import start_route
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
@@ -227,25 +227,17 @@ class MessagePreviewView(APIView):
             if project.inline_agent_switch:
                 logger.info("Starting Inline Agent")
                 task_kwargs = {
-                    "message": message.dict(),
                     "preview": True,
                     "user_email": request.user.email,
                     "language": language,
                 }
                 if supervisor_agent_uuid:
                     try:
-                        # validating if supervisor_agent_uuid is a ID (identifier of deprecated manager)
-                        # # or UUID (identifier of new manager)
-                        # this code adds temporary support for deprecated manager agent that
-                        # will be removed in the next release
                         int(supervisor_agent_uuid)
                     except ValueError:
                         task_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
 
-                start_inline_agents.apply_async(
-                    kwargs=task_kwargs,
-                    queue="celery",
-                )
+                enqueue_start_inline_agents(message=message.dict(), queue="celery", **task_kwargs)
                 return Response(data={"type": "preview", "message": "Processing started", "fonts": []})
             else:
                 task = start_route.delay(message=message.__dict__, preview=True)
