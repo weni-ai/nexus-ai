@@ -31,11 +31,6 @@ class ProjectTestCase(TestCase):
         self.assertIsNone(project.template_type)
         self.assertEqual(project.indexer_database, Project.BEDROCK)
 
-    def test_indexer_database_default_is_bedrock(self):
-        project = Project.objects.create(name="Default Indexer", org=self.org, created_by=self.user)
-        self.assertEqual(project.indexer_database, Project.BEDROCK)
-        self.assertEqual(Project._meta.get_field("indexer_database").get_default(), Project.BEDROCK)
-
     def test_set_project_prompt_creation_configurations(self):
         project_usecase = ProjectsUseCase()
         project_usecase.set_project_prompt_creation_configurations(
