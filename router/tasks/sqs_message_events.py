@@ -24,6 +24,13 @@ EVENT_TYPE_MESSAGE_RECEIVED = "message.received"
 EVENT_TYPE_MESSAGE_SENT = "message.sent"
 
 
+def conversation_starter_metadata(metadata: Optional[dict]) -> dict:
+    """Return the whitelisted conversation metadata sent to the conversations service."""
+    return {
+        "from_conversation_starter": (metadata or {}).get("from_conversation_starter") is True,
+    }
+
+
 def parse_tool_result(raw: Any) -> Any:
     """Parse tool result (str/dict/list) into a Python value."""
     if isinstance(raw, (dict, list)):
@@ -164,6 +171,7 @@ class MessagePayload:
     source: str
     created_at: str
     contact_name: str
+    metadata: Optional[dict] = None
 
 
 @dataclass
@@ -197,6 +205,8 @@ class SQSMessageEvent:
                 "created_at": self.data.message.created_at,
                 "contact_name": self.data.message.contact_name,
             }
+            if self.data.message.metadata is not None:
+                data["message"]["metadata"] = self.data.message.metadata
 
         if self.data.key:
             data["key"] = self.data.key
@@ -231,6 +241,7 @@ def build_message_received_event(
     created_at: str,
     message_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
+    metadata: Optional[dict] = None,
 ) -> SQSMessageEvent:
     """Build message.received. Pass message_id/correlation_id for SQS and consumer deduplication."""
     cid = correlation_id or str(uuid.uuid4())
@@ -248,6 +259,7 @@ def build_message_received_event(
                 source="incoming",
                 created_at=created_at,
                 contact_name=contact_name,
+                metadata=metadata,
             ),
         ),
     )
