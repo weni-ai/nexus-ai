@@ -566,7 +566,7 @@ class ConversationDetailProxyView(APIView):
             "topic": topic,
             "channel_uuid": str(response_data.get("channel_uuid")) if response_data.get("channel_uuid") else None,
             "contact_urn": response_data.get("contact_urn"),
-            "has_conversation_starter": response_data.get("has_conversation_starter") is True,
+            "has_conversation_starter": response_data.get("has_conversation_starter"),
             "messages": messages,
         }
 

@@ -35,7 +35,7 @@ class ConversationSerializer(serializers.Serializer):
     end_date = serializers.DateTimeField(required=False, allow_null=True)
     channel_uuid = serializers.UUIDField(required=False, allow_null=True)
     has_chats_room = serializers.BooleanField(required=False, allow_null=True)
-    has_conversation_starter = serializers.BooleanField(required=False)
+    has_conversation_starter = serializers.BooleanField(required=False, allow_null=True)
     csat = serializers.CharField(required=False, allow_null=True)
     nps = serializers.IntegerField(required=False, allow_null=True)
     created_at = serializers.DateTimeField(required=False, allow_null=True)
