@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
 
 from nexus.agents.models import Team
+from nexus.projects.models import Project
 from nexus.task_managers.models import ContentBaseLinkTaskManager, TaskManager
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -187,7 +188,9 @@ class TestContentBaseTextViewset(TestCase):
         )
         self.org = OrgFactory()
         self.user = self.org.created_by
-        self.project = self.org.projects.create(name="Project", created_by=self.org.created_by)
+        self.project = self.org.projects.create(
+            name="Project", created_by=self.org.created_by, indexer_database=Project.SENTENX
+        )
         self.project.authorizations.create(user=self.user, role=3)
         self.integrated_intelligence = create_base_brain_structure(self.project)
         self.intelligence = self.integrated_intelligence.intelligence
