@@ -105,7 +105,7 @@ class TestChangesInProjectBedrockTestCase(TestCase):
         self.project = self.org.projects.create(
             name="Bedrock 1", indexer_database=Project.BEDROCK, created_by=self.org.created_by
         )
-        self.project2 = ProjectFactory()
+        self.project2 = ProjectFactory(indexer_database=Project.SENTENX)
         self.project_uuid = str(self.project.uuid)
         self.project_uuid2 = str(self.project2.uuid)
 
