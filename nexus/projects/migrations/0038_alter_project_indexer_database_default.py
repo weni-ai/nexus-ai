@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("projects", "0036_project_vtex_account_vtex_host_store_storefront_type"),
+        ("projects", "0037_project_is_live_desk_copilot"),
     ]
 
     operations = [
