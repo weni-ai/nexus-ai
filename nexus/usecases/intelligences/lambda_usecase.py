@@ -916,6 +916,7 @@ def create_lambda_conversation(
         channel_uuid = payload.get("channel_uuid")
         external_id = payload.get("external_id")
 
+        lambda_usecase = LambdaUseCase()
         error_type, error_message = lambda_usecase._determine_error_and_log(e, project_uuid, contact_urn, channel_uuid)
 
         # Send unclassified to billing in case of error
