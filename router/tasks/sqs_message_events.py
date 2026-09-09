@@ -24,11 +24,11 @@ EVENT_TYPE_MESSAGE_RECEIVED = "message.received"
 EVENT_TYPE_MESSAGE_SENT = "message.sent"
 
 
-def conversation_starter_metadata(metadata: Optional[dict]) -> dict:
-    """Return the whitelisted conversation metadata sent to the conversations service."""
-    return {
-        "from_conversation_starter": (metadata or {}).get("from_conversation_starter") is True,
-    }
+def conversation_starter_metadata(metadata: Optional[dict]) -> Optional[dict]:
+    """Return starter metadata only when the inbound flag is JSON true; otherwise omit it."""
+    if (metadata or {}).get("from_conversation_starter") is True:
+        return {"from_conversation_starter": True}
+    return None
 
 
 def parse_tool_result(raw: Any) -> Any:

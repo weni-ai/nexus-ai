@@ -19,11 +19,8 @@ class TestConversationStarterMetadata(unittest.TestCase):
             conversation_starter_metadata({"from_conversation_starter": True}),
             {"from_conversation_starter": True},
         )
-        self.assertEqual(
-            conversation_starter_metadata({"from_conversation_starter": "true"}),
-            {"from_conversation_starter": False},
-        )
-        self.assertEqual(conversation_starter_metadata(None), {"from_conversation_starter": False})
+        self.assertIsNone(conversation_starter_metadata({"from_conversation_starter": "true"}))
+        self.assertIsNone(conversation_starter_metadata(None))
 
 
 class TestSqsResponseTextFromAgentOutput(unittest.TestCase):
@@ -172,6 +169,19 @@ class TestBuildMessageReceivedEvent(unittest.TestCase):
             event.to_dict()["data"]["message"]["metadata"],
             {"from_conversation_starter": True},
         )
+
+    def test_omits_metadata_when_not_from_conversation_starter(self):
+        event = build_message_received_event(
+            project_uuid="proj-1",
+            contact_urn="urn:1",
+            channel_uuid="chan-1",
+            contact_name="Alice",
+            message_text="Hello world",
+            created_at="2026-07-28T12:00:00Z",
+            metadata=conversation_starter_metadata(None),
+        )
+
+        self.assertNotIn("metadata", event.to_dict()["data"]["message"])
 
 
 class TestSendToolMessagesSentToConversationSqs(unittest.TestCase):
