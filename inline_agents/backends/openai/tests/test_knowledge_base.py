@@ -42,6 +42,35 @@ class FormatKnowledgeBaseRetrievalResultsTests(SimpleTestCase):
         )
         self.assertNotIn("x-amz-bedrock-kb-source-uri", references[0])
 
+    def test_includes_source_url_from_site_metadata(self):
+        retrieval_results = [
+            {
+                "content": {"text": "Gift cards are in-store only."},
+                "metadata": {
+                    "filename": "d608f54d-0c53-4d81-adc2-5db8db03b084-202f1bbb-6ab2-4c56-835e-6b7d4b65106c.md",
+                    "fileUuid": "link-uuid-1",
+                    "sourceUrl": "https://example.com/gift-card",
+                    "x-amz-bedrock-kb-source-uri": "s3://internal-bucket/file.md",
+                },
+            }
+        ]
+
+        text, references = format_knowledge_base_retrieval_results(retrieval_results)
+
+        self.assertEqual(text, "Gift cards are in-store only.")
+        self.assertEqual(
+            references,
+            [
+                {
+                    "text": "Gift cards are in-store only.",
+                    "filename": "d608f54d-0c53-4d81-adc2-5db8db03b084-202f1bbb-6ab2-4c56-835e-6b7d4b65106c.md",
+                    "fileUuid": "link-uuid-1",
+                    "sourceUrl": "https://example.com/gift-card",
+                }
+            ],
+        )
+        self.assertNotIn("x-amz-bedrock-kb-source-uri", references[0])
+
     def test_omits_missing_metadata_without_failing(self):
         retrieval_results = [
             {"content": {"text": "Chunk without filename"}},
