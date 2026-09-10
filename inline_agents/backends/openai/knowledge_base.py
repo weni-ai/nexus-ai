@@ -36,7 +36,7 @@ def format_knowledge_base_retrieval_results(
             reference["filename"] = filename
         if file_uuid:
             reference["fileUuid"] = file_uuid
-        if source_url:
+        if source_url is not None:
             reference["sourceUrl"] = source_url
         references.append(reference)
 

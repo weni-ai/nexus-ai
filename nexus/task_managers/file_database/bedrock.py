@@ -190,7 +190,7 @@ class BedrockFileDatabase(FileDataBase):
             "filename": filename,
             "fileUuid": file_uuid,
         }
-        if source_url:
+        if source_url is not None:
             metadata_attributes["sourceUrl"] = source_url
 
         data = {"metadataAttributes": metadata_attributes}
