@@ -178,14 +178,22 @@ class BedrockFileDatabase(FileDataBase):
 
         return _update_agent_response
 
-    def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
+    def add_metadata_json_file(
+        self, filename: str, content_base_uuid: str, file_uuid: str, source_url: str | None = None
+    ):
         from io import BytesIO
 
         logger.info("[Bedrock] Adding metadata.json file")
 
-        data = {
-            "metadataAttributes": {"contentBaseUuid": content_base_uuid, "filename": filename, "fileUuid": file_uuid}
+        metadata_attributes = {
+            "contentBaseUuid": content_base_uuid,
+            "filename": filename,
+            "fileUuid": file_uuid,
         }
+        if source_url is not None:
+            metadata_attributes["sourceUrl"] = source_url
+
+        data = {"metadataAttributes": metadata_attributes}
 
         filename_metadata_json = f"{filename}.metadata.json"
         key = self._build_s3_key(content_base_uuid, filename_metadata_json)
@@ -228,7 +236,9 @@ class BedrockFileDatabase(FileDataBase):
             logger.error("Error on upload: %s", e, exc_info=True)
             s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
 
-    def add_file(self, file, content_base_uuid: str, file_uuid: str) -> FileResponseDTO:
+    def add_file(
+        self, file, content_base_uuid: str, file_uuid: str, source_url: str | None = None
+    ) -> FileResponseDTO:
         try:
             logger.info("[Bedrock] Adding file to bucket")
 
@@ -241,7 +251,7 @@ class BedrockFileDatabase(FileDataBase):
                 file_name=file_name,
             )
             self.s3_client.upload_fileobj(file, self.bucket_name, file_path)
-            self.add_metadata_json_file(file_name, content_base_uuid, file_uuid)
+            self.add_metadata_json_file(file_name, content_base_uuid, file_uuid, source_url=source_url)
 
         except Exception as exception:
             response.status = 1
@@ -903,6 +913,7 @@ class BedrockFileDatabase(FileDataBase):
                     "full_page": chunk.get("content").get("text"),
                     "filename": chunk.get("metadata").get("filename"),
                     "file_uuid": chunk.get("metadata").get("fileUuid"),
+                    "source_url": chunk.get("metadata").get("sourceUrl"),
                 }
             )
 

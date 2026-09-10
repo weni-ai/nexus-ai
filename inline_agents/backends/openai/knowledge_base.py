@@ -31,10 +31,13 @@ def format_knowledge_base_retrieval_results(
         reference: dict[str, Any] = {"text": text}
         filename = metadata.get("filename")
         file_uuid = metadata.get("fileUuid")
+        source_url = metadata.get("sourceUrl")
         if filename:
             reference["filename"] = filename
         if file_uuid:
             reference["fileUuid"] = file_uuid
+        if source_url is not None:
+            reference["sourceUrl"] = source_url
         references.append(reference)
 
     return "\n".join(texts), references
