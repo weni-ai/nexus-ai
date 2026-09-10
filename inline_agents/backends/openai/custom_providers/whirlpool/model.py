@@ -17,6 +17,7 @@ from agents.tool import Tool
 from agents.tracing import generation_span
 from agents.usage import Usage
 from openai import omit
+from openai.types.chat import ChatCompletionMessage
 from openai.types.responses.response_prompt_param import ResponsePromptParam
 
 from inline_agents.backends.openai.custom_providers.base import (
@@ -32,6 +33,7 @@ from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     assert_tools_accepted,
     build_generate_content_payload,
     gemini_response_to_chat_message,
+    guard_block_message,
     openai_tool_names,
 )
 
@@ -186,6 +188,15 @@ class WhirlpoolModel(Model):
         try:
             response = await self._client.generate_content(payload)
         except WhirlpoolAPIError as exc:
+            guard_message = guard_block_message(exc.status_code, exc.body)
+            if guard_message is not None:
+                logger.warning(
+                    "Whirlpool guard blocked the request model=%s status=%s; relaying guard message",
+                    self.model,
+                    exc.status_code,
+                )
+                return ChatCompletionMessage(role="assistant", content=guard_message), Usage(requests=1)
+
             body_str = str(exc.body) if exc.body is not None else ""
             if requested and any(
                 token in body_str.lower() for token in ("tool", "function", "unsupported")

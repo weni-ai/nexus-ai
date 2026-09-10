@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 from agents.model_settings import ModelSettings
 from agents.models.interface import ModelTracing
 from agents.tool import FunctionTool
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from inline_agents.backends.openai.custom_providers.whirlpool.client import (
     WhirlpoolAPIError,
@@ -14,6 +14,9 @@ from inline_agents.backends.openai.custom_providers.whirlpool.model import Whirl
 from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     WhirlpoolTranslationError,
 )
+
+
+GUARD_MESSAGE = "I'm sorry, I can't help with that request."
 
 
 class WhirlpoolModelTests(SimpleTestCase):
@@ -82,6 +85,62 @@ class WhirlpoolModelTests(SimpleTestCase):
                         input="hello",
                         model_settings=ModelSettings(tool_choice="required"),
                         tools=[tool],
+                        output_schema=None,
+                        handoffs=[],
+                        tracing=ModelTracing.DISABLED,
+                    )
+
+        asyncio.run(_run())
+
+    @override_settings(WHIRLPOOL_GUARD_BLOCK_MESSAGES=[GUARD_MESSAGE])
+    def test_guard_block_400_becomes_assistant_reply(self):
+        async def _run():
+            with patch(
+                "inline_agents.backends.openai.custom_providers.whirlpool.client.WhirlpoolClient.generate_content",
+                new_callable=AsyncMock,
+            ) as mock_generate:
+                mock_generate.side_effect = WhirlpoolAPIError(
+                    "blocked",
+                    status_code=400,
+                    body={"error_code": "400-001", "error_description": GUARD_MESSAGE},
+                )
+                response = await self.model.get_response(
+                    system_instructions=None,
+                    input="hello",
+                    model_settings=ModelSettings(),
+                    tools=[],
+                    output_schema=None,
+                    handoffs=[],
+                    tracing=ModelTracing.DISABLED,
+                )
+                texts = [
+                    content.text
+                    for item in response.output
+                    for content in getattr(item, "content", []) or []
+                    if getattr(content, "text", None)
+                ]
+                self.assertIn(GUARD_MESSAGE, texts)
+
+        asyncio.run(_run())
+
+    @override_settings(WHIRLPOOL_GUARD_BLOCK_MESSAGES=[GUARD_MESSAGE])
+    def test_other_400_still_raises(self):
+        async def _run():
+            with patch(
+                "inline_agents.backends.openai.custom_providers.whirlpool.client.WhirlpoolClient.generate_content",
+                new_callable=AsyncMock,
+            ) as mock_generate:
+                mock_generate.side_effect = WhirlpoolAPIError(
+                    "bad request",
+                    status_code=400,
+                    body={"error_code": "400-001", "error_description": "Bad Request"},
+                )
+                with self.assertRaises(WhirlpoolAPIError):
+                    await self.model.get_response(
+                        system_instructions=None,
+                        input="hello",
+                        model_settings=ModelSettings(),
+                        tools=[],
                         output_schema=None,
                         handoffs=[],
                         tracing=ModelTracing.DISABLED,
