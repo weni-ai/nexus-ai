@@ -142,6 +142,12 @@ def apply_simulation_foundation_model_override(
     """Replace foundation model with Redis-cached value on default preview-channel traffic."""
     if not on_default_simulation_channel or not project_uuid:
         return foundation_model
+    from nexus.inline_agents.backends.openai.models import is_api_hidden_model_vendor
+    from nexus.projects.models import Project
+
+    project = Project.objects.filter(uuid=project_uuid).select_related("manager_agent").first()
+    if project and is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)):
+        return foundation_model
     cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
     effective = cached if cached else foundation_model
     urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
