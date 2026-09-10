@@ -1,12 +1,18 @@
+from unittest.mock import patch
+
+import requests
 from cryptography.fernet import Fernet
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from nexus.agents.encryption import encrypt_value
 from nexus.inline_agents.backends.openai.models import (
     ManagerAgent,
     ModelProvider,
     ProjectModelProvider,
+    project_has_api_visible_own_engine,
 )
 from nexus.inline_agents.backends.openai.repository import ManagerAgentRepository
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
@@ -276,6 +282,66 @@ class TestManagerAgentRepositoryProjectCredentials(TestCase):
         self.assertEqual(creds["api_key"], "proj-api-key-123")
         self.assertEqual(creds["api_base"], "https://proj.example.com")
 
+    def test_passes_through_whirlpool_oauth_credentials(self):
+        whirlpool_manager = _create_manager(model_vendor="whirlpool", name="Whirlpool Manager")
+        whirlpool_provider = ModelProvider.objects.create(
+            model_vendor="whirlpool",
+            label="Whirlpool",
+            credentials=[
+                {"id": "client_id", "label": "Client ID", "type": "PASSWORD"},
+                {"id": "client_secret", "label": "Client secret", "type": "PASSWORD"},
+                {"id": "token_url", "label": "OAuth token URL", "type": "TEXT"},
+                {"id": "generate_content_url", "label": "generateContent URL", "type": "TEXT"},
+            ],
+            manager_agent=whirlpool_manager,
+        )
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=whirlpool_provider,
+            credentials=[
+                {
+                    "id": "client_id",
+                    "type": "PASSWORD",
+                    "label": "Client ID",
+                    "value": encrypt_value("whirlpool-client-id"),
+                },
+                {
+                    "id": "client_secret",
+                    "type": "PASSWORD",
+                    "label": "Client secret",
+                    "value": encrypt_value("whirlpool-client-secret"),
+                },
+                {
+                    "id": "token_url",
+                    "type": "TEXT",
+                    "label": "OAuth token URL",
+                    "value": "https://api-dev.whirlpool.com/oauth2/v1/token",
+                },
+                {
+                    "id": "generate_content_url",
+                    "type": "TEXT",
+                    "label": "generateContent URL",
+                    "value": "https://api-dev.whirlpool.com/d2c/cxplatform/v1/ai/generateContent",
+                },
+            ],
+            is_active=True,
+        )
+
+        repo = ManagerAgentRepository()
+        result = repo.get_supervisor(
+            supervisor_agent_uuid=str(whirlpool_manager.uuid),
+            project_uuid=str(self.project.uuid),
+        )
+
+        creds = result["user_model_credentials"]
+        self.assertEqual(creds["client_id"], "whirlpool-client-id")
+        self.assertEqual(creds["client_secret"], "whirlpool-client-secret")
+        self.assertEqual(creds["token_url"], "https://api-dev.whirlpool.com/oauth2/v1/token")
+        self.assertEqual(
+            creds["generate_content_url"],
+            "https://api-dev.whirlpool.com/d2c/cxplatform/v1/ai/generateContent",
+        )
+
     def test_falls_back_to_manager_credentials_when_inactive(self):
         self.manager.api_key = "manager-key"
         self.manager.api_base = "https://manager.example.com"
@@ -403,15 +469,7 @@ class TestEngineSourceLogic(TestCase):
         self.provider = _create_provider("openai", manager_agent=self.manager)
 
     def test_standard_when_no_credentials(self):
-        has_own = (
-            ProjectModelProvider.objects.filter(
-                project=self.project,
-                is_active=True,
-            )
-            .exclude(credentials=[])
-            .exists()
-        )
-        self.assertFalse(has_own)
+        self.assertFalse(project_has_api_visible_own_engine(self.project))
 
     def test_own_when_active_credentials(self):
         ProjectModelProvider.objects.create(
@@ -422,15 +480,7 @@ class TestEngineSourceLogic(TestCase):
             ],
             is_active=True,
         )
-        has_own = (
-            ProjectModelProvider.objects.filter(
-                project=self.project,
-                is_active=True,
-            )
-            .exclude(credentials=[])
-            .exists()
-        )
-        self.assertTrue(has_own)
+        self.assertTrue(project_has_api_visible_own_engine(self.project))
 
     def test_standard_when_inactive_credentials(self):
         ProjectModelProvider.objects.create(
@@ -441,15 +491,23 @@ class TestEngineSourceLogic(TestCase):
             ],
             is_active=False,
         )
-        has_own = (
-            ProjectModelProvider.objects.filter(
-                project=self.project,
-                is_active=True,
-            )
-            .exclude(credentials=[])
-            .exists()
+        self.assertFalse(project_has_api_visible_own_engine(self.project))
+
+    def test_standard_when_only_hidden_whirlpool_credentials(self):
+        whirlpool_manager = _create_manager(model_vendor="whirlpool", name="Whirlpool Manager", public=False)
+        whirlpool_provider = ModelProvider.objects.create(
+            model_vendor="whirlpool",
+            label="Whirlpool",
+            credentials=[{"id": "client_id", "label": "Client ID", "type": "PASSWORD"}],
+            manager_agent=whirlpool_manager,
         )
-        self.assertFalse(has_own)
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=whirlpool_provider,
+            credentials=[{"id": "client_id", "type": "PASSWORD", "label": "Client ID", "value": "cid"}],
+            is_active=True,
+        )
+        self.assertFalse(project_has_api_visible_own_engine(self.project))
 
 
 @override_settings(CREDENTIAL_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY)
@@ -593,3 +651,161 @@ class TestVertexAICredentialInjection(TestCase):
 
         extra_args = result["model_settings"]["manager_extra_args"]
         self.assertNotIn("vertex_credentials", extra_args)
+
+
+@override_settings(CREDENTIAL_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY)
+class TestWhirlpoolHiddenFromModelProvidersApi(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory(name="HiddenProviderProject")
+        self.user = self.project.created_by
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.openai_manager = _create_manager(model_vendor="openai", name="OpenAI Manager", public=True)
+        self.openai_provider = _create_provider("openai", manager_agent=self.openai_manager)
+        self.whirlpool_manager = _create_manager(
+            model_vendor="whirlpool",
+            name="Whirlpool Manager",
+            default=False,
+            public=False,
+        )
+        self.whirlpool_provider = ModelProvider.objects.create(
+            model_vendor="whirlpool",
+            label="Whirlpool",
+            credentials=[
+                {"id": "client_id", "label": "Client ID", "type": "PASSWORD"},
+                {"id": "client_secret", "label": "Client secret", "type": "PASSWORD"},
+            ],
+            manager_agent=self.whirlpool_manager,
+        )
+        self.url = reverse("project-model-providers", kwargs={"project_uuid": str(self.project.uuid)})
+        self.engine_url = reverse("project-engine-source", kwargs={"project_uuid": str(self.project.uuid)})
+        self.managers_url = reverse("project-agent-managers", kwargs={"project_uuid": str(self.project.uuid)})
+
+    def _auth_ok(self, mock_check_auth):
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+    @patch("nexus.projects.permissions._check_project_authorization")
+    def test_get_omits_whirlpool_from_providers_and_current(self, mock_check_auth):
+        self._auth_ok(mock_check_auth)
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=self.whirlpool_provider,
+            credentials=[{"id": "client_id", "type": "PASSWORD", "label": "Client ID", "value": "cid"}],
+            is_active=True,
+        )
+        self.project.manager_agent = self.whirlpool_manager
+        self.project.save()
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIsNone(body["current"])
+        vendors = [item.get("label") for item in body["providers"]]
+        self.assertNotIn("Whirlpool", vendors)
+        self.assertIn("OpenAI", vendors)
+
+    @patch("nexus.inline_agents.api.views.notify_async")
+    @patch("nexus.projects.permissions._check_project_authorization")
+    def test_post_cannot_activate_whirlpool(self, mock_check_auth, mock_notify_async):
+        self._auth_ok(mock_check_auth)
+        response = self.client.post(
+            self.url,
+            {
+                "provider_uuid": str(self.whirlpool_provider.uuid),
+                "credentials": [{"id": "client_id", "value": "cid"}],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(
+            ProjectModelProvider.objects.filter(project=self.project, provider=self.whirlpool_provider).exists()
+        )
+        mock_notify_async.assert_not_called()
+
+    @patch("nexus.inline_agents.api.views.notify_async")
+    @patch("nexus.projects.permissions._check_project_authorization")
+    def test_post_cannot_replace_active_whirlpool(self, mock_check_auth, mock_notify_async):
+        self._auth_ok(mock_check_auth)
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=self.whirlpool_provider,
+            credentials=[{"id": "client_id", "type": "PASSWORD", "label": "Client ID", "value": "cid"}],
+            is_active=True,
+        )
+        self.project.manager_agent = self.whirlpool_manager
+        self.project.save()
+
+        response = self.client.post(
+            self.url,
+            {
+                "provider_uuid": str(self.openai_provider.uuid),
+                "credentials": [{"id": "api_key", "value": "sk-test"}],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        pmp = ProjectModelProvider.objects.get(project=self.project, provider=self.whirlpool_provider)
+        self.assertTrue(pmp.is_active)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.manager_agent_id, self.whirlpool_manager.id)
+        mock_notify_async.assert_not_called()
+
+    @patch("nexus.inline_agents.api.views.notify_async")
+    @patch("nexus.projects.permissions._check_project_authorization")
+    def test_delete_cannot_deactivate_whirlpool(self, mock_check_auth, mock_notify_async):
+        self._auth_ok(mock_check_auth)
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=self.whirlpool_provider,
+            credentials=[{"id": "client_id", "type": "PASSWORD", "label": "Client ID", "value": "cid"}],
+            is_active=True,
+        )
+        self.project.manager_agent = self.whirlpool_manager
+        self.project.save()
+
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, 403)
+        pmp = ProjectModelProvider.objects.get(project=self.project, provider=self.whirlpool_provider)
+        self.assertTrue(pmp.is_active)
+        mock_notify_async.assert_not_called()
+
+    @patch("nexus.projects.permissions._check_project_authorization")
+    def test_engine_source_stays_standard_for_whirlpool(self, mock_check_auth):
+        self._auth_ok(mock_check_auth)
+        ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=self.whirlpool_provider,
+            credentials=[{"id": "client_id", "type": "PASSWORD", "label": "Client ID", "value": "cid"}],
+            is_active=True,
+        )
+        response = self.client.get(self.engine_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["engine_source"], "STANDARD")
+
+    @patch("nexus.inline_agents.api.views.notify_async")
+    @patch("nexus.projects.permissions._check_project_authorization")
+    def test_managers_api_cannot_assign_or_leave_whirlpool(self, mock_check_auth, mock_notify_async):
+        self._auth_ok(mock_check_auth)
+        response = self.client.post(
+            self.managers_url, {"currentManager": str(self.whirlpool_manager.uuid)}, format="json"
+        )
+        self.assertEqual(response.status_code, 404)
+        self.project.refresh_from_db()
+        self.assertIsNone(self.project.manager_agent)
+
+        self.project.manager_agent = self.whirlpool_manager
+        self.project.save()
+        response = self.client.post(
+            self.managers_url, {"currentManager": str(self.openai_manager.uuid)}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.manager_agent_id, self.whirlpool_manager.id)
+
+        response = self.client.get(self.managers_url)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotEqual(body.get("currentManager"), str(self.whirlpool_manager.uuid))
+        if "new" in body:
+            self.assertNotEqual(body["new"].get("id"), str(self.whirlpool_manager.uuid))
+        mock_notify_async.assert_not_called()

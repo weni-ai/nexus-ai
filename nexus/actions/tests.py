@@ -6,6 +6,7 @@ from unittest import skip
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from nexus.actions.api.views import (
@@ -22,6 +23,7 @@ from nexus.intelligences.models import (
     ContentBaseLink,
     ContentBaseText,
 )
+from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.logs.models import Message as ContactMessage
 from nexus.logs.models import MessageLog
 from nexus.projects.models import Project
@@ -444,3 +446,55 @@ class SimulationActionsApiTestCase(TestCase):
         force_authenticate(request, user=self.user)
         response = SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
         self.assertEqual(response.status_code, 400)
+
+    def test_simulation_manager_model_post_forbidden_when_whirlpool_active(self):
+        whirlpool = ManagerAgent.objects.create(
+            name="Whirlpool Manager",
+            base_prompt="You are a manager.",
+            foundation_model="custom/whirlpool/generateContent",
+            model_vendor="whirlpool",
+            public=False,
+            default=False,
+            release_date=timezone.now(),
+            collaborators_foundation_model="custom/whirlpool/generateContent",
+            formatter_agent_foundation_model="custom/whirlpool/generateContent",
+        )
+        self.project.manager_agent = whirlpool
+        self.project.save()
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-model/",
+            data={
+                "manager_foundation_model": "00acf398-183e-41f9-baac-0b04a3fef22c",
+                "contact_urn": "ext:preview@weni.ai",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 403)
+
+    @patch("nexus.actions.api.views.get_redis_read_client")
+    def test_simulation_manager_model_get_ignores_cache_when_whirlpool_active(self, mock_redis):
+        whirlpool = ManagerAgent.objects.create(
+            name="Whirlpool Manager",
+            base_prompt="You are a manager.",
+            foundation_model="custom/whirlpool/generateContent",
+            model_vendor="whirlpool",
+            public=False,
+            default=False,
+            release_date=timezone.now(),
+            collaborators_foundation_model="custom/whirlpool/generateContent",
+            formatter_agent_foundation_model="custom/whirlpool/generateContent",
+        )
+        self.project.manager_agent = whirlpool
+        self.project.save()
+        request = self.factory.get(
+            f"/{self.project.uuid}/simulation/manager-model/",
+            {"contact_urn": "ext:preview@weni.ai"},
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["manager_foundation_model"], "custom/whirlpool/generateContent")
+        self.assertEqual(response.data["source"], "project_default")
+        mock_redis.assert_not_called()
