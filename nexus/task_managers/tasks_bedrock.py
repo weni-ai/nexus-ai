@@ -553,7 +553,9 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
     file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
 
     with open(f"/tmp/{filename}", "rb") as file:
-        file_database_response = file_database.add_file(file, content_base_uuid, content_base_link_uuid)
+        file_database_response = file_database.add_file(
+            file, content_base_uuid, content_base_link_uuid, source_url=link
+        )
 
     if file_database_response.status != 0:
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
