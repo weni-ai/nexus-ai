@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from agents.handoffs import Handoff
 from agents.models.chatcmpl_converter import Converter
 from agents.tool import FunctionTool, Tool
+from django.conf import settings
 from openai.types.chat import ChatCompletionMessage, ChatCompletionMessageParam
 from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
@@ -243,6 +244,50 @@ def assert_tools_accepted(
             f"by inline agents. Requested tools={requested}. Error={message!r}. "
             f"Request had tools={bool(request_payload.get('tools'))}"
         )
+
+
+def guard_block_message(status_code: int | None, body: Any) -> Optional[str]:
+    """Return the guard text when a 400 body carries a configured block message.
+
+    Whirlpool used to answer guard blocks with HTTP 200 plus the message; it now answers 400.
+    Only an exact match against ``settings.WHIRLPOOL_GUARD_BLOCK_MESSAGES`` is relayed as a
+    model reply, so real Bad Request failures keep surfacing as errors.
+    """
+    if status_code != 400:
+        return None
+
+    configured = [
+        message.strip()
+        for message in (getattr(settings, "WHIRLPOOL_GUARD_BLOCK_MESSAGES", None) or [])
+        if isinstance(message, str) and message.strip()
+    ]
+    if not configured:
+        return None
+
+    for candidate in _error_message_candidates(body):
+        for message in configured:
+            if candidate.strip() == message:
+                return message
+    return None
+
+
+def _error_message_candidates(body: Any) -> List[str]:
+    if isinstance(body, str):
+        return [body]
+    if not isinstance(body, dict):
+        return []
+
+    candidates: List[str] = []
+    for key in ("error_description", "message", "description", "detail", "error"):
+        value = body.get(key)
+        if isinstance(value, str):
+            candidates.append(value)
+        elif isinstance(value, dict):
+            for nested_key in ("message", "description", "error_description"):
+                nested = value.get(nested_key)
+                if isinstance(nested, str):
+                    candidates.append(nested)
+    return candidates
 
 
 def _tool_choice_to_gemini(tool_choice: Any) -> Optional[Dict[str, Any]]:

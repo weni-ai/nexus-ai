@@ -1,7 +1,7 @@
 import json
 
 from agents.tool import FunctionTool
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     WhirlpoolTranslationError,
@@ -10,6 +10,7 @@ from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     build_generate_content_payload,
     chat_messages_to_gemini_contents,
     gemini_response_to_chat_message,
+    guard_block_message,
 )
 
 
@@ -136,3 +137,30 @@ class WhirlpoolTranslateTests(SimpleTestCase):
             request_payload={"tools": [{}]},
             response={"candidates": []},
         )
+
+
+GUARD_MESSAGE = "I'm sorry, I can't help with that request."
+
+
+@override_settings(WHIRLPOOL_GUARD_BLOCK_MESSAGES=[GUARD_MESSAGE])
+class WhirlpoolGuardBlockTests(SimpleTestCase):
+    def test_matches_configured_message_in_error_description(self):
+        body = {"error_code": "400-001", "error_description": GUARD_MESSAGE}
+        self.assertEqual(guard_block_message(400, body), GUARD_MESSAGE)
+
+    def test_matches_nested_error_message(self):
+        body = {"error": {"message": GUARD_MESSAGE}}
+        self.assertEqual(guard_block_message(400, body), GUARD_MESSAGE)
+
+    def test_ignores_other_400_bodies(self):
+        body = {"error_code": "400-001", "error_description": "Bad Request"}
+        self.assertIsNone(guard_block_message(400, body))
+
+    def test_ignores_other_status_codes(self):
+        body = {"error_description": GUARD_MESSAGE}
+        self.assertIsNone(guard_block_message(500, body))
+
+    @override_settings(WHIRLPOOL_GUARD_BLOCK_MESSAGES=[])
+    def test_no_configured_messages_means_no_match(self):
+        body = {"error_description": GUARD_MESSAGE}
+        self.assertIsNone(guard_block_message(400, body))
