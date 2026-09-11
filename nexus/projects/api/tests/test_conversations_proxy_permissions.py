@@ -31,6 +31,7 @@ CONVERSATIONS_LIST_RESPONSE = {
             "channel_uuid": str(uuid4()),
             "topic": "General",
             "is_amazing": False,
+            "has_conversation_starter": True,
         }
     ],
 }
@@ -42,6 +43,7 @@ CONVERSATION_DETAIL_RESPONSE = {
     "status": "open",
     "contact_urn": "tel:+5511999999999",
     "channel_uuid": str(uuid4()),
+    "has_conversation_starter": True,
     "classification": {"topic": "general"},
     "messages": {"next": None, "previous": None, "results": []},
 }
@@ -109,6 +111,7 @@ class TestConversationsProxyViewPermissions(_PermissionTestBase):
         response = self.view(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["results"][0]["has_conversation_starter"])
         mock_get.assert_called_once()
 
     def test_internal_permission_grants_access_when_project_denied(self, mock_get):
@@ -153,6 +156,7 @@ class TestConversationDetailProxyViewPermissions(_PermissionTestBase):
         response = self.view(request, project_uuid=self.project_uuid, conversation_uuid=self.conversation_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["has_conversation_starter"])
         mock_get.assert_called_once()
 
     def test_internal_permission_grants_access_when_project_denied(self, mock_get):
