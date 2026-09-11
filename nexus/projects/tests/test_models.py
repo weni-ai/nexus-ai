@@ -29,6 +29,7 @@ class ProjectTestCase(TestCase):
         self.assertFalse(project.brain_on)
         self.assertFalse(project.is_template)
         self.assertIsNone(project.template_type)
+        self.assertEqual(project.indexer_database, Project.BEDROCK)
 
     def test_set_project_prompt_creation_configurations(self):
         project_usecase = ProjectsUseCase()
