@@ -75,3 +75,26 @@ class PreprocessApplyGuardrailTestCase(SimpleTestCase):
         self.assertIn("https://example.com/a.png", composed_text)
         self.assertIn("product items", composed_text)
         self.assertIn("blocked politics payload", composed_text)
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ProjectGuardrailsConfigUseCase.apply_input_guardrail")
+    def test_empty_text_with_ig_comment_overwrite_reaches_agent(self, mock_apply):
+        mock_apply.return_value = None
+        message = {
+            "text": "",
+            "attachments": [],
+            "metadata": {
+                "overwrite_message": {
+                    "ig_comment": {
+                        "id": "30065221",
+                        "media": {"id": "180615383", "caption": "Summer sale post"},
+                    }
+                }
+            },
+        }
+
+        processed, _, _ = _preprocess_message_input(message, "OpenAIBackend", guardrails_config=None)
+
+        self.assertIn("30065221", processed["text"])
+        self.assertIn("ig_comment", processed["text"])
+        mock_apply.assert_called_once()
+        self.assertIn("30065221", mock_apply.call_args.args[0])
