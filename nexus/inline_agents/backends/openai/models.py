@@ -2,6 +2,14 @@ from uuid import uuid4
 
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.db.models.functions import Lower
+
+# Vendors attached only via Django admin / shell — never listed or mutated by API.
+API_HIDDEN_MODEL_VENDORS = frozenset({"whirlpool"})
+
+
+def is_api_hidden_model_vendor(model_vendor: str | None) -> bool:
+    return (model_vendor or "").lower() in API_HIDDEN_MODEL_VENDORS
 
 
 class OpenAISupervisor(models.Model):
@@ -142,6 +150,14 @@ class ModelProvider(models.Model):
         return self.label
 
 
+def api_visible_model_providers():
+    return (
+        ModelProvider.objects.select_related("manager_agent")
+        .annotate(_vendor=Lower("model_vendor"))
+        .exclude(_vendor__in=API_HIDDEN_MODEL_VENDORS)
+    )
+
+
 class ProjectModelProvider(models.Model):
     uuid = models.UUIDField(default=uuid4, editable=False)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="model_providers")
@@ -211,3 +227,13 @@ class ProjectModelProvider(models.Model):
                 }
             )
         return result
+
+
+def project_has_api_visible_own_engine(project) -> bool:
+    return (
+        ProjectModelProvider.objects.filter(project=project, is_active=True)
+        .exclude(credentials=[])
+        .annotate(_vendor=Lower("provider__model_vendor"))
+        .exclude(_vendor__in=API_HIDDEN_MODEL_VENDORS)
+        .exists()
+    )

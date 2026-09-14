@@ -47,7 +47,11 @@ from router.tasks.latency_context import (
     TurnLatencyRecorder,
 )
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
+from router.tasks.sqs_message_events import (
+    build_message_received_event,
+    conversation_starter_metadata,
+    sqs_response_text_from_agent_output,
+)
 from router.utils.redis_clients import get_redis_read_client
 
 from .actions_client import get_action_clients, get_guardrail_block_broadcast_client
@@ -137,6 +141,12 @@ def apply_simulation_foundation_model_override(
 ) -> Optional[str]:
     """Replace foundation model with Redis-cached value on default preview-channel traffic."""
     if not on_default_simulation_channel or not project_uuid:
+        return foundation_model
+    from nexus.inline_agents.backends.openai.models import is_api_hidden_model_vendor
+    from nexus.projects.models import Project
+
+    project = Project.objects.filter(uuid=project_uuid).select_related("manager_agent").first()
+    if project and is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)):
         return foundation_model
     cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
     effective = cached if cached else foundation_model
@@ -630,6 +640,7 @@ def start_inline_agents(  # noqa: C901
                         created_at=incoming_created_at,
                         message_id=incoming_message_id,
                         correlation_id=str(turn_id),
+                        metadata=conversation_starter_metadata(message_obj.metadata),
                     )
                     try:
                         get_conversation_events_producer().send_event(received_event.to_dict())

@@ -21,6 +21,7 @@ from opentelemetry import trace
 
 from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backends.openai.entities import FinalResponse, HooksState
+from inline_agents.backends.openai.knowledge_base import consume_knowledge_base_retrieved_references
 from router.tasks.sqs_message_events import (
     extract_messages_sent_texts,
     parse_tool_result,
@@ -971,12 +972,15 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
     async def _on_tool_end_knowledge_base(self, context, agent, tool, result, context_data, project_uuid, parameters):
         """Handle on_tool_end for knowledge base tool."""
+        retrieved_references = consume_knowledge_base_retrieved_references(self.hooks_state)
         trace_data = {
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
             "trace": {
                 "orchestrationTrace": {
-                    "observation": {"knowledgeBaseLookupOutput": {"retrievedReferences": result}},
+                    "observation": {
+                        "knowledgeBaseLookupOutput": {"retrievedReferences": retrieved_references}
+                    },
                 }
             },
         }
