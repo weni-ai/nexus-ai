@@ -48,6 +48,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
             from nexus.inline_agents.team.repository import ORMTeamRepository
             from nexus.usecases.guardrails.project_guardrails_config import ProjectGuardrailsConfigUseCase
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
+            from nexus.usecases.projects.live_desk_copilot import vtex_runtime_fields
             from router.services.cache_service import CacheService
             from router.services.manager_pipeline_version import manager_pipeline_version_from_project
 
@@ -61,6 +62,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
 
             # Helper functions to convert to dict
             def _project_to_dict(proj):
+                vtex_fields = vtex_runtime_fields(proj)
                 return {
                     "uuid": str(proj.uuid),
                     "agents_backend": proj.agents_backend,
@@ -74,9 +76,9 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "human_support_prompt": proj.human_support_prompt,
                     "manager_pipeline_version": manager_pipeline_version_from_project(proj),
                     "supervisor_agent_uuid": proj.manager_agent.uuid if proj.manager_agent else None,
-                    "vtex_account": proj.vtex_account,
-                    "vtex_host_store": proj.vtex_host_store,
-                    "storefront_type": proj.storefront_type,
+                    "vtex_account": vtex_fields["vtex_account"],
+                    "vtex_host_store": vtex_fields["vtex_host_store"],
+                    "storefront_type": vtex_fields["storefront_type"],
                 }
 
             def _content_base_to_dict(cb):

@@ -16,6 +16,9 @@ class PreGenerationService:
         self._inline_agent_config_obj = None
 
     def _project_to_dict(self, project) -> Dict:
+        from nexus.usecases.projects.live_desk_copilot import vtex_runtime_fields
+
+        vtex_fields = vtex_runtime_fields(project)
         return {
             "uuid": str(project.uuid),
             "agents_backend": project.agents_backend,
@@ -35,9 +38,9 @@ class PreGenerationService:
             "formatter_tools_descriptions": project.formatter_tools_descriptions,
             "manager_pipeline_version": manager_pipeline_version_from_project(project),
             "supervisor_agent_uuid": project.manager_agent.uuid if project.manager_agent else None,
-            "vtex_account": project.vtex_account,
-            "vtex_host_store": project.vtex_host_store,
-            "storefront_type": project.storefront_type,
+            "vtex_account": vtex_fields["vtex_account"],
+            "vtex_host_store": vtex_fields["vtex_host_store"],
+            "storefront_type": vtex_fields["storefront_type"],
         }
 
     def _content_base_to_dict(self, content_base) -> Dict:
