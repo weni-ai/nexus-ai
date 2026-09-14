@@ -89,6 +89,14 @@ class Project(BaseModel, SoftDeleteModel):
         default=False,
         help_text="When True, this project is a Live Desk sales assistant copilot and cannot change manager version",
     )
+    parent_project = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="live_desk_copilots",
+        help_text="Main Live Desk project that owns the VTEX account for this copilot",
+    )
 
     # Synced from Connect EDA (projects.topic / update-projects.topic)
     vtex_account = models.CharField(max_length=255, null=True, blank=True, unique=True)
