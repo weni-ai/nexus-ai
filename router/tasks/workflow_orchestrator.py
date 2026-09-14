@@ -48,7 +48,11 @@ from router.tasks.invoke import (
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
+from router.tasks.sqs_message_events import (
+    build_message_received_event,
+    conversation_starter_metadata,
+    sqs_response_text_from_agent_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +320,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
             created_at=ctx.incoming_created_at,
             message_id=incoming_message_id,
             correlation_id=str(ctx.turn_id),
+            metadata=conversation_starter_metadata(message_obj.metadata),
         )
         try:
             get_conversation_events_producer().send_event(received_event.to_dict())

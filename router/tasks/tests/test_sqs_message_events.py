@@ -5,11 +5,22 @@ from unittest.mock import MagicMock, patch
 from router.tasks.sqs_message_events import (
     EVENT_TYPE_MESSAGE_SENT,
     build_message_received_event,
+    conversation_starter_metadata,
     extract_messages_sent_texts,
     send_tool_messages_sent_to_conversation_sqs,
     sqs_response_text_from_agent_output,
     tool_result_has_final_output,
 )
+
+
+class TestConversationStarterMetadata(unittest.TestCase):
+    def test_only_boolean_true_marks_conversation_starter(self):
+        self.assertEqual(
+            conversation_starter_metadata({"from_conversation_starter": True}),
+            {"from_conversation_starter": True},
+        )
+        self.assertIsNone(conversation_starter_metadata({"from_conversation_starter": "true"}))
+        self.assertIsNone(conversation_starter_metadata(None))
 
 
 class TestSqsResponseTextFromAgentOutput(unittest.TestCase):
@@ -142,6 +153,35 @@ class TestBuildMessageReceivedEvent(unittest.TestCase):
             created_at="2026-07-28T12:00:00Z",
         )
         self.assertEqual(event.data.message.text, "Hello world")
+
+    def test_includes_conversation_starter_metadata(self):
+        event = build_message_received_event(
+            project_uuid="proj-1",
+            contact_urn="urn:1",
+            channel_uuid="chan-1",
+            contact_name="Alice",
+            message_text="Hello world",
+            created_at="2026-07-28T12:00:00Z",
+            metadata={"from_conversation_starter": True},
+        )
+
+        self.assertEqual(
+            event.to_dict()["data"]["message"]["metadata"],
+            {"from_conversation_starter": True},
+        )
+
+    def test_omits_metadata_when_not_from_conversation_starter(self):
+        event = build_message_received_event(
+            project_uuid="proj-1",
+            contact_urn="urn:1",
+            channel_uuid="chan-1",
+            contact_name="Alice",
+            message_text="Hello world",
+            created_at="2026-07-28T12:00:00Z",
+            metadata=conversation_starter_metadata(None),
+        )
+
+        self.assertNotIn("metadata", event.to_dict()["data"]["message"])
 
 
 class TestSendToolMessagesSentToConversationSqs(unittest.TestCase):

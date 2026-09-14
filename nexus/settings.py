@@ -799,6 +799,10 @@ GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER = env.str(
 
 GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT = env.str("GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT", default="")
 
+# Exact texts the Whirlpool model guard returns on HTTP 400. Only these are relayed to the
+# contact as the model reply; any other 400 stays an error.
+WHIRLPOOL_GUARD_BLOCK_MESSAGES = env.json("WHIRLPOOL_GUARD_BLOCK_MESSAGES", [])
+
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")
 AWS_LAMBDA_MEMORY_SIZE = env.int("AWS_LAMBDA_MEMORY_SIZE", 512)
