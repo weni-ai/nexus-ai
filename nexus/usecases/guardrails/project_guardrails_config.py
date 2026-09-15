@@ -73,12 +73,8 @@ class ProjectGuardrailsConfigUseCase:
         return merged
 
     @classmethod
-    def new_projects_blocked_by_default(cls) -> bool:
-        return bool(getattr(settings, "GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT", True))
-
-    @classmethod
     def get_or_initialize(cls, project: Project, *, assign_pool: bool = True) -> ProjectGuardrailsConfig:
-        blocked = cls.new_projects_blocked_by_default()
+        blocked = settings.GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT
         config, created = ProjectGuardrailsConfig.objects.get_or_create(
             project=project,
             defaults={
