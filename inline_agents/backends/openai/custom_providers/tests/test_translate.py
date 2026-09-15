@@ -61,7 +61,6 @@ class WhirlpoolTranslateTests(SimpleTestCase):
                 {
                     "role": "tool",
                     "tool_call_id": "call_1",
-                    "name": "lookup_order",
                     "content": '{"status":"ok"}',
                 },
             ]
@@ -70,6 +69,46 @@ class WhirlpoolTranslateTests(SimpleTestCase):
         self.assertEqual(contents[1]["role"], "model")
         self.assertIn("functionCall", contents[1]["parts"][0])
         self.assertEqual(contents[2]["parts"][0]["functionResponse"]["name"], "lookup_order")
+        self.assertEqual(contents[2]["parts"][-1], {"text": "Continue using the tool result above."})
+
+    def test_plain_user_turn_remains_the_last_prompt_text(self):
+        _, contents = chat_messages_to_gemini_contents(
+            [{"role": "user", "content": "Where is my order?"}]
+        )
+        self.assertEqual(contents, [{"role": "user", "parts": [{"text": "Where is my order?"}]}])
+
+    def test_build_payload_keeps_tool_response_and_gateway_prompt(self):
+        payload = build_generate_content_payload(
+            messages=[
+                {"role": "user", "content": "Find products"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "searchproducts", "arguments": '{"query":"washer"}'},
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": '{"products":[{"id":"1"}]}',
+                },
+            ],
+            tools=[_dummy_tool("searchproducts")],
+        )
+
+        final_parts = payload["contents"][-1]["parts"]
+        self.assertEqual(final_parts[0]["functionResponse"]["name"], "searchproducts")
+        self.assertEqual(
+            final_parts[0]["functionResponse"]["response"],
+            {"products": [{"id": "1"}]},
+        )
+        self.assertEqual(final_parts[-1], {"text": "Continue using the tool result above."})
+        self.assertTrue(final_parts[-1]["text"].strip())
 
     def test_agents_tools_to_gemini_declarations(self):
         decls = agents_tools_to_gemini([_dummy_tool()])

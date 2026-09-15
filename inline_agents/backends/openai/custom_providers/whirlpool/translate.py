@@ -19,6 +19,8 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 
 logger = logging.getLogger(__name__)
 
+_TOOL_RESULT_CONTINUATION_TEXT = "Continue using the tool result above."
+
 
 class WhirlpoolTranslationError(Exception):
     """Raised when request/response translation fails or tools are rejected."""
@@ -137,6 +139,7 @@ def chat_messages_to_gemini_contents(
     """Convert OpenAI chat messages to Gemini ``systemInstruction`` + ``contents``."""
     system_parts: List[str] = []
     contents: List[Dict[str, Any]] = []
+    tool_names_by_call_id: Dict[str, str] = {}
 
     for message in messages:
         role = message.get("role")
@@ -157,6 +160,10 @@ def chat_messages_to_gemini_contents(
                 parts.append({"text": text})
             for tc in message.get("tool_calls") or []:
                 fn = tc.get("function") or {}
+                call_id = tc.get("id")
+                function_name = fn.get("name") or call_id or "unknown"
+                if call_id and fn.get("name"):
+                    tool_names_by_call_id[str(call_id)] = str(fn["name"])
                 args = fn.get("arguments") or "{}"
                 if isinstance(args, str):
                     try:
@@ -168,7 +175,7 @@ def chat_messages_to_gemini_contents(
                 parts.append(
                     {
                         "functionCall": {
-                            "name": fn.get("name") or tc.get("id") or "unknown",
+                            "name": function_name,
                             "args": args_obj,
                         }
                     }
@@ -178,7 +185,12 @@ def chat_messages_to_gemini_contents(
             continue
 
         if role == "tool":
-            name = message.get("name") or _tool_name_from_tool_call_id(message.get("tool_call_id"))
+            tool_call_id = message.get("tool_call_id")
+            name = (
+                message.get("name")
+                or tool_names_by_call_id.get(str(tool_call_id))
+                or _tool_name_from_tool_call_id(tool_call_id)
+            )
             response_payload = message.get("content")
             if isinstance(response_payload, str):
                 try:
@@ -206,6 +218,8 @@ def chat_messages_to_gemini_contents(
 
         logger.debug("Skipping unsupported chat message role=%s", role)
 
+    _ensure_gateway_prompt_after_tool_result(contents)
+
     system_instruction = None
     if system_parts:
         system_instruction = {"parts": [{"text": "\n\n".join(system_parts)}]}
@@ -214,6 +228,27 @@ def chat_messages_to_gemini_contents(
         contents = [{"role": "user", "parts": [{"text": ""}]}]
 
     return system_instruction, contents
+
+
+def _ensure_gateway_prompt_after_tool_result(contents: List[Dict[str, Any]]) -> None:
+    """Give Whirlpool's request preprocessor a non-empty final ``text`` part.
+
+    Gemini accepts a user turn ending in ``functionResponse``, but Whirlpool's
+    gateway extracts the prompt from ``contents[-1].parts[-1].text`` before
+    forwarding the request. Keep the protocol part and append a neutral
+    continuation instruction; the original user prompt was already evaluated
+    before the tool call.
+    """
+    if not contents:
+        return
+
+    parts = contents[-1].get("parts")
+    if not isinstance(parts, list) or not parts:
+        return
+
+    last_part = parts[-1]
+    if isinstance(last_part, dict) and "functionResponse" in last_part:
+        parts.append({"text": _TOOL_RESULT_CONTINUATION_TEXT})
 
 
 def build_generate_content_payload(
