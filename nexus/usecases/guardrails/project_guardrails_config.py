@@ -73,14 +73,19 @@ class ProjectGuardrailsConfigUseCase:
         return merged
 
     @classmethod
+    def new_projects_blocked_by_default(cls) -> bool:
+        return bool(getattr(settings, "GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT", True))
+
+    @classmethod
     def get_or_initialize(cls, project: Project, *, assign_pool: bool = True) -> ProjectGuardrailsConfig:
+        blocked = cls.new_projects_blocked_by_default()
         config, created = ProjectGuardrailsConfig.objects.get_or_create(
             project=project,
             defaults={
-                "category_states": cls.build_default_category_states(blocked=True),
+                "category_states": cls.build_default_category_states(blocked=blocked),
                 "blocking_message": None,
-                "initialized_as_new_project": True,
-                "prompt_injection_filter_enabled": True,
+                "initialized_as_new_project": blocked,
+                "prompt_injection_filter_enabled": blocked,
             },
         )
         if not created:

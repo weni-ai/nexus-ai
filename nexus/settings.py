@@ -799,6 +799,10 @@ GUARDRAILS_BEDROCK_GUARDRAIL_PROFILE_IDENTIFIER = env.str(
 
 GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT = env.str("GUARDRAILS_PROMPT_INJECTION_FILTER_TEXT", default="")
 
+# First persist of ProjectGuardrailsConfig only (lazy init). Does not rewrite
+# existing rows when the flag changes; catalog merge still uses stored initialized_as_new_project.
+GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT = env.bool("GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT", default=True)
+
 # Exact texts the Whirlpool model guard returns on HTTP 400. Only these are relayed to the
 # contact as the model reply; any other 400 stays an error.
 WHIRLPOOL_GUARD_BLOCK_MESSAGES = env.json("WHIRLPOOL_GUARD_BLOCK_MESSAGES", [])
