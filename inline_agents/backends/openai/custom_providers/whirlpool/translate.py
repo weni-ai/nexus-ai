@@ -24,6 +24,73 @@ class WhirlpoolTranslationError(Exception):
     """Raised when request/response translation fails or tools are rejected."""
 
 
+_GEMINI_SCHEMA_DROP_KEYS = frozenset(
+    {
+        "title",
+        "default",
+        "examples",
+        "example",
+        "$schema",
+        "$id",
+        "$defs",
+        "definitions",
+        "additionalProperties",
+    }
+)
+_SCHEMA_UNION_KEYS = ("anyOf", "oneOf")
+
+
+def sanitize_json_schema_for_gemini(schema: Any) -> Any:
+    """Rewrite OpenAI/Pydantic JSON Schema into Gemini ``functionDeclarations`` subset.
+
+    Vertex rejects sibling keys next to ``anyOf`` (Pydantic ``Optional[list]`` plus
+    OpenAI ``_clean_schema`` injecting ``type``). Optional ``T | null`` becomes
+    ``type`` + ``nullable``. Schema text is never logged.
+    """
+    if isinstance(schema, list):
+        return [sanitize_json_schema_for_gemini(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+
+    cleaned = {
+        key: sanitize_json_schema_for_gemini(value)
+        for key, value in schema.items()
+        if key not in _GEMINI_SCHEMA_DROP_KEYS
+    }
+    collapsed = _collapse_nullable_union(cleaned)
+    if collapsed is not cleaned:
+        return sanitize_json_schema_for_gemini(collapsed)
+
+    union_key = next((key for key in _SCHEMA_UNION_KEYS if key in cleaned), None)
+    if union_key:
+        # Gemini: no siblings next to anyOf/oneOf (including description/type).
+        return {union_key: cleaned[union_key]}
+
+    return cleaned
+
+
+def _collapse_nullable_union(schema: Dict[str, Any]) -> Dict[str, Any]:
+    for key in _SCHEMA_UNION_KEYS:
+        options = schema.get(key)
+        if not isinstance(options, list):
+            continue
+        non_null = [option for option in options if not _is_null_schema(option)]
+        has_null = any(_is_null_schema(option) for option in options)
+        if not has_null or len(non_null) != 1 or not isinstance(non_null[0], dict):
+            continue
+        collapsed = dict(non_null[0])
+        collapsed["nullable"] = True
+        description = schema.get("description")
+        if description and "description" not in collapsed:
+            collapsed["description"] = description
+        return collapsed
+    return schema
+
+
+def _is_null_schema(option: Any) -> bool:
+    return isinstance(option, dict) and option.get("type") == "null"
+
+
 def agents_tools_to_gemini(
     tools: Sequence[Tool] | None,
     handoffs: Sequence[Handoff] | None = None,
@@ -42,7 +109,9 @@ def agents_tools_to_gemini(
             {
                 "name": fn.get("name"),
                 "description": fn.get("description") or "",
-                "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
+                "parameters": sanitize_json_schema_for_gemini(
+                    fn.get("parameters") or {"type": "object", "properties": {}}
+                ),
             }
         )
 
@@ -53,7 +122,9 @@ def agents_tools_to_gemini(
             {
                 "name": fn.get("name"),
                 "description": fn.get("description") or "",
-                "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
+                "parameters": sanitize_json_schema_for_gemini(
+                    fn.get("parameters") or {"type": "object", "properties": {}}
+                ),
             }
         )
 
