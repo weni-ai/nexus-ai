@@ -154,11 +154,14 @@ class WhirlpoolModel(Model):
         span_generation,
         tracing: ModelTracing,
     ):
+        # The SDK only restores Gemini thought signatures when the model id
+        # contains "gemini". Whirlpool's custom id does not, so pass a converter
+        # hint without changing the HTTP model name.
         messages = Converter.items_to_messages(
             input,
             preserve_thinking_blocks=False,
             preserve_tool_output_all_content=True,
-            model=self.model,
+            model="gemini",
         )
         if system_instructions:
             messages.insert(0, {"role": "system", "content": system_instructions})
