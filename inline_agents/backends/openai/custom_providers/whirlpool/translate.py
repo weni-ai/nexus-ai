@@ -26,6 +26,16 @@ class WhirlpoolTranslationError(Exception):
     """Raised when request/response translation fails or tools are rejected."""
 
 
+class _ToolCallWithThoughtSignature(ChatCompletionMessageFunctionToolCall):
+    """Carry Gemini thought signatures through the Agents SDK converter.
+
+    ``Converter.message_to_output_items`` reads ``extra_content.google.thought_signature``.
+    The stock OpenAI tool-call type has no such field.
+    """
+
+    extra_content: dict[str, Any] | None = None
+
+
 _GEMINI_SCHEMA_DROP_KEYS = frozenset(
     {
         "title",
@@ -133,6 +143,33 @@ def agents_tools_to_gemini(
     return [d for d in declarations if d.get("name")]
 
 
+def _part_thought_signature(part: Dict[str, Any]) -> str | None:
+    signature = part.get("thoughtSignature") or part.get("thought_signature")
+    if isinstance(signature, str) and signature:
+        return signature
+    return None
+
+
+def _get_field(obj: Any, key: str) -> Any:
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+
+def _thought_signature_from_tool_call(tool_call: Any) -> str | None:
+    extra = _get_field(tool_call, "extra_content")
+    if isinstance(extra, dict):
+        google_fields = extra.get("google")
+        if isinstance(google_fields, dict):
+            signature = google_fields.get("thought_signature")
+            if isinstance(signature, str) and signature:
+                return signature
+    provider = _get_field(tool_call, "provider_specific_fields")
+    if isinstance(provider, dict):
+        signature = provider.get("thought_signature")
+        if isinstance(signature, str) and signature:
+            return signature
+    return None
+
+
 def chat_messages_to_gemini_contents(
     messages: Sequence[ChatCompletionMessageParam],
 ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -172,14 +209,16 @@ def chat_messages_to_gemini_contents(
                         args_obj = {"raw": args}
                 else:
                     args_obj = args
-                parts.append(
-                    {
-                        "functionCall": {
-                            "name": function_name,
-                            "args": args_obj,
-                        }
+                function_call_part: Dict[str, Any] = {
+                    "functionCall": {
+                        "name": function_name,
+                        "args": args_obj,
                     }
-                )
+                }
+                thought_signature = _thought_signature_from_tool_call(tc)
+                if thought_signature:
+                    function_call_part["thoughtSignature"] = thought_signature
+                parts.append(function_call_part)
             if parts:
                 contents.append({"role": "model", "parts": parts})
             continue
@@ -293,23 +332,41 @@ def gemini_response_to_chat_message(response: Dict[str, Any]) -> ChatCompletionM
     parts = content.get("parts") or []
     text_chunks: List[str] = []
     tool_calls: List[ChatCompletionMessageFunctionToolCall] = []
+    pending_thought_signature: str | None = None
+    first_function_call = True
 
     for part in parts:
         if not isinstance(part, dict):
             continue
-        if "text" in part and part["text"] is not None:
-            text_chunks.append(str(part["text"]))
+        part_signature = _part_thought_signature(part)
         function_call = part.get("functionCall") or part.get("function_call")
+        is_thought_part = bool(part.get("thought"))
+
+        if part_signature and not function_call:
+            pending_thought_signature = pending_thought_signature or part_signature
+
+        if "text" in part and part["text"] is not None and not is_thought_part:
+            text_chunks.append(str(part["text"]))
+
         if function_call:
             name = function_call.get("name") or "unknown"
             args = function_call.get("args") or function_call.get("arguments") or {}
             if not isinstance(args, str):
                 args = json.dumps(args, ensure_ascii=False)
+            thought_signature = part_signature
+            if not thought_signature and first_function_call:
+                thought_signature = pending_thought_signature
+            first_function_call = False
+            pending_thought_signature = None
+            extra_content = None
+            if thought_signature:
+                extra_content = {"google": {"thought_signature": thought_signature}}
             tool_calls.append(
-                ChatCompletionMessageFunctionToolCall(
+                _ToolCallWithThoughtSignature(
                     id=f"call_{uuid.uuid4().hex[:24]}",
                     type="function",
                     function=Function(name=name, arguments=args),
+                    extra_content=extra_content,
                 )
             )
 
