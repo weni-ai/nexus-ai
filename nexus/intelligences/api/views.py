@@ -742,6 +742,7 @@ class InlineContentBaseTextViewset(ModelViewSet):
             contentbasetext_uuid = kwargs.get("contentbasetext_uuid")
             use_case.delete_inline_contentbasetext(
                 contentbasetext_uuid=contentbasetext_uuid,
+                user=request.user,
             )
 
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -752,6 +753,7 @@ class InlineContentBaseTextViewset(ModelViewSet):
             contentbasetext_uuid = kwargs.get("contentbasetext_uuid")
             use_case.delete_inline_contentbasetext(
                 contentbasetext_uuid=contentbasetext_uuid,
+                user=request.user,
             )
             return Response(status=status.HTTP_204_NO_CONTENT)
 
