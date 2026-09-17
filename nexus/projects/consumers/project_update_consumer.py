@@ -7,6 +7,7 @@ from weni.eda.messages import Message as WeniMessage
 
 from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.event_driven.parsers import JSONParser
+from nexus.usecases.projects.sync_live_desk_copilot import SyncLiveDeskCopilotUseCase
 from nexus.usecases.projects.sync_vtex import (
     SyncProjectVtexUseCase,
     extract_vtex_fields,
@@ -43,6 +44,7 @@ def _handle_project_updated(body: dict) -> tuple[str | None, bool]:
         vtex_fields,
         mode="update",
     )
+    SyncLiveDeskCopilotUseCase().sync(str(project_uuid), payload, mode="update")
 
     if project is None:
         logger.warning(
