@@ -9,6 +9,10 @@ from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecen
 from nexus.intelligences.models import IntegratedIntelligence
 
 
+# Instruction category moves must not emit change-history (IDs look like text edits in the feed).
+_INSTRUCTION_CATEGORY_ONLY_FIELDS = frozenset({"category", "suggested_category"})
+
+
 def _update_comparison_fields(
     old_model_data: dict,
     new_model_data: dict,
@@ -19,6 +23,10 @@ def _update_comparison_fields(
         if old_value != new_value:
             action_details[key] = {"old": old_value, "new": new_value}
     return action_details
+
+
+def _is_instruction_category_only_update(action_details: dict) -> bool:
+    return bool(action_details) and set(action_details.keys()).issubset(_INSTRUCTION_CATEGORY_ONLY_FIELDS)
 
 
 @observer("intelligence_create_activity")
@@ -153,6 +161,8 @@ class ContentBaseInstructionObserver(EventObserver):
             old_model_data = kwargs.get("old_instruction_data")
             new_model_data = kwargs.get("new_instruction_data")
             action_details = _update_comparison_fields(old_model_data, new_model_data)
+            if _is_instruction_category_only_update(action_details):
+                return
         else:
             action_details = kwargs.get("action_details", {"old": "", "new": content_base_instruction.instruction})
 
