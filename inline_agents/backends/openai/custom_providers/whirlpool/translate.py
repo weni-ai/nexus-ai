@@ -150,25 +150,21 @@ def _part_thought_signature(part: Dict[str, Any]) -> str | None:
     return None
 
 
-def _thought_signature_from_tool_call(tool_call: Any) -> str | None:
-    extra = None
-    provider_fields = None
-    if isinstance(tool_call, dict):
-        extra = tool_call.get("extra_content")
-        provider_fields = tool_call.get("provider_specific_fields")
-    else:
-        extra = getattr(tool_call, "extra_content", None)
-        provider_fields = getattr(tool_call, "provider_specific_fields", None)
+def _get_field(obj: Any, key: str) -> Any:
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
 
+
+def _thought_signature_from_tool_call(tool_call: Any) -> str | None:
+    extra = _get_field(tool_call, "extra_content")
     if isinstance(extra, dict):
         google_fields = extra.get("google")
         if isinstance(google_fields, dict):
             signature = google_fields.get("thought_signature")
             if isinstance(signature, str) and signature:
                 return signature
-
-    if isinstance(provider_fields, dict):
-        signature = provider_fields.get("thought_signature")
+    provider = _get_field(tool_call, "provider_specific_fields")
+    if isinstance(provider, dict):
+        signature = provider.get("thought_signature")
         if isinstance(signature, str) and signature:
             return signature
     return None
