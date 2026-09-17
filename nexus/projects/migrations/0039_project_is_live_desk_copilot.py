@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("projects", "0037_alter_project_indexer_database_default"),
+        ("projects", "0038_alter_project_rationale_switch_default"),
     ]
 
     operations = [

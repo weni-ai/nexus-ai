@@ -5,7 +5,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("projects", "0038_project_is_live_desk_copilot"),
+        ("projects", "0039_project_is_live_desk_copilot"),
     ]
 
     operations = [
