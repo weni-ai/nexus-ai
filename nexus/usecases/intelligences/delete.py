@@ -33,6 +33,7 @@ class DeleteIntelligenceUseCase:
             user=user,
             entity_name=intelligence_name,
             action="DELETE",
+            action_model="Intelligence",
         )
         return True
 
@@ -86,8 +87,9 @@ class DeleteContentBaseUseCase:
 
 
 class DeleteContentBaseTextUseCase:
-    def __init__(self, file_database) -> None:
+    def __init__(self, file_database, event_manager_notify=event_manager.notify) -> None:
         self.file_database = file_database
+        self.event_manager_notify = event_manager_notify
 
     def delete_contentbasetext(self, contentbasetext_uuid: str, user_email: str):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
@@ -99,7 +101,15 @@ class DeleteContentBaseTextUseCase:
             raise IntelligencePermissionDenied()
 
         contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
+        label = contentbasetext.title or contentbasetext.file_name or ""
         contentbasetext.delete()
+        self.event_manager_notify(
+            event="contentbase_text_activity",
+            content_base_text=contentbasetext,
+            action_type="D",
+            user=user,
+            action_details={"old": label, "new": ""},
+        )
         self.delete_content_base_text_from_index(
             contentbasetext_uuid=str(contentbasetext_uuid),
             content_base_uuid=str(contentbasetext.content_base.uuid),
@@ -110,9 +120,20 @@ class DeleteContentBaseTextUseCase:
     def delete_inline_contentbasetext(
         self,
         contentbasetext_uuid: str,
+        user=None,
     ):
         contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
+        actor = user or contentbasetext.created_by
+        label = contentbasetext.title or contentbasetext.file_name or ""
         contentbasetext.delete()
+        if actor is not None:
+            self.event_manager_notify(
+                event="contentbase_text_activity",
+                content_base_text=contentbasetext,
+                action_type="D",
+                user=actor,
+                action_details={"old": label, "new": ""},
+            )
         self.delete_content_base_text_from_index(
             contentbasetext_uuid=str(contentbasetext_uuid),
             content_base_uuid=str(contentbasetext.content_base.uuid),

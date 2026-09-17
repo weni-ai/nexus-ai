@@ -2,6 +2,7 @@ import logging
 
 import pendulum
 
+from nexus.events import event_manager
 from nexus.intelligences.models import (
     ContentBaseFile,
     ContentBaseLink,
@@ -20,6 +21,92 @@ from nexus.usecases.task_managers.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _already_succeeded_for_content(task_manager: TaskManager) -> bool:
+    """True if another task for the same content already reached SUCCESS (e.g. re-ingest)."""
+    if getattr(task_manager, "content_base_file_id", None):
+        return (
+            ContentBaseFileTaskManager.objects.filter(
+                content_base_file_id=task_manager.content_base_file_id,
+                status=TaskManager.STATUS_SUCCESS,
+            )
+            .exclude(pk=task_manager.pk)
+            .exists()
+        )
+    if getattr(task_manager, "content_base_link_id", None):
+        return (
+            ContentBaseLinkTaskManager.objects.filter(
+                content_base_link_id=task_manager.content_base_link_id,
+                status=TaskManager.STATUS_SUCCESS,
+            )
+            .exclude(pk=task_manager.pk)
+            .exists()
+        )
+    if getattr(task_manager, "content_base_text_id", None):
+        return (
+            ContentBaseTextTaskManager.objects.filter(
+                content_base_text_id=task_manager.content_base_text_id,
+                status=TaskManager.STATUS_SUCCESS,
+            )
+            .exclude(pk=task_manager.pk)
+            .exists()
+        )
+    return False
+
+
+def publish_ingest_success_create(task_manager: TaskManager) -> None:
+    """
+    Publish CREATE recent-activity for file/link/text when ingest reaches SUCCESS.
+
+    Safe to call only on first transition to SUCCESS for this task (caller must guard).
+    Skips if the content already had a successful ingest (re-index after edit).
+    Failures must not emit CREATE — DELETE of a failed object remains allowed elsewhere.
+    """
+    if _already_succeeded_for_content(task_manager):
+        logger.debug(
+            "Skipping ingest-success CREATE: content already succeeded (task %s)",
+            getattr(task_manager, "uuid", None),
+        )
+        return
+
+    user = getattr(task_manager, "created_by", None)
+    if user is None:
+        logger.warning(
+            "Skipping ingest-success change history: missing created_by for task %s",
+            getattr(task_manager, "uuid", None),
+        )
+        return
+
+    content_base_file = getattr(task_manager, "content_base_file", None)
+    if content_base_file is not None:
+        event_manager.notify(
+            event="contentbase_file_activity",
+            content_base_file=content_base_file,
+            action_type="C",
+            user=user,
+            action_details={"old": "", "new": content_base_file.created_file_name},
+        )
+        return
+
+    content_base_link = getattr(task_manager, "content_base_link", None)
+    if content_base_link is not None:
+        event_manager.notify(
+            event="contentbase_link_activity",
+            content_base_link=content_base_link,
+            action_type="C",
+            user=user,
+            action_details={"old": "", "new": content_base_link.link},
+        )
+        return
+
+    if getattr(task_manager, "content_base_text", None) is not None:
+        return
+
+    logger.warning(
+        "Skipping ingest-success change history: task %s has no content relation",
+        getattr(task_manager, "uuid", None),
+    )
 
 
 class CeleryTaskManagerUseCase:
@@ -91,9 +178,12 @@ class CeleryTaskManagerUseCase:
 
     def update_task_status(self, task_uuid, status, file_type):
         task_manager = self.get_task_manager_by_uuid(task_uuid=task_uuid, file_type=file_type)
+        previous_status = task_manager.status
         task_manager.status = status
         task_manager.end_at = pendulum.now()
         task_manager.save(update_fields=["end_at", "status"])
+        if status == TaskManager.STATUS_SUCCESS and previous_status != TaskManager.STATUS_SUCCESS:
+            publish_ingest_success_create(task_manager)
 
     def create_celery_link_manager(self, content_base_link: ContentBaseLink) -> ContentBaseLinkTaskManager:
         content_base_task_manager = ContentBaseLinkTaskManager.objects.create(
