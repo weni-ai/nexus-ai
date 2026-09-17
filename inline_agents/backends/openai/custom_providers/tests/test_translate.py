@@ -11,6 +11,7 @@ from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     chat_messages_to_gemini_contents,
     gemini_response_to_chat_message,
     guard_block_message,
+    sanitize_json_schema_for_gemini,
 )
 
 
@@ -60,7 +61,6 @@ class WhirlpoolTranslateTests(SimpleTestCase):
                 {
                     "role": "tool",
                     "tool_call_id": "call_1",
-                    "name": "lookup_order",
                     "content": '{"status":"ok"}',
                 },
             ]
@@ -69,12 +69,101 @@ class WhirlpoolTranslateTests(SimpleTestCase):
         self.assertEqual(contents[1]["role"], "model")
         self.assertIn("functionCall", contents[1]["parts"][0])
         self.assertEqual(contents[2]["parts"][0]["functionResponse"]["name"], "lookup_order")
+        self.assertEqual(contents[2]["parts"][-1], {"text": "Continue using the tool result above."})
+
+    def test_plain_user_turn_remains_the_last_prompt_text(self):
+        _, contents = chat_messages_to_gemini_contents(
+            [{"role": "user", "content": "Where is my order?"}]
+        )
+        self.assertEqual(contents, [{"role": "user", "parts": [{"text": "Where is my order?"}]}])
+
+    def test_build_payload_keeps_tool_response_and_gateway_prompt(self):
+        payload = build_generate_content_payload(
+            messages=[
+                {"role": "user", "content": "Find products"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "searchproducts", "arguments": '{"query":"washer"}'},
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": '{"products":[{"id":"1"}]}',
+                },
+            ],
+            tools=[_dummy_tool("searchproducts")],
+        )
+
+        final_parts = payload["contents"][-1]["parts"]
+        self.assertEqual(final_parts[0]["functionResponse"]["name"], "searchproducts")
+        self.assertEqual(
+            final_parts[0]["functionResponse"]["response"],
+            {"products": [{"id": "1"}]},
+        )
+        self.assertEqual(final_parts[-1], {"text": "Continue using the tool result above."})
+        self.assertTrue(final_parts[-1]["text"].strip())
 
     def test_agents_tools_to_gemini_declarations(self):
         decls = agents_tools_to_gemini([_dummy_tool()])
         self.assertEqual(len(decls), 1)
         self.assertEqual(decls[0]["name"], "lookup_order")
         self.assertIn("parameters", decls[0])
+
+    def test_sanitizes_optional_array_anyof_siblings_for_gemini(self):
+        async def _on_invoke(ctx, raw):
+            return "{}"
+
+        tool = FunctionTool(
+            name="sendcatalog",
+            description="Send catalog",
+            params_json_schema={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "more_options_text": {
+                        "anyOf": [
+                            {"items": {"type": "string"}, "type": "array"},
+                            {"type": "null"},
+                        ],
+                        "default": None,
+                        "description": "optional labels",
+                        "title": "More Options Text",
+                        "type": "array",
+                    }
+                },
+            },
+            on_invoke_tool=_on_invoke,
+        )
+        param = agents_tools_to_gemini([tool])[0]["parameters"]["properties"]["more_options_text"]
+        self.assertNotIn("anyOf", param)
+        self.assertNotIn("title", param)
+        self.assertNotIn("default", param)
+        self.assertEqual(param["type"], "array")
+        self.assertTrue(param["nullable"])
+        self.assertEqual(param["items"], {"type": "string"})
+        self.assertNotIn("additionalProperties", agents_tools_to_gemini([tool])[0]["parameters"])
+
+    def test_sanitize_optional_scalar_and_keeps_true_unions(self):
+        scalar = sanitize_json_schema_for_gemini(
+            {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "X", "type": "string"}
+        )
+        self.assertEqual(scalar, {"type": "string", "nullable": True})
+
+        union = sanitize_json_schema_for_gemini(
+            {
+                "anyOf": [{"type": "string"}, {"type": "integer"}],
+                "description": "either",
+                "title": "Y",
+            }
+        )
+        self.assertEqual(union, {"anyOf": [{"type": "string"}, {"type": "integer"}]})
 
     def test_build_payload_includes_tools_and_required_mode(self):
         payload = build_generate_content_payload(
