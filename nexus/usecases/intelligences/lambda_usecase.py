@@ -302,7 +302,7 @@ class LambdaUseCase:
                     "task_name": "create_lambda_conversation",
                 },
             )
-            raise ValueError("No messages found for conversation period")
+            return []
         return messages
 
     def _classify_conversation(
@@ -463,6 +463,31 @@ class LambdaUseCase:
             logger.info(
                 f"[Billing] Updated conversation to Unclassified in database - "
                 f"project_uuid: {project_uuid}, contact_urn: {contact_urn}"
+            )
+
+    def _apply_unclassified_fallback(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        external_id: str,
+        payload: dict,
+        error_type: str,
+        error_message: str,
+    ):
+        try:
+            if settings.SEND_LAMBDA_RESOLUTION_EVENTS:
+                self._send_unclassified_to_billing(
+                    project_uuid, contact_urn, payload.get("has_chats_room", False), error_type, error_message
+                )
+
+            self._update_conversation_unclassified(project_uuid, contact_urn, channel_uuid, external_id, payload)
+
+        except Exception as billing_error:
+            logger.error(
+                f"[Billing] Error sending unclassified to billing - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}, "
+                f"error: {str(billing_error)}"
             )
 
     def _get_agent_uuid(self, project_uuid: str):
@@ -788,6 +813,29 @@ def create_lambda_conversation(
             message_service, project_uuid, contact_urn, channel_uuid, payload
         )
 
+        if not messages:
+            lambda_usecase._apply_unclassified_fallback(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                external_id=external_id,
+                payload=payload,
+                error_type="no_messages_found",
+                error_message="No messages found for conversation period",
+            )
+            logger.info(
+                "[create_lambda_conversation] Task skipped - no messages for conversation period",
+                extra={
+                    "task_id": task_id,
+                    "correlation_id": correlation_id,
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "external_id": external_id,
+                    "task_name": "create_lambda_conversation",
+                },
+            )
+            return
+
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=contact_urn,
@@ -867,29 +915,20 @@ def create_lambda_conversation(
         contact_urn = payload.get("contact_urn")
         channel_uuid = payload.get("channel_uuid")
         external_id = payload.get("external_id")
-        has_chats_room = payload.get("has_chats_room", False)
 
+        lambda_usecase = LambdaUseCase()
         error_type, error_message = lambda_usecase._determine_error_and_log(e, project_uuid, contact_urn, channel_uuid)
 
         # Send unclassified to billing in case of error
-        try:
-            lambda_usecase = LambdaUseCase()
-            if settings.SEND_LAMBDA_RESOLUTION_EVENTS:
-                lambda_usecase._send_unclassified_to_billing(
-                    project_uuid, contact_urn, has_chats_room, error_type, error_message
-                )
-
-            # Update conversation in database with Unclassified status if it exists
-            lambda_usecase._update_conversation_unclassified(
-                project_uuid, contact_urn, channel_uuid, external_id, payload
-            )
-
-        except Exception as billing_error:
-            logger.error(
-                f"[Billing] Error sending unclassified to billing - "
-                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}, "
-                f"error: {str(billing_error)}"
-            )
+        lambda_usecase._apply_unclassified_fallback(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            external_id=external_id,
+            payload=payload,
+            error_type=error_type,
+            error_message=error_message,
+        )
 
         # Enrich Sentry context and log failure details, including agent_uuid when available
         agent_uuid = None

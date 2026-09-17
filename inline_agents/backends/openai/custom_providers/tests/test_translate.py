@@ -11,6 +11,7 @@ from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     chat_messages_to_gemini_contents,
     gemini_response_to_chat_message,
     guard_block_message,
+    sanitize_json_schema_for_gemini,
 )
 
 
@@ -75,6 +76,55 @@ class WhirlpoolTranslateTests(SimpleTestCase):
         self.assertEqual(len(decls), 1)
         self.assertEqual(decls[0]["name"], "lookup_order")
         self.assertIn("parameters", decls[0])
+
+    def test_sanitizes_optional_array_anyof_siblings_for_gemini(self):
+        async def _on_invoke(ctx, raw):
+            return "{}"
+
+        tool = FunctionTool(
+            name="sendcatalog",
+            description="Send catalog",
+            params_json_schema={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "more_options_text": {
+                        "anyOf": [
+                            {"items": {"type": "string"}, "type": "array"},
+                            {"type": "null"},
+                        ],
+                        "default": None,
+                        "description": "optional labels",
+                        "title": "More Options Text",
+                        "type": "array",
+                    }
+                },
+            },
+            on_invoke_tool=_on_invoke,
+        )
+        param = agents_tools_to_gemini([tool])[0]["parameters"]["properties"]["more_options_text"]
+        self.assertNotIn("anyOf", param)
+        self.assertNotIn("title", param)
+        self.assertNotIn("default", param)
+        self.assertEqual(param["type"], "array")
+        self.assertTrue(param["nullable"])
+        self.assertEqual(param["items"], {"type": "string"})
+        self.assertNotIn("additionalProperties", agents_tools_to_gemini([tool])[0]["parameters"])
+
+    def test_sanitize_optional_scalar_and_keeps_true_unions(self):
+        scalar = sanitize_json_schema_for_gemini(
+            {"anyOf": [{"type": "string"}, {"type": "null"}], "title": "X", "type": "string"}
+        )
+        self.assertEqual(scalar, {"type": "string", "nullable": True})
+
+        union = sanitize_json_schema_for_gemini(
+            {
+                "anyOf": [{"type": "string"}, {"type": "integer"}],
+                "description": "either",
+                "title": "Y",
+            }
+        )
+        self.assertEqual(union, {"anyOf": [{"type": "string"}, {"type": "integer"}]})
 
     def test_build_payload_includes_tools_and_required_mode(self):
         payload = build_generate_content_payload(
