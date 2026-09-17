@@ -1,8 +1,10 @@
 import json
 
+from agents.models.chatcmpl_converter import Converter
 from agents.tool import FunctionTool
 from django.test import SimpleTestCase, override_settings
 
+from inline_agents.backends.openai.custom_providers.base import chat_message_to_model_response
 from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     WhirlpoolTranslationError,
     agents_tools_to_gemini,
@@ -211,6 +213,150 @@ class WhirlpoolTranslateTests(SimpleTestCase):
         self.assertEqual(len(message.tool_calls), 1)
         self.assertEqual(message.tool_calls[0].function.name, "lookup_order")
         self.assertEqual(json.loads(message.tool_calls[0].function.arguments)["order_id"], "99")
+        self.assertIsNone(getattr(message.tool_calls[0], "extra_content", None))
+
+    def test_replays_function_call_thought_signature(self):
+        message = gemini_response_to_chat_message(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "searchproducts",
+                                        "args": {"query": "washer"},
+                                    },
+                                    "thoughtSignature": "synthetic-signature",
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        )
+        self.assertEqual(
+            message.tool_calls[0].extra_content,
+            {"google": {"thought_signature": "synthetic-signature"}},
+        )
+
+        _, contents = chat_messages_to_gemini_contents(
+            [
+                {"role": "user", "content": "Find products"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "searchproducts",
+                                "arguments": '{"query":"washer"}',
+                            },
+                            "extra_content": {
+                                "google": {"thought_signature": "synthetic-signature"}
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": '{"products":[]}',
+                },
+            ]
+        )
+        function_call_part = contents[1]["parts"][0]
+        self.assertEqual(function_call_part["functionCall"]["name"], "searchproducts")
+        self.assertEqual(function_call_part["thoughtSignature"], "synthetic-signature")
+
+    def test_attaches_sibling_thought_signature_to_first_function_call_only(self):
+        message = gemini_response_to_chat_message(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "thought": True,
+                                    "text": "internal",
+                                    "thoughtSignature": "synthetic-turn-signature",
+                                },
+                                {
+                                    "functionCall": {
+                                        "name": "searchproducts",
+                                        "args": {"query": "washer"},
+                                    }
+                                },
+                                {
+                                    "functionCall": {
+                                        "name": "getproductdetails",
+                                        "args": {"id": "1"},
+                                    }
+                                },
+                            ],
+                        }
+                    }
+                ]
+            }
+        )
+        self.assertIsNone(message.content)
+        self.assertEqual(
+            message.tool_calls[0].extra_content["google"]["thought_signature"],
+            "synthetic-turn-signature",
+        )
+        self.assertIsNone(message.tool_calls[1].extra_content)
+
+    def test_agents_sdk_roundtrip_keeps_thought_signature_on_next_payload(self):
+        message = gemini_response_to_chat_message(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "searchproducts",
+                                        "args": {"query": "washer"},
+                                    },
+                                    "thoughtSignature": "synthetic-signature",
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        )
+        items = [
+            item.model_dump()
+            for item in chat_message_to_model_response(
+                message, model="custom/whirlpool/generateContent"
+            ).output
+        ]
+        items.append(
+            {
+                "type": "function_call_output",
+                "call_id": items[0]["call_id"],
+                "output": '{"products":[]}',
+            }
+        )
+        history = [
+            {"role": "user", "content": "Find products"},
+            *items,
+        ]
+        messages = Converter.items_to_messages(
+            history,
+            preserve_thinking_blocks=False,
+            preserve_tool_output_all_content=True,
+            model="gemini",
+        )
+        _, contents = chat_messages_to_gemini_contents(messages)
+        self.assertEqual(contents[1]["parts"][0]["thoughtSignature"], "synthetic-signature")
+        self.assertNotIn("thoughtSignature", json.dumps(contents[0]))
 
     def test_assert_tools_accepted_raises_on_tool_error(self):
         with self.assertRaises(WhirlpoolTranslationError):
