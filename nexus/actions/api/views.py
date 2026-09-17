@@ -29,6 +29,7 @@ from nexus.projects.simulation_model_cache import (
     simulation_manager_model_redis_key,
     simulation_manager_pipeline_version_redis_key,
 )
+from nexus.inline_agents.backends.openai.models import is_api_hidden_model_vendor
 from nexus.usecases import projects
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
@@ -315,6 +316,14 @@ class SimulationManagerModelView(APIView):
 
         try:
             project = projects.get_project_by_uuid(project_uuid)
+            if is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)):
+                manager = project.manager_agent
+                return Response(
+                    {
+                        "manager_foundation_model": manager.foundation_model if manager else None,
+                        "source": "project_default",
+                    }
+                )
             key = simulation_manager_model_redis_key(project_uuid, contact_urn)
             cached = get_redis_read_client().get(key)
             if cached:
@@ -346,6 +355,12 @@ class SimulationManagerModelView(APIView):
             contact_urn = f"ext:{contact_urn}"
 
         try:
+            project = projects.get_project_by_uuid(project_uuid)
+            if is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)):
+                return Response(
+                    {"error": "This provider cannot be changed via API"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             key = simulation_manager_model_redis_key(project_uuid, contact_urn)
             get_redis_write_client().setex(
                 key,

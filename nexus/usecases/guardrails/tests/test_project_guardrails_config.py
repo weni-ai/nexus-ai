@@ -39,6 +39,79 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         self.assertEqual(config.bedrock_guardrail_version, "1")
         self._mock_get_or_create_pool.assert_called_once()
 
+    @override_settings(GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT=False)
+    def test_lazy_init_new_project_unblocked_when_default_flag_off(self):
+        project = ProjectFactory()
+
+        config = self.use_case.get_or_initialize(project)
+
+        self.assertFalse(config.initialized_as_new_project)
+        self.assertFalse(config.prompt_injection_filter_enabled)
+        self.assertEqual(len(config.category_states), len(self.use_case.catalog_slugs()))
+        self.assertFalse(any(config.category_states.values()))
+        self.assertIsNone(config.bedrock_guardrail_pool_id)
+        self._mock_get_or_create_pool.assert_not_called()
+
+    @override_settings(GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT=False)
+    def test_lazy_init_does_not_rewrite_when_default_flag_turns_on(self):
+        project = ProjectFactory()
+        config = self.use_case.get_or_initialize(project)
+        self.assertFalse(config.initialized_as_new_project)
+
+        with override_settings(GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT=True):
+            refreshed = self.use_case.get_or_initialize(project)
+
+        self.assertFalse(refreshed.initialized_as_new_project)
+        self.assertFalse(refreshed.prompt_injection_filter_enabled)
+        self.assertFalse(any(refreshed.category_states.values()))
+        self._mock_get_or_create_pool.assert_not_called()
+
+    def test_lazy_init_does_not_rewrite_when_default_flag_turns_off(self):
+        project = ProjectFactory()
+        config = self.use_case.get_or_initialize(project)
+        self.assertTrue(config.initialized_as_new_project)
+
+        with override_settings(GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT=False):
+            refreshed = self.use_case.get_or_initialize(project)
+
+        self.assertTrue(refreshed.initialized_as_new_project)
+        self.assertTrue(refreshed.prompt_injection_filter_enabled)
+        self.assertTrue(all(refreshed.category_states.values()))
+
+    @override_settings(GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT=False)
+    def test_get_runtime_config_honors_stored_blocked_when_flag_off(self):
+        project = ProjectFactory()
+        ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states=self.use_case.build_default_category_states(blocked=True),
+            initialized_as_new_project=True,
+            prompt_injection_filter_enabled=True,
+        )
+
+        runtime = self.use_case.get_runtime_config_as_dict(str(project.uuid))
+
+        self.assertTrue(runtime["has_blocked_category"])
+        self.assertTrue(runtime["prompt_injection_filter_enabled"])
+        self.assertIsNotNone(runtime["guardrailIdentifier"])
+
+    def test_merge_adds_new_catalog_slug_blocked_for_new_project_flag(self):
+        project = ProjectFactory()
+        ProjectGuardrailsConfig.objects.create(
+            project=project,
+            category_states={"politics": True},
+            initialized_as_new_project=True,
+        )
+
+        with patch.object(
+            ProjectGuardrailsConfigUseCase,
+            "catalog_slugs",
+            return_value=["politics", "bias"],
+        ):
+            refreshed = self.use_case.get_or_initialize(project)
+
+        self.assertTrue(refreshed.category_states["politics"])
+        self.assertTrue(refreshed.category_states["bias"])
+
     def test_lazy_init_keeps_backfilled_unblocked_config(self):
         project = ProjectFactory()
         ProjectGuardrailsConfig.objects.create(
@@ -434,6 +507,34 @@ class ProjectGuardrailsConfigUseCaseTestCase(TestCase):
         )
         self.assertEqual(result, "Project refusal message")
         self.assertEqual(client.apply_guardrail.call_args.kwargs["source"], "INPUT")
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+        GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT=False,
+        GUARDRAILS_DEFAULT_BLOCKING_MESSAGES={
+            "en-us": "Default refusal",
+            "pt-br": "Default refusal",
+            "es": "Default refusal",
+        },
+    )
+    def test_apply_input_guardrail_ignores_new_project_default_flag(self):
+        client = MagicMock()
+        client.apply_guardrail.return_value = {
+            "action": "GUARDRAIL_INTERVENED",
+            "outputs": [{"text": "Bedrock canned text"}],
+        }
+        result = ProjectGuardrailsConfigUseCase.apply_input_guardrail(
+            "Who should I vote for?",
+            {
+                "has_blocked_category": True,
+                "guardrailIdentifier": "gr-1",
+                "guardrailVersion": "1",
+                "blocking_message": "Project refusal message",
+            },
+            client=client,
+        )
+        self.assertEqual(result, "Project refusal message")
+        client.apply_guardrail.assert_called_once()
 
     @override_settings(
         AWS_BEDROCK_REGION_NAME="us-east-1",

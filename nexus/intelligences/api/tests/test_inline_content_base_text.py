@@ -43,7 +43,7 @@ class InlineContentBaseTextViewsetTestCase(TestCase):
         force_authenticate(request, user=self.user)
         return self.view_list(request, project_uuid=str(self.project.uuid))
 
-    @patch("nexus.intelligences.api.views.upload_text_file.delay")
+    @patch("nexus.intelligences.api.views.bedrock_upload_text_file.delay")
     def test_create_and_list_ordered_by_last_updated(self, mock_upload):
         create_request = self.factory.post(
             "/",
@@ -77,7 +77,7 @@ class InlineContentBaseTextViewsetTestCase(TestCase):
             self.assertIn("last_updated_at", item)
             self.assertIsNone(item["last_updated_at"])
 
-    @patch("nexus.intelligences.api.views.upload_text_file.delay")
+    @patch("nexus.intelligences.api.views.bedrock_upload_text_file.delay")
     def test_create_default_untitled_title(self, mock_upload):
         request = self.factory.post("/", {"text": "Body"}, format="json")
         force_authenticate(request, user=self.user)
@@ -92,7 +92,7 @@ class InlineContentBaseTextViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(ContentBaseText.objects.filter(content_base=self.router_content_base).count(), 0)
 
-    @patch("nexus.intelligences.api.views.upload_text_file.delay")
+    @patch("nexus.intelligences.api.views.bedrock_upload_text_file.delay")
     def test_retrieve_by_uuid(self, mock_upload):
         create_request = self.factory.post("/", {"text": "Retrieve me", "title": "T"}, format="json")
         force_authenticate(create_request, user=self.user)
@@ -109,7 +109,7 @@ class InlineContentBaseTextViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["text"], "Retrieve me")
 
-    @patch("nexus.intelligences.api.views.upload_text_file.delay")
+    @patch("nexus.intelligences.api.views.bedrock_upload_text_file.delay")
     def test_patch_title_only_skips_reindex(self, mock_upload):
         text = ContentBaseTextFactory(content_base=self.router_content_base, created_by=self.user)
         mock_upload.reset_mock()

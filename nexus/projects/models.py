@@ -50,7 +50,7 @@ class Project(BaseModel, SoftDeleteModel):
     )
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
-    indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
+    indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=BEDROCK)
     bedrock_ingestion_strategy = models.CharField(
         max_length=10,
         choices=BEDROCK_INGESTION_STRATEGY_CHOICES,

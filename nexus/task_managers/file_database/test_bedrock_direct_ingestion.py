@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
@@ -107,6 +108,42 @@ class BedrockDirectIngestionMethodsTestCase(SimpleTestCase):
         self.assertEqual(
             uri,
             f"s3://test-bucket/direct-ingest/{self.content_base_uuid}/{self.filename}",
+        )
+
+    def test_add_metadata_json_file_omits_source_url_for_files(self):
+        bedrock = self._bedrock_with_mocks()
+        bedrock.s3_client = MagicMock()
+
+        bedrock.add_metadata_json_file("policy.txt", self.content_base_uuid, "file-uuid-1")
+
+        uploaded = bedrock.s3_client.upload_fileobj.call_args.args[0]
+        payload = json.loads(uploaded.getvalue().decode("utf-8"))
+        self.assertEqual(
+            payload["metadataAttributes"],
+            {
+                "contentBaseUuid": self.content_base_uuid,
+                "filename": "policy.txt",
+                "fileUuid": "file-uuid-1",
+            },
+        )
+        self.assertNotIn("sourceUrl", payload["metadataAttributes"])
+
+    def test_add_metadata_json_file_includes_source_url_for_sites(self):
+        bedrock = self._bedrock_with_mocks()
+        bedrock.s3_client = MagicMock()
+
+        bedrock.add_metadata_json_file(
+            "link.md",
+            self.content_base_uuid,
+            "link-uuid-1",
+            source_url="https://example.com/gift-card",
+        )
+
+        uploaded = bedrock.s3_client.upload_fileobj.call_args.args[0]
+        payload = json.loads(uploaded.getvalue().decode("utf-8"))
+        self.assertEqual(
+            payload["metadataAttributes"]["sourceUrl"],
+            "https://example.com/gift-card",
         )
 
 
