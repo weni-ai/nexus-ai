@@ -7,16 +7,14 @@ from collections.abc import AsyncIterator
 from typing import Any, Optional
 
 from agents.items import ModelResponse, TResponseStreamEvent
+from agents.model_settings import ModelSettings
 from agents.models.chatcmpl_converter import Converter
 from agents.models.chatcmpl_stream_handler import ChatCmplStreamHandler
 from agents.models.fake_id import FAKE_RESPONSES_ID
-from agents.model_settings import ModelSettings
 from agents.usage import Usage
 from openai.types.chat import ChatCompletionChunk, ChatCompletionMessage
 from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice
-from openai.types.chat.chat_completion_chunk import ChoiceDelta
-from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
-from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCallFunction
+from openai.types.chat.chat_completion_chunk import ChoiceDelta, ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
 from openai.types.responses import Response
 from openai.types.shared import Reasoning
 
@@ -37,6 +35,17 @@ def chat_message_to_model_response(
     )
 
 
+class _ChoiceDeltaToolCallWithExtraContent(ChoiceDeltaToolCall):
+    """Carry provider metadata through ``ChatCmplStreamHandler``.
+
+    The handler reads ``extra_content.google.thought_signature`` off each tool-call
+    delta to build the item's ``provider_data``. The stock chunk type has no such
+    field, so the signature would be dropped on the streaming path.
+    """
+
+    extra_content: dict[str, Any] | None = None
+
+
 def _tool_calls_as_delta(message: ChatCompletionMessage) -> list[ChoiceDeltaToolCall] | None:
     if not message.tool_calls:
         return None
@@ -44,7 +53,7 @@ def _tool_calls_as_delta(message: ChatCompletionMessage) -> list[ChoiceDeltaTool
     for i, tc in enumerate(message.tool_calls):
         fn = getattr(tc, "function", None)
         deltas.append(
-            ChoiceDeltaToolCall(
+            _ChoiceDeltaToolCallWithExtraContent(
                 index=i,
                 id=getattr(tc, "id", None) or f"call_{i}",
                 type="function",
@@ -52,6 +61,7 @@ def _tool_calls_as_delta(message: ChatCompletionMessage) -> list[ChoiceDeltaTool
                     name=getattr(fn, "name", None) if fn else None,
                     arguments=getattr(fn, "arguments", None) if fn else None,
                 ),
+                extra_content=getattr(tc, "extra_content", None),
             )
         )
     return deltas
@@ -62,8 +72,13 @@ async def synthesize_stream_from_message(
     *,
     model: str,
     model_settings: ModelSettings,
+    converter_model: str | None = None,
 ) -> AsyncIterator[TResponseStreamEvent]:
-    """Emit Agents stream events from a complete chat message (non-streaming APIs)."""
+    """Emit Agents stream events from a complete chat message (non-streaming APIs).
+
+    ``converter_model`` overrides the model id handed to the stream handler, which
+    gates vendor-specific metadata (e.g. Gemini thought signatures) on that id.
+    """
     parallel = bool(model_settings.parallel_tool_calls) if model_settings.parallel_tool_calls else False
     tool_choice: Any = "auto"
     if model_settings.tool_choice is not None:
@@ -105,5 +120,7 @@ async def synthesize_stream_from_message(
     async def _single_chunk_stream():
         yield chunk
 
-    async for event in ChatCmplStreamHandler.handle_stream(response, _single_chunk_stream(), model=model):
+    async for event in ChatCmplStreamHandler.handle_stream(
+        response, _single_chunk_stream(), model=converter_model or model
+    ):
         yield event

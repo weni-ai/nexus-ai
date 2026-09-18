@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import uuid
@@ -20,6 +21,12 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 logger = logging.getLogger(__name__)
 
 _TOOL_RESULT_CONTINUATION_TEXT = "Continue using the tool result above."
+
+# Gemini 3 rejects a request whose current turn replays a ``functionCall`` without
+# the signature it issued. For calls Gemini never generated (context injected as a
+# tool result, history recorded before signatures were kept) Google documents this
+# sentinel to skip validation. ``thoughtSignature`` is a bytes field, so base64.
+_SKIP_SIGNATURE_VALIDATION = base64.b64encode(b"skip_thought_signature_validator").decode()
 
 
 class WhirlpoolTranslationError(Exception):
@@ -177,6 +184,8 @@ def chat_messages_to_gemini_contents(
     system_parts: List[str] = []
     contents: List[Dict[str, Any]] = []
     tool_names_by_call_id: Dict[str, str] = {}
+    tool_result_content: Optional[Dict[str, Any]] = None
+    unsigned_function_calls = 0
 
     for message in messages:
         role = message.get("role")
@@ -216,8 +225,10 @@ def chat_messages_to_gemini_contents(
                     }
                 }
                 thought_signature = _thought_signature_from_tool_call(tc)
-                if thought_signature:
-                    function_call_part["thoughtSignature"] = thought_signature
+                if not thought_signature:
+                    thought_signature = _SKIP_SIGNATURE_VALIDATION
+                    unsigned_function_calls += 1
+                function_call_part["thoughtSignature"] = thought_signature
                 parts.append(function_call_part)
             if parts:
                 contents.append({"role": "model", "parts": parts})
@@ -238,24 +249,32 @@ def chat_messages_to_gemini_contents(
                     response_obj = {"result": response_payload}
             else:
                 response_obj = response_payload
-            contents.append(
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "functionResponse": {
-                                "name": name or "tool",
-                                "response": response_obj
-                                if isinstance(response_obj, dict)
-                                else {"result": response_obj},
-                            }
-                        }
-                    ],
+            response_part = {
+                "functionResponse": {
+                    "name": name or "tool",
+                    "response": response_obj
+                    if isinstance(response_obj, dict)
+                    else {"result": response_obj},
                 }
-            )
+            }
+            # Gemini requires all functionCall parts followed by all functionResponse
+            # parts; interleaving them across turns is a 400. Keep results of one
+            # round of (possibly parallel) calls in a single user turn.
+            if contents and contents[-1] is tool_result_content:
+                tool_result_content["parts"].append(response_part)
+            else:
+                tool_result_content = {"role": "user", "parts": [response_part]}
+                contents.append(tool_result_content)
             continue
 
         logger.debug("Skipping unsupported chat message role=%s", role)
+
+    if unsigned_function_calls:
+        logger.warning(
+            "Whirlpool payload replays %s function call(s) with no Gemini thought "
+            "signature; sent the validation-skip sentinel instead",
+            unsigned_function_calls,
+        )
 
     _ensure_gateway_prompt_after_tool_result(contents)
 
@@ -369,6 +388,14 @@ def gemini_response_to_chat_message(response: Dict[str, Any]) -> ChatCompletionM
                     extra_content=extra_content,
                 )
             )
+
+    if tool_calls:
+        signed = sum(1 for call in tool_calls if getattr(call, "extra_content", None))
+        logger.info(
+            "Whirlpool returned %s function call(s), %s carrying a thought signature",
+            len(tool_calls),
+            signed,
+        )
 
     return ChatCompletionMessage(
         role="assistant",
