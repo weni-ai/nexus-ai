@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from nexus.projects.models import Project, ProjectAuthorizationRole
 from nexus.users.models import User
@@ -15,6 +16,8 @@ class ProjectCreationDTO:
     brain_on: bool = False
     indexer_database: str = Project.BEDROCK
     inline_agent_switch: bool = True
+    is_live_desk_copilot: bool = False
+    parent_uuid: Optional[str] = None
 
 
 @dataclass

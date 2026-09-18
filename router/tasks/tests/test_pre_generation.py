@@ -277,6 +277,7 @@ class PreGenerationProjectToDictTestCase(SimpleTestCase):
         project.formatter_send_only_assistant_message = False
         project.formatter_tools_descriptions = None
         project.manager_agent = None
+        project.is_live_desk_copilot = False
         project.vtex_account = "mystore"
         project.vtex_host_store = "https://www.mystore.com.br"
         project.storefront_type = "vtex_io"
