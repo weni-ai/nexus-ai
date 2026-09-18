@@ -8,6 +8,7 @@ from django.test import SimpleTestCase, override_settings
 
 from inline_agents.backends.openai.custom_providers.whirlpool.client import (
     WhirlpoolAPIError,
+    _payload_turn_shape,
     clear_token_cache,
 )
 from inline_agents.backends.openai.custom_providers.whirlpool.model import WhirlpoolModel
@@ -147,6 +148,29 @@ class WhirlpoolModelTests(SimpleTestCase):
                     )
 
         asyncio.run(_run())
+
+    def test_payload_turn_shape_reports_roles_without_message_text(self):
+        shape = _payload_turn_shape(
+            {
+                "contents": [
+                    {"role": "user", "parts": [{"text": "quero comprar uma geladeira"}]},
+                    {
+                        "role": "model",
+                        "parts": [{"functionCall": {}, "thoughtSignature": "sig"}],
+                    },
+                    {"role": "user", "parts": [{"functionResponse": {}}, {"text": "continue"}]},
+                ]
+            }
+        )
+
+        self.assertEqual(shape["roles"], ["user", "model", "user"])
+        self.assertEqual(shape["trailing_role"], "user")
+        self.assertEqual(shape["turn_count"], 3)
+        self.assertEqual(
+            [turn["parts"] for turn in shape["turns"]],
+            [["text"], ["functionCall+thoughtSignature"], ["functionResponse", "text"]],
+        )
+        self.assertNotIn("geladeira", str(shape))
 
     def test_stream_response_synthesizes_events(self):
         async def _run():
