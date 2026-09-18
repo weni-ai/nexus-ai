@@ -17,6 +17,18 @@ Neither 3.7.12 nor 3.7.13 shows evidence of breaking existing non-Whirlpool traf
 
 3.7.13 intentionally enables rationale by default for newly created projects, so it has global future-project behavior scope. That is not evidence of a deployed regression in existing traffic and is unrelated to Whirlpool translation.
 
+### Production rollback (operator, 2026-09-18)
+
+Production was moved from **3.7.13** back to **3.7.11** so users stopped seeing errors. 3.7.12 was the Whirlpool thought-signature converter deploy; 3.7.13 was an outside change.
+
+That rollback undoes **both** tags at once, so “errors stopped after leaving 3.7.13” does not uniquely prove 3.7.13 broke existing non-Whirlpool traffic:
+
+- Runtime reads `project.rationale_switch` from the stored project row / cache (`pre_generation_service` → `CachedProjectData`). The 3.7.13 migration only `AlterField`s the **column default**; it does not `UPDATE` existing rows.
+- 3.7.12 only touched Whirlpool adapter files. NEXUS-2WF (`thought_signature`) first appeared **2026-09-16**, before 3.7.12, and is still Whirlpool-only. Rolling to 3.7.11 does not remove that Gemini requirement.
+- Sentry still recorded NEXUS-2WF events on 2026-09-18 (including after 13:00 UTC). Non-Whirlpool production errors continue at baseline volume after the rollback.
+
+If a later deploy of this branch is cut from `origin/main`, it **re-includes 3.7.13**. To keep production on 3.7.11 behavior except the Whirlpool streaming fix, cherry-pick onto 3.7.11 (or 3.7.12) instead of merging current `main`.
+
 ## Stream metadata preservation
 
 ### Decision
