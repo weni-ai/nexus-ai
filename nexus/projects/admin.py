@@ -73,6 +73,7 @@ class ProjectAdmin(admin.ModelAdmin):
                     "guardrail",
                     "bedrock_ingestion_strategy",
                     "is_live_desk_copilot",
+                    "parent_project",
                     "manager_agent",
                 )
             },

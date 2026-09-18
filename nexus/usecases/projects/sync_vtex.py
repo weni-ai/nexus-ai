@@ -128,6 +128,8 @@ class SyncProjectVtexUseCase:
                 return None
 
         notify_async(event="cache_invalidation:project", project=project)
+        for copilot in Project.objects.filter(parent_project=project, is_live_desk_copilot=True):
+            notify_async(event="cache_invalidation:project", project=copilot)
         logger.info(
             "[SyncProjectVtexUseCase] Project VTEX fields synced",
             extra={"project_uuid": project_uuid, "update_fields": update_fields, "mode": mode},

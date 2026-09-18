@@ -19,9 +19,88 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 
 logger = logging.getLogger(__name__)
 
+_TOOL_RESULT_CONTINUATION_TEXT = "Continue using the tool result above."
+
 
 class WhirlpoolTranslationError(Exception):
     """Raised when request/response translation fails or tools are rejected."""
+
+
+class _ToolCallWithThoughtSignature(ChatCompletionMessageFunctionToolCall):
+    """Carry Gemini thought signatures through the Agents SDK converter.
+
+    ``Converter.message_to_output_items`` reads ``extra_content.google.thought_signature``.
+    The stock OpenAI tool-call type has no such field.
+    """
+
+    extra_content: dict[str, Any] | None = None
+
+
+_GEMINI_SCHEMA_DROP_KEYS = frozenset(
+    {
+        "title",
+        "default",
+        "examples",
+        "example",
+        "$schema",
+        "$id",
+        "$defs",
+        "definitions",
+        "additionalProperties",
+    }
+)
+_SCHEMA_UNION_KEYS = ("anyOf", "oneOf")
+
+
+def sanitize_json_schema_for_gemini(schema: Any) -> Any:
+    """Rewrite OpenAI/Pydantic JSON Schema into Gemini ``functionDeclarations`` subset.
+
+    Vertex rejects sibling keys next to ``anyOf`` (Pydantic ``Optional[list]`` plus
+    OpenAI ``_clean_schema`` injecting ``type``). Optional ``T | null`` becomes
+    ``type`` + ``nullable``. Schema text is never logged.
+    """
+    if isinstance(schema, list):
+        return [sanitize_json_schema_for_gemini(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+
+    cleaned = {
+        key: sanitize_json_schema_for_gemini(value)
+        for key, value in schema.items()
+        if key not in _GEMINI_SCHEMA_DROP_KEYS
+    }
+    collapsed = _collapse_nullable_union(cleaned)
+    if collapsed is not cleaned:
+        return sanitize_json_schema_for_gemini(collapsed)
+
+    union_key = next((key for key in _SCHEMA_UNION_KEYS if key in cleaned), None)
+    if union_key:
+        # Gemini: no siblings next to anyOf/oneOf (including description/type).
+        return {union_key: cleaned[union_key]}
+
+    return cleaned
+
+
+def _collapse_nullable_union(schema: Dict[str, Any]) -> Dict[str, Any]:
+    for key in _SCHEMA_UNION_KEYS:
+        options = schema.get(key)
+        if not isinstance(options, list):
+            continue
+        non_null = [option for option in options if not _is_null_schema(option)]
+        has_null = any(_is_null_schema(option) for option in options)
+        if not has_null or len(non_null) != 1 or not isinstance(non_null[0], dict):
+            continue
+        collapsed = dict(non_null[0])
+        collapsed["nullable"] = True
+        description = schema.get("description")
+        if description and "description" not in collapsed:
+            collapsed["description"] = description
+        return collapsed
+    return schema
+
+
+def _is_null_schema(option: Any) -> bool:
+    return isinstance(option, dict) and option.get("type") == "null"
 
 
 def agents_tools_to_gemini(
@@ -42,7 +121,9 @@ def agents_tools_to_gemini(
             {
                 "name": fn.get("name"),
                 "description": fn.get("description") or "",
-                "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
+                "parameters": sanitize_json_schema_for_gemini(
+                    fn.get("parameters") or {"type": "object", "properties": {}}
+                ),
             }
         )
 
@@ -53,11 +134,40 @@ def agents_tools_to_gemini(
             {
                 "name": fn.get("name"),
                 "description": fn.get("description") or "",
-                "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
+                "parameters": sanitize_json_schema_for_gemini(
+                    fn.get("parameters") or {"type": "object", "properties": {}}
+                ),
             }
         )
 
     return [d for d in declarations if d.get("name")]
+
+
+def _part_thought_signature(part: Dict[str, Any]) -> str | None:
+    signature = part.get("thoughtSignature") or part.get("thought_signature")
+    if isinstance(signature, str) and signature:
+        return signature
+    return None
+
+
+def _get_field(obj: Any, key: str) -> Any:
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+
+def _thought_signature_from_tool_call(tool_call: Any) -> str | None:
+    extra = _get_field(tool_call, "extra_content")
+    if isinstance(extra, dict):
+        google_fields = extra.get("google")
+        if isinstance(google_fields, dict):
+            signature = google_fields.get("thought_signature")
+            if isinstance(signature, str) and signature:
+                return signature
+    provider = _get_field(tool_call, "provider_specific_fields")
+    if isinstance(provider, dict):
+        signature = provider.get("thought_signature")
+        if isinstance(signature, str) and signature:
+            return signature
+    return None
 
 
 def chat_messages_to_gemini_contents(
@@ -66,6 +176,7 @@ def chat_messages_to_gemini_contents(
     """Convert OpenAI chat messages to Gemini ``systemInstruction`` + ``contents``."""
     system_parts: List[str] = []
     contents: List[Dict[str, Any]] = []
+    tool_names_by_call_id: Dict[str, str] = {}
 
     for message in messages:
         role = message.get("role")
@@ -86,6 +197,10 @@ def chat_messages_to_gemini_contents(
                 parts.append({"text": text})
             for tc in message.get("tool_calls") or []:
                 fn = tc.get("function") or {}
+                call_id = tc.get("id")
+                function_name = fn.get("name") or call_id or "unknown"
+                if call_id and fn.get("name"):
+                    tool_names_by_call_id[str(call_id)] = str(fn["name"])
                 args = fn.get("arguments") or "{}"
                 if isinstance(args, str):
                     try:
@@ -94,20 +209,27 @@ def chat_messages_to_gemini_contents(
                         args_obj = {"raw": args}
                 else:
                     args_obj = args
-                parts.append(
-                    {
-                        "functionCall": {
-                            "name": fn.get("name") or tc.get("id") or "unknown",
-                            "args": args_obj,
-                        }
+                function_call_part: Dict[str, Any] = {
+                    "functionCall": {
+                        "name": function_name,
+                        "args": args_obj,
                     }
-                )
+                }
+                thought_signature = _thought_signature_from_tool_call(tc)
+                if thought_signature:
+                    function_call_part["thoughtSignature"] = thought_signature
+                parts.append(function_call_part)
             if parts:
                 contents.append({"role": "model", "parts": parts})
             continue
 
         if role == "tool":
-            name = message.get("name") or _tool_name_from_tool_call_id(message.get("tool_call_id"))
+            tool_call_id = message.get("tool_call_id")
+            name = (
+                message.get("name")
+                or tool_names_by_call_id.get(str(tool_call_id))
+                or _tool_name_from_tool_call_id(tool_call_id)
+            )
             response_payload = message.get("content")
             if isinstance(response_payload, str):
                 try:
@@ -135,6 +257,8 @@ def chat_messages_to_gemini_contents(
 
         logger.debug("Skipping unsupported chat message role=%s", role)
 
+    _ensure_gateway_prompt_after_tool_result(contents)
+
     system_instruction = None
     if system_parts:
         system_instruction = {"parts": [{"text": "\n\n".join(system_parts)}]}
@@ -143,6 +267,27 @@ def chat_messages_to_gemini_contents(
         contents = [{"role": "user", "parts": [{"text": ""}]}]
 
     return system_instruction, contents
+
+
+def _ensure_gateway_prompt_after_tool_result(contents: List[Dict[str, Any]]) -> None:
+    """Give Whirlpool's request preprocessor a non-empty final ``text`` part.
+
+    Gemini accepts a user turn ending in ``functionResponse``, but Whirlpool's
+    gateway extracts the prompt from ``contents[-1].parts[-1].text`` before
+    forwarding the request. Keep the protocol part and append a neutral
+    continuation instruction; the original user prompt was already evaluated
+    before the tool call.
+    """
+    if not contents:
+        return
+
+    parts = contents[-1].get("parts")
+    if not isinstance(parts, list) or not parts:
+        return
+
+    last_part = parts[-1]
+    if isinstance(last_part, dict) and "functionResponse" in last_part:
+        parts.append({"text": _TOOL_RESULT_CONTINUATION_TEXT})
 
 
 def build_generate_content_payload(
@@ -187,23 +332,41 @@ def gemini_response_to_chat_message(response: Dict[str, Any]) -> ChatCompletionM
     parts = content.get("parts") or []
     text_chunks: List[str] = []
     tool_calls: List[ChatCompletionMessageFunctionToolCall] = []
+    pending_thought_signature: str | None = None
+    first_function_call = True
 
     for part in parts:
         if not isinstance(part, dict):
             continue
-        if "text" in part and part["text"] is not None:
-            text_chunks.append(str(part["text"]))
+        part_signature = _part_thought_signature(part)
         function_call = part.get("functionCall") or part.get("function_call")
+        is_thought_part = bool(part.get("thought"))
+
+        if part_signature and not function_call:
+            pending_thought_signature = pending_thought_signature or part_signature
+
+        if "text" in part and part["text"] is not None and not is_thought_part:
+            text_chunks.append(str(part["text"]))
+
         if function_call:
             name = function_call.get("name") or "unknown"
             args = function_call.get("args") or function_call.get("arguments") or {}
             if not isinstance(args, str):
                 args = json.dumps(args, ensure_ascii=False)
+            thought_signature = part_signature
+            if not thought_signature and first_function_call:
+                thought_signature = pending_thought_signature
+            first_function_call = False
+            pending_thought_signature = None
+            extra_content = None
+            if thought_signature:
+                extra_content = {"google": {"thought_signature": thought_signature}}
             tool_calls.append(
-                ChatCompletionMessageFunctionToolCall(
+                _ToolCallWithThoughtSignature(
                     id=f"call_{uuid.uuid4().hex[:24]}",
                     type="function",
                     function=Function(name=name, arguments=args),
+                    extra_content=extra_content,
                 )
             )
 

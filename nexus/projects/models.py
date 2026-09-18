@@ -60,7 +60,7 @@ class Project(BaseModel, SoftDeleteModel):
 
     human_support = models.BooleanField(default=False)
     human_support_prompt = models.TextField(null=True, blank=True)
-    rationale_switch = models.BooleanField(default=False)
+    rationale_switch = models.BooleanField(default=True)
     inline_agent_switch = models.BooleanField(default=True)
     use_components = models.BooleanField(default=False)
     default_supervisor_foundation_model = models.CharField(max_length=100, blank=True, null=True)
@@ -88,6 +88,14 @@ class Project(BaseModel, SoftDeleteModel):
     is_live_desk_copilot = models.BooleanField(
         default=False,
         help_text="When True, this project is a Live Desk sales assistant copilot and cannot change manager version",
+    )
+    parent_project = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="live_desk_copilots",
+        help_text="Main Live Desk project that owns the VTEX account for this copilot",
     )
 
     # Synced from Connect EDA (projects.topic / update-projects.topic)
