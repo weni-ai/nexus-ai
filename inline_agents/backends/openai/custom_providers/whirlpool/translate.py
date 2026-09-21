@@ -285,8 +285,6 @@ def chat_messages_to_gemini_contents(
     if not contents:
         contents = [{"role": "user", "parts": [{"text": ""}]}]
 
-    _ensure_request_ends_with_user_turn(contents)
-
     return system_instruction, contents
 
 
@@ -309,24 +307,6 @@ def _ensure_gateway_prompt_after_tool_result(contents: List[Dict[str, Any]]) -> 
     last_part = parts[-1]
     if isinstance(last_part, dict) and "functionResponse" in last_part:
         parts.append({"text": _TOOL_RESULT_CONTINUATION_TEXT})
-
-
-def _ensure_request_ends_with_user_turn(contents: List[Dict[str, Any]]) -> None:
-    """Gemini answers ``400 Requests ending with a model turn are not supported``.
-
-    A trailing ``model`` turn reaches us whenever the last chat message is an
-    assistant one, either because history was replayed without its tool results
-    or because the message after it used a role this translator skips. Close the
-    turn with the continuation prompt instead of failing the request.
-    """
-    if not contents or contents[-1].get("role") == "user":
-        return
-
-    logger.warning(
-        "Whirlpool payload ended with role=%s; appended a user turn to close it",
-        contents[-1].get("role"),
-    )
-    contents.append({"role": "user", "parts": [{"text": _TOOL_RESULT_CONTINUATION_TEXT}]})
 
 
 def build_generate_content_payload(

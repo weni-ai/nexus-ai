@@ -435,36 +435,6 @@ class WhirlpoolTranslateTests(SimpleTestCase):
             ["searchproducts", "getproductdetails"],
         )
 
-    def test_trailing_assistant_message_gets_a_closing_user_turn(self):
-        """Gemini 400s with "Requests ending with a model turn are not supported"."""
-        _, contents = chat_messages_to_gemini_contents(
-            [
-                {"role": "user", "content": "quero comprar uma geladeira"},
-                {"role": "assistant", "content": "Vou verificar os modelos disponíveis."},
-            ]
-        )
-        self.assertEqual([content["role"] for content in contents], ["user", "model", "user"])
-        self.assertEqual(contents[-1]["parts"][0]["text"], _TOOL_RESULT_CONTINUATION_TEXT)
-
-    def test_replayed_tool_call_without_result_gets_a_closing_user_turn(self):
-        _, contents = chat_messages_to_gemini_contents(
-            [
-                {"role": "user", "content": "Where is my order?"},
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": "call_1",
-                            "type": "function",
-                            "function": {"name": "lookup_order", "arguments": "{}"},
-                        }
-                    ],
-                },
-            ]
-        )
-        self.assertEqual(contents[-1]["role"], "user")
-
     def test_tool_result_turn_is_not_duplicated(self):
         _, contents = chat_messages_to_gemini_contents(
             [
