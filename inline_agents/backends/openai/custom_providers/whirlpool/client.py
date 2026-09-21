@@ -6,7 +6,7 @@ import base64
 import logging
 import os
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import httpx
 import sentry_sdk
@@ -37,9 +37,21 @@ def _payload_turn_shape(payload: Dict[str, Any]) -> Dict[str, Any]:
     what we need on the error event; the part keys tell text turns apart from
     functionCall/functionResponse ones.
     """
+    system_instruction = payload.get("systemInstruction")
+    system_parts = system_instruction.get("parts") if isinstance(system_instruction, dict) else None
+    system_text = "\n".join(
+        str(part.get("text") or "")
+        for part in (system_parts or [])
+        if isinstance(part, dict)
+    )
+    instruction_shape = {
+        "has_system_instruction": bool(system_text),
+        "has_safety_guardrails": "<safety_guardrails>" in system_text,
+    }
+
     contents = payload.get("contents")
     if not isinstance(contents, list):
-        return {"turns": None, "trailing_role": None}
+        return {**instruction_shape, "turns": None, "trailing_role": None}
 
     turns = []
     for turn in contents:
@@ -55,6 +67,7 @@ def _payload_turn_shape(payload: Dict[str, Any]) -> Dict[str, Any]:
         turns.append({"role": turn.get("role"), "parts": part_keys})
 
     return {
+        **instruction_shape,
         "turn_count": len(turns),
         "roles": [turn["role"] for turn in turns],
         "turns": turns,

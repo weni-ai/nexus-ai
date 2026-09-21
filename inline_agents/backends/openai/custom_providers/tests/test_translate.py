@@ -135,7 +135,7 @@ class WhirlpoolTranslateTests(SimpleTestCase):
         self.assertEqual(contents[1]["role"], "model")
         self.assertIn("functionCall", contents[1]["parts"][0])
         self.assertEqual(contents[2]["parts"][0]["functionResponse"]["name"], "lookup_order")
-        self.assertEqual(contents[2]["parts"][-1], {"text": "Continue using the tool result above."})
+        self.assertEqual(contents[3]["parts"], [{"text": "Continue using the tool result above."}])
 
     def test_plain_user_turn_remains_the_last_prompt_text(self):
         _, contents = chat_messages_to_gemini_contents(
@@ -167,14 +167,15 @@ class WhirlpoolTranslateTests(SimpleTestCase):
             tools=[_dummy_tool("searchproducts")],
         )
 
-        final_parts = payload["contents"][-1]["parts"]
-        self.assertEqual(final_parts[0]["functionResponse"]["name"], "searchproducts")
+        tool_result_parts = payload["contents"][-2]["parts"]
+        self.assertEqual(tool_result_parts[0]["functionResponse"]["name"], "searchproducts")
         self.assertEqual(
-            final_parts[0]["functionResponse"]["response"],
+            tool_result_parts[0]["functionResponse"]["response"],
             {"products": [{"id": "1"}]},
         )
-        self.assertEqual(final_parts[-1], {"text": "Continue using the tool result above."})
-        self.assertTrue(final_parts[-1]["text"].strip())
+        final_parts = payload["contents"][-1]["parts"]
+        self.assertEqual(final_parts, [{"text": "Continue using the tool result above."}])
+        self.assertTrue(final_parts[0]["text"].strip())
 
     def test_agents_tools_to_gemini_declarations(self):
         decls = agents_tools_to_gemini([_dummy_tool()])
@@ -421,7 +422,7 @@ class WhirlpoolTranslateTests(SimpleTestCase):
                 {"role": "tool", "tool_call_id": "call_2", "content": '{"details":{}}'},
             ]
         )
-        self.assertEqual(len(contents), 3)
+        self.assertEqual(len(contents), 4)
         self.assertEqual(
             [part["functionCall"]["name"] for part in contents[1]["parts"]],
             ["searchproducts", "getproductdetails"],
@@ -483,7 +484,7 @@ class WhirlpoolTranslateTests(SimpleTestCase):
                 {"role": "tool", "tool_call_id": "call_1", "content": '{"status":"shipped"}'},
             ]
         )
-        self.assertEqual([content["role"] for content in contents], ["user", "model", "user"])
+        self.assertEqual([content["role"] for content in contents], ["user", "model", "user", "user"])
 
     def test_agents_sdk_roundtrip_keeps_thought_signature_on_next_payload(self):
         message = gemini_response_to_chat_message(_function_call_response())
