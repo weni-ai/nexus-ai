@@ -291,13 +291,13 @@ def chat_messages_to_gemini_contents(
 
 
 def _ensure_gateway_prompt_after_tool_result(contents: List[Dict[str, Any]]) -> None:
-    """Give Whirlpool's request preprocessor a final text-only user turn.
+    """Give Whirlpool's request preprocessor a non-empty final ``text`` part.
 
     Gemini accepts a user turn ending in ``functionResponse``, but Whirlpool's
     gateway extracts the prompt from ``contents[-1].parts[-1].text`` before
-    forwarding the request. Keep the protocol turn intact and append a separate
-    continuation turn. A mixed ``functionResponse`` + ``text`` turn still caused
-    the gateway to forward history ending in ``model`` on staging.
+    forwarding the request. Keep the protocol part and append a neutral
+    continuation instruction; the original user prompt was already evaluated
+    before the tool call.
     """
     if not contents:
         return
@@ -308,12 +308,7 @@ def _ensure_gateway_prompt_after_tool_result(contents: List[Dict[str, Any]]) -> 
 
     last_part = parts[-1]
     if isinstance(last_part, dict) and "functionResponse" in last_part:
-        contents.append(
-            {
-                "role": "user",
-                "parts": [{"text": _TOOL_RESULT_CONTINUATION_TEXT}],
-            }
-        )
+        parts.append({"text": _TOOL_RESULT_CONTINUATION_TEXT})
 
 
 def _ensure_request_ends_with_user_turn(contents: List[Dict[str, Any]]) -> None:
