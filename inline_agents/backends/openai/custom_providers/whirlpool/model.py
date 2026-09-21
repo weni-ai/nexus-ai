@@ -186,11 +186,15 @@ class WhirlpoolModel(Model):
             span_generation.span_data.input = messages
 
         requested = openai_tool_names(tools, handoffs)
-        logger.debug(
-            "WhirlpoolModel calling generateContent model=%s tools=%s payload_keys=%s",
+        logger.info(
+            "WhirlpoolModel system_instructions present=%s has_safety_guardrails=%s "
+            "has_safety_triage=%s length=%s model=%s tools=%s",
+            bool(system_instructions),
+            "<safety_guardrails>" in (system_instructions or ""),
+            "<safety_triage>" in (system_instructions or ""),
+            len(system_instructions or ""),
             self.model,
             requested,
-            list(payload.keys()),
         )
 
         try:

@@ -172,8 +172,19 @@ class WhirlpoolClient:
                 )
 
         body = _safe_json(response)
+        shape = _payload_turn_shape(payload)
+        logger.info(
+            "Whirlpool generateContent status=%s has_system_instruction=%s "
+            "has_safety_guardrails=%s trailing_role=%s turn_count=%s roles=%s",
+            response.status_code,
+            shape.get("has_system_instruction"),
+            shape.get("has_safety_guardrails"),
+            shape.get("trailing_role"),
+            shape.get("turn_count"),
+            shape.get("roles"),
+        )
         if response.status_code >= 400:
-            sentry_sdk.set_context("whirlpool_request", _payload_turn_shape(payload))
+            sentry_sdk.set_context("whirlpool_request", shape)
             raise WhirlpoolAPIError(
                 f"Whirlpool generateContent failed with status {response.status_code}: {body}",
                 status_code=response.status_code,

@@ -1293,6 +1293,19 @@ class OpenAITeamAdapter(TeamAdapter):
                 get_prompt_injection_filter_block(),
             )
 
+        logger.info(
+            "Manager prompt injection filter project_uuid=%s enabled=%s "
+            "has_safety_guardrails=%s has_safety_triage=%s has_core_identity=%s "
+            "has_scope_boundaries=%s prompt_len=%s",
+            project_id,
+            bool(prompt_injection_filter_enabled),
+            "<safety_guardrails>" in rendered_content,
+            "<safety_triage>" in rendered_content,
+            "</core_identity>" in rendered_content,
+            "<scope_boundaries>" in rendered_content,
+            len(rendered_content or ""),
+        )
+
         return rendered_content
 
     @classmethod
