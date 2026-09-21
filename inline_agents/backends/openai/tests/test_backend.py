@@ -6,6 +6,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
+from inline_agents.backends.openai.bedrock_mantle_auth import BedrockMantleAuthError
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.sessions import openai_session_base_id
 from inline_agents.backends.openai.tests.openai_factory import OpenAISupervisorFactory
@@ -1089,3 +1090,33 @@ class SetOpenAIClientTestCase(SimpleTestCase):
         set_client.assert_not_called()
         set_key.assert_not_called()
         resolve_key.assert_not_called()
+
+    def test_mantle_none_stored_values_mint_token(self):
+        async_openai, _, _, resolve_key = self.call(
+            {"api_key": None, "api_base": None},
+            "aws_mantle",
+        )
+
+        resolve_key.assert_called_once_with("", region="us-west-2")
+        async_openai.assert_called_once_with(
+            base_url="https://bedrock-mantle.us-west-2.api.aws/openai/v1",
+            api_key="minted-bedrock-token",
+        )
+
+    def test_mantle_iam_failure_is_fail_fast(self):
+        target = "inline_agents.backends.openai.backend"
+        with (
+            patch(f"{target}.AsyncOpenAI") as async_openai,
+            patch(f"{target}.set_default_openai_client") as set_client,
+            patch(
+                f"{target}.resolve_aws_mantle_api_key",
+                side_effect=BedrockMantleAuthError("no credentials"),
+            ),
+            patch(f"{target}.logger.exception") as log_exception,
+        ):
+            with self.assertRaises(BedrockMantleAuthError):
+                self.backend._set_openai_client({}, "aws_mantle")
+
+        async_openai.assert_not_called()
+        set_client.assert_not_called()
+        log_exception.assert_called_once()

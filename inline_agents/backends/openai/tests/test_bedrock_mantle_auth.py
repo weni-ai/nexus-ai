@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 
 from inline_agents.backends.openai.bedrock_mantle_auth import (
     BedrockMantleAuthError,
+    clear_token_cache,
     mint_bedrock_bearer_token,
     region_from_mantle_base,
     resolve_aws_mantle_api_key,
@@ -59,6 +60,12 @@ class MintBedrockBearerTokenTests(SimpleTestCase):
 
 
 class ResolveAwsMantleApiKeyTests(SimpleTestCase):
+    def setUp(self):
+        clear_token_cache()
+
+    def tearDown(self):
+        clear_token_cache()
+
     def test_stored_key_wins(self):
         with patch(
             "inline_agents.backends.openai.bedrock_mantle_auth.mint_bedrock_bearer_token"
@@ -81,6 +88,30 @@ class ResolveAwsMantleApiKeyTests(SimpleTestCase):
         ) as mint:
             resolve_aws_mantle_api_key("", region="us-east-1")
             mint.assert_called_once_with(region="us-east-1")
+
+    def test_empty_key_reuses_cached_token_for_region(self):
+        with patch(
+            "inline_agents.backends.openai.bedrock_mantle_auth.mint_bedrock_bearer_token",
+            return_value="bedrock-api-key-cached",
+        ) as mint:
+            first = resolve_aws_mantle_api_key("", region="us-west-2")
+            second = resolve_aws_mantle_api_key("", region="us-west-2")
+
+        self.assertEqual(first, "bedrock-api-key-cached")
+        self.assertEqual(second, "bedrock-api-key-cached")
+        mint.assert_called_once_with(region="us-west-2")
+
+    def test_empty_key_mints_again_for_another_region(self):
+        with patch(
+            "inline_agents.backends.openai.bedrock_mantle_auth.mint_bedrock_bearer_token",
+            side_effect=["west-token", "east-token"],
+        ) as mint:
+            west = resolve_aws_mantle_api_key("", region="us-west-2")
+            east = resolve_aws_mantle_api_key("", region="us-east-1")
+
+        self.assertEqual(west, "west-token")
+        self.assertEqual(east, "east-token")
+        self.assertEqual(mint.call_count, 2)
 
 
 class RegionFromMantleBaseTests(SimpleTestCase):
