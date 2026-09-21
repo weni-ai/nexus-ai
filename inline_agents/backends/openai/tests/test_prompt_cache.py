@@ -166,6 +166,12 @@ class PromptCachingOpenAIResponsesModelTests(SimpleTestCase):
         self.assertEqual(input_items, "Hello")
         self.assertIs(resulting_settings, settings)
 
+    @patch("inline_agents.backends.openai.prompt_cache.get_default_openai_client")
+    def test_model_does_not_bind_client_until_first_use(self, get_client):
+        PromptCachingOpenAIResponsesModel("openai.gpt-5.6-luna")
+
+        get_client.assert_not_called()
+
     @patch("inline_agents.backends.openai.prompt_cache.get_default_openai_client", return_value=None)
     def test_model_requires_configured_default_client(self, _get_client):
         model = PromptCachingOpenAIResponsesModel("openai.gpt-5.6-luna")
