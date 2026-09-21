@@ -16,7 +16,6 @@ from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     WhirlpoolTranslationError,
 )
 
-
 GUARD_MESSAGE = "I'm sorry, I can't help with that request."
 
 
@@ -152,6 +151,9 @@ class WhirlpoolModelTests(SimpleTestCase):
     def test_payload_turn_shape_reports_roles_without_message_text(self):
         shape = _payload_turn_shape(
             {
+                "systemInstruction": {
+                    "parts": [{"text": "manager\n<safety_guardrails>\nrules"}],
+                },
                 "contents": [
                     {"role": "user", "parts": [{"text": "quero comprar uma geladeira"}]},
                     {
@@ -166,6 +168,8 @@ class WhirlpoolModelTests(SimpleTestCase):
         self.assertEqual(shape["roles"], ["user", "model", "user"])
         self.assertEqual(shape["trailing_role"], "user")
         self.assertEqual(shape["turn_count"], 3)
+        self.assertTrue(shape["has_system_instruction"])
+        self.assertTrue(shape["has_safety_guardrails"])
         self.assertEqual(
             [turn["parts"] for turn in shape["turns"]],
             [["text"], ["functionCall+thoughtSignature"], ["functionResponse", "text"]],
