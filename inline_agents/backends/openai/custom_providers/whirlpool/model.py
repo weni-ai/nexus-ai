@@ -39,6 +39,11 @@ from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
 
 logger = logging.getLogger(__name__)
 
+# The Agents SDK only keeps/restores Gemini thought signatures when the model id
+# contains "gemini" — both in the chat converter and in the streaming handler.
+# Whirlpool's custom id does not, so pass this hint instead of the HTTP model name.
+SDK_GEMINI_MODEL_HINT = "gemini-whirlpool"
+
 
 class WhirlpoolModel(Model):
     """In-process adapter: Agents SDK Model protocol → Whirlpool generateContent."""
@@ -139,7 +144,10 @@ class WhirlpoolModel(Model):
                 "output_tokens": usage.output_tokens,
             }
             async for event in synthesize_stream_from_message(
-                message, model=self.model, model_settings=model_settings
+                message,
+                model=self.model,
+                model_settings=model_settings,
+                converter_model=SDK_GEMINI_MODEL_HINT,
             ):
                 yield event
 
@@ -154,14 +162,11 @@ class WhirlpoolModel(Model):
         span_generation,
         tracing: ModelTracing,
     ):
-        # The SDK only restores Gemini thought signatures when the model id
-        # contains "gemini". Whirlpool's custom id does not, so pass a converter
-        # hint without changing the HTTP model name.
         messages = Converter.items_to_messages(
             input,
             preserve_thinking_blocks=False,
             preserve_tool_output_all_content=True,
-            model="gemini",
+            model=SDK_GEMINI_MODEL_HINT,
         )
         if system_instructions:
             messages.insert(0, {"role": "system", "content": system_instructions})
