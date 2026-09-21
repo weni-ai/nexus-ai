@@ -6,6 +6,7 @@ from inline_agents.backends.openai.agent_entities import (
     build_reasoning_settings,
     resolve_agent_model,
 )
+from inline_agents.backends.openai.prompt_cache import PromptCachingOpenAIResponsesModel
 
 
 class FinalOutputFromToolDictTests(SimpleTestCase):
@@ -42,6 +43,16 @@ class ResolveAgentModelTests(SimpleTestCase):
 
     def test_mantle_model_skips_litellm(self):
         self.assertEqual(resolve_agent_model("openai.gpt-5.6-luna", {}), "openai.gpt-5.6-luna")
+
+    def test_mantle_manager_uses_prompt_caching_responses_model(self):
+        model = resolve_agent_model(
+            "openai.gpt-5.6-luna",
+            {},
+            model_vendor="aws_mantle",
+        )
+
+        self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(model.model, "openai.gpt-5.6-luna")
 
     def test_litellm_azure_with_credentials(self):
         credentials = {
