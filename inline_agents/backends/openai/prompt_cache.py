@@ -4,6 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from functools import lru_cache
+from threading import Lock
 
 from agents import ModelSettings
 from agents.agent_output import AgentOutputSchemaBase
@@ -105,21 +106,31 @@ def with_explicit_cache_settings(model_settings: ModelSettings, cache_key: str) 
 
 
 class PromptCachingOpenAIResponsesModel(Model):
-    """Lazy Responses model that applies Manager 2.8 explicit prompt caching."""
+    """Responses model that applies Manager 2.8 explicit prompt caching.
+
+    The wrapped OpenAIResponsesModel is created on first use, not in __init__.
+    Supervisor is built in the adapter before OpenAIBackend._set_openai_client()
+    binds the process-wide Mantle client for this invocation.
+    """
 
     def __init__(self, model: str):
         self.model = model
         self._responses_model: OpenAIResponsesModel | None = None
+        self._responses_model_lock = Lock()
 
     def _model(self) -> OpenAIResponsesModel:
         if self._responses_model is not None:
             return self._responses_model
 
-        client = get_default_openai_client()
-        if client is None:
-            raise RuntimeError("The default OpenAI client must be configured before invoking AWS Mantle")
-        self._responses_model = OpenAIResponsesModel(model=self.model, openai_client=client)
-        return self._responses_model
+        with self._responses_model_lock:
+            if self._responses_model is not None:
+                return self._responses_model
+
+            client = get_default_openai_client()
+            if client is None:
+                raise RuntimeError("The default OpenAI client must be configured before invoking AWS Mantle")
+            self._responses_model = OpenAIResponsesModel(model=self.model, openai_client=client)
+            return self._responses_model
 
     def _prepare(
         self,
