@@ -2,11 +2,17 @@
 
 Matches aws-bedrock-token-generator: SigV4-presign CallWithBearerToken, then
 base64-encode the URL. Used so aws_mantle can auth without a stored api_key.
+
+boto3/botocore are project dependencies (see pyproject.toml). Tokens are valid
+for up to 12 hours; mint results are cached in-process until shortly before
+expiry so _set_openai_client can run per invocation without reminting every turn.
 """
 
 import base64
 import logging
-from typing import Optional
+import time
+from threading import Lock
+from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 import boto3
@@ -21,6 +27,10 @@ _SERVICE_NAME = "bedrock"
 _AUTH_PREFIX = "bedrock-api-key-"
 _TOKEN_VERSION = "&Version=1"
 _TOKEN_DURATION_SECONDS = 43200
+_TOKEN_SKEW_SECONDS = 300
+
+_token_cache: Dict[str, Tuple[str, float]] = {}
+_token_cache_lock = Lock()
 
 
 class BedrockMantleAuthError(RuntimeError):
@@ -72,8 +82,26 @@ def resolve_aws_mantle_api_key(explicit_key: str, *, region: Optional[str] = Non
     """Prefer a stored Bedrock key; otherwise mint from the pod IAM role."""
     if explicit_key:
         return explicit_key
+
+    resolved_region = region or "us-west-2"
+    now = time.monotonic()
+    with _token_cache_lock:
+        cached = _token_cache.get(resolved_region)
+        if cached and cached[1] > now:
+            return cached[0]
+
     logger.info("Minting short-lived Bedrock token from the process credential chain")
-    return mint_bedrock_bearer_token(region=region or "us-west-2")
+    token = mint_bedrock_bearer_token(region=resolved_region)
+    expires_at = time.monotonic() + max(_TOKEN_DURATION_SECONDS - _TOKEN_SKEW_SECONDS, 30.0)
+    with _token_cache_lock:
+        _token_cache[resolved_region] = (token, expires_at)
+    return token
+
+
+def clear_token_cache() -> None:
+    """Test helper to drop cached pod IAM tokens."""
+    with _token_cache_lock:
+        _token_cache.clear()
 
 
 def _load_process_credentials() -> Credentials:

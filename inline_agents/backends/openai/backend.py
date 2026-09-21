@@ -21,6 +21,7 @@ from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
 from inline_agents.backends.openai.agent_entities import resolve_agent_model
 from inline_agents.backends.openai.bedrock_mantle_auth import (
+    BedrockMantleAuthError,
     region_from_mantle_base,
     resolve_aws_mantle_api_key,
 )
@@ -1246,20 +1247,29 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.capture_exception(exception)
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
+        """Point the Agents SDK at this invocation's OpenAI-compatible vendor.
+
+        aws_mantle always uses Mantle. A stored project/manager key wins; otherwise
+        a short-lived token is minted from the pod IAM chain. Missing IAM
+        credentials raise BedrockMantleAuthError on purpose (fail-fast) so the
+        turn never calls Mantle without auth.
+        """
         normalized_vendor = model_vendor.lower()
         if normalized_vendor not in OPENAI_COMPATIBLE_MODEL_VENDORS:
             return
 
         credentials = user_model_credentials or {}
-        api_key = credentials.get("api_key", "") or ""
-        base_url = credentials.get("api_base", "") or ""
+        api_key = credentials.get("api_key") or ""
+        base_url = credentials.get("api_base") or ""
 
         if normalized_vendor == "aws_mantle":
-            # Platform 2.8 must hit Mantle even with an empty credential map. A stored
-            # project/manager key still wins; otherwise mint from the pod IAM chain.
             if not base_url:
                 base_url = AWS_MANTLE_API_BASE
-            api_key = resolve_aws_mantle_api_key(api_key, region=region_from_mantle_base(base_url))
+            try:
+                api_key = resolve_aws_mantle_api_key(api_key, region=region_from_mantle_base(base_url))
+            except BedrockMantleAuthError:
+                logger.exception("aws_mantle has no stored Bedrock key and the pod IAM chain is empty")
+                raise
         elif not credentials:
             return
 
