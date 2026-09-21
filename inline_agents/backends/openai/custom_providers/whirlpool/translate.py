@@ -285,17 +285,21 @@ def chat_messages_to_gemini_contents(
     if not contents:
         contents = [{"role": "user", "parts": [{"text": ""}]}]
 
+    _ensure_request_ends_with_user_turn(contents)
+
     return system_instruction, contents
 
 
 def _ensure_gateway_prompt_after_tool_result(contents: List[Dict[str, Any]]) -> None:
-    """Give Whirlpool's request preprocessor a non-empty final ``text`` part.
+    """Give Whirlpool's request preprocessor a final text-only user turn.
 
-    Gemini accepts a user turn ending in ``functionResponse``, but Whirlpool's
-    gateway extracts the prompt from ``contents[-1].parts[-1].text`` before
-    forwarding the request. Keep the protocol part and append a neutral
-    continuation instruction; the original user prompt was already evaluated
-    before the tool call.
+    The gateway consumes the whole last turn as the prompt (read from
+    ``contents[-1].parts[-1].text``) and forwards only the preceding turns as
+    history. Appending the continuation *inside* the ``functionResponse`` turn
+    therefore hands the gateway a history ending in the ``model`` turn that
+    carries the matching ``functionCall``, which Gemini rejects with
+    ``Requests ending with a model turn are not supported``. The continuation
+    needs its own turn so the tool result survives in the history.
     """
     if not contents:
         return
@@ -306,7 +310,30 @@ def _ensure_gateway_prompt_after_tool_result(contents: List[Dict[str, Any]]) -> 
 
     last_part = parts[-1]
     if isinstance(last_part, dict) and "functionResponse" in last_part:
-        parts.append({"text": _TOOL_RESULT_CONTINUATION_TEXT})
+        contents.append(
+            {
+                "role": "user",
+                "parts": [{"text": _TOOL_RESULT_CONTINUATION_TEXT}],
+            }
+        )
+
+
+def _ensure_request_ends_with_user_turn(contents: List[Dict[str, Any]]) -> None:
+    """Gemini answers ``400 Requests ending with a model turn are not supported``.
+
+    A trailing ``model`` turn reaches us whenever the last chat message is an
+    assistant one, either because history was replayed without its tool results
+    or because the message after it used a role this translator skips. Close the
+    turn with the continuation prompt instead of failing the request.
+    """
+    if not contents or contents[-1].get("role") == "user":
+        return
+
+    logger.warning(
+        "Whirlpool payload ended with role=%s; appended a user turn to close it",
+        contents[-1].get("role"),
+    )
+    contents.append({"role": "user", "parts": [{"text": _TOOL_RESULT_CONTINUATION_TEXT}]})
 
 
 def build_generate_content_payload(

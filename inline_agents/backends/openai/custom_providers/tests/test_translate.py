@@ -135,7 +135,7 @@ class WhirlpoolTranslateTests(SimpleTestCase):
         self.assertEqual(contents[1]["role"], "model")
         self.assertIn("functionCall", contents[1]["parts"][0])
         self.assertEqual(contents[2]["parts"][0]["functionResponse"]["name"], "lookup_order")
-        self.assertEqual(contents[2]["parts"][-1], {"text": "Continue using the tool result above."})
+        self.assertEqual(contents[3]["parts"], [{"text": "Continue using the tool result above."}])
 
     def test_plain_user_turn_remains_the_last_prompt_text(self):
         _, contents = chat_messages_to_gemini_contents(
@@ -167,14 +167,15 @@ class WhirlpoolTranslateTests(SimpleTestCase):
             tools=[_dummy_tool("searchproducts")],
         )
 
-        final_parts = payload["contents"][-1]["parts"]
-        self.assertEqual(final_parts[0]["functionResponse"]["name"], "searchproducts")
+        tool_result_parts = payload["contents"][-2]["parts"]
+        self.assertEqual(tool_result_parts[0]["functionResponse"]["name"], "searchproducts")
         self.assertEqual(
-            final_parts[0]["functionResponse"]["response"],
+            tool_result_parts[0]["functionResponse"]["response"],
             {"products": [{"id": "1"}]},
         )
-        self.assertEqual(final_parts[-1], {"text": "Continue using the tool result above."})
-        self.assertTrue(final_parts[-1]["text"].strip())
+        final_parts = payload["contents"][-1]["parts"]
+        self.assertEqual(final_parts, [{"text": "Continue using the tool result above."}])
+        self.assertTrue(final_parts[0]["text"].strip())
 
     def test_agents_tools_to_gemini_declarations(self):
         decls = agents_tools_to_gemini([_dummy_tool()])
@@ -421,7 +422,7 @@ class WhirlpoolTranslateTests(SimpleTestCase):
                 {"role": "tool", "tool_call_id": "call_2", "content": '{"details":{}}'},
             ]
         )
-        self.assertEqual(len(contents), 3)
+        self.assertEqual(len(contents), 4)
         self.assertEqual(
             [part["functionCall"]["name"] for part in contents[1]["parts"]],
             ["searchproducts", "getproductdetails"],
@@ -434,6 +435,36 @@ class WhirlpoolTranslateTests(SimpleTestCase):
             ],
             ["searchproducts", "getproductdetails"],
         )
+
+    def test_trailing_assistant_message_gets_a_closing_user_turn(self):
+        """Gemini 400s with "Requests ending with a model turn are not supported"."""
+        _, contents = chat_messages_to_gemini_contents(
+            [
+                {"role": "user", "content": "quero comprar uma geladeira"},
+                {"role": "assistant", "content": "Vou verificar os modelos disponíveis."},
+            ]
+        )
+        self.assertEqual([content["role"] for content in contents], ["user", "model", "user"])
+        self.assertEqual(contents[-1]["parts"][0]["text"], _TOOL_RESULT_CONTINUATION_TEXT)
+
+    def test_replayed_tool_call_without_result_gets_a_closing_user_turn(self):
+        _, contents = chat_messages_to_gemini_contents(
+            [
+                {"role": "user", "content": "Where is my order?"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "lookup_order", "arguments": "{}"},
+                        }
+                    ],
+                },
+            ]
+        )
+        self.assertEqual(contents[-1]["role"], "user")
 
     def test_tool_result_turn_is_not_duplicated(self):
         _, contents = chat_messages_to_gemini_contents(
@@ -453,7 +484,41 @@ class WhirlpoolTranslateTests(SimpleTestCase):
                 {"role": "tool", "tool_call_id": "call_1", "content": '{"status":"shipped"}'},
             ]
         )
-        self.assertEqual([content["role"] for content in contents], ["user", "model", "user"])
+        self.assertEqual([content["role"] for content in contents], ["user", "model", "user", "user"])
+
+    def test_history_without_the_gateway_prompt_turn_never_ends_on_model(self):
+        """The gateway consumes the last turn as the prompt and forwards the rest.
+
+        Whatever remains has to end on a user turn, otherwise Gemini answers
+        ``Requests ending with a model turn are not supported``.
+        """
+        messages = [{"role": "user", "content": "quero comprar uma geladeira"}]
+        for index in range(3):
+            call_id = f"call_{index}"
+            messages.extend(
+                [
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": call_id,
+                                "type": "function",
+                                "function": {"name": "searchproducts", "arguments": "{}"},
+                            }
+                        ],
+                    },
+                    {"role": "tool", "tool_call_id": call_id, "content": '{"products":[]}'},
+                    {"role": "user", "content": "quero comprar uma geladeira"},
+                ]
+            )
+        messages.pop()
+
+        _, contents = chat_messages_to_gemini_contents(messages)
+
+        self.assertEqual(contents[-1]["parts"], [{"text": _TOOL_RESULT_CONTINUATION_TEXT}])
+        self.assertEqual(contents[-2]["role"], "user")
+        self.assertIn("functionResponse", contents[-2]["parts"][0])
 
     def test_agents_sdk_roundtrip_keeps_thought_signature_on_next_payload(self):
         message = gemini_response_to_chat_message(_function_call_response())
