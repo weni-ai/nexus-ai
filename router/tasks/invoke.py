@@ -758,7 +758,7 @@ def start_inline_agents(  # noqa: C901
                 turn_id=turn_id,
             )
             block_broadcast = get_guardrail_block_broadcast_client(
-                preview=preview,
+                preview=preview or preview_websocket,
                 force_instagram_comment_broadcast=instagram_comment_message,
             )
             if preview or preview_websocket:

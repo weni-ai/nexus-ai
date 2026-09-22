@@ -208,7 +208,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         ctx.message.get("metadata"),
     )
     broadcast = get_guardrail_block_broadcast_client(
-        preview=ctx.preview,
+        preview=ctx.preview or ctx.preview_websocket,
         force_instagram_comment_broadcast=instagram_comment_message,
     )
 
