@@ -83,3 +83,26 @@ def get_guardrail_block_broadcast_client(
         os.environ.get("FLOWS_REST_ENDPOINT"),
         os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
     )
+
+
+def resolve_guardrail_block_broadcast_client(
+    *,
+    preview: bool = False,
+    preview_websocket: bool = False,
+    turn_broadcast=None,
+    force_instagram_comment_broadcast: bool = False,
+):
+    """
+    Broadcast client for ApplyGuardrail early-exit replies, per execution mode.
+
+    The webchat preview (preview_websocket without preview) renders from the Flows
+    socket, so the block reply has to reuse the turn's client and reach the same
+    stream endpoint as normal replies. Classic preview and production keep the
+    dedicated client.
+    """
+    if preview_websocket and not preview and turn_broadcast is not None:
+        return turn_broadcast
+    return get_guardrail_block_broadcast_client(
+        preview=preview,
+        force_instagram_comment_broadcast=force_instagram_comment_broadcast,
+    )
