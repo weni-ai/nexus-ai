@@ -54,7 +54,7 @@ from router.tasks.sqs_message_events import (
 )
 from router.utils.redis_clients import get_redis_read_client
 
-from .actions_client import get_action_clients, get_guardrail_block_broadcast_client
+from .actions_client import get_action_clients, resolve_guardrail_block_broadcast_client
 
 logger = logging.getLogger(__name__)
 
@@ -750,7 +750,11 @@ def start_inline_agents(  # noqa: C901
                 message_conversation_log_uuid=message_conversation_log_uuid,
                 turn_id=turn_id,
             )
-            block_broadcast = get_guardrail_block_broadcast_client(preview=preview or preview_websocket)
+            block_broadcast = resolve_guardrail_block_broadcast_client(
+                preview=preview,
+                preview_websocket=preview_websocket,
+                turn_broadcast=broadcast,
+            )
             if preview or preview_websocket:
                 return dispatch_preview(
                     e.message, message_obj, block_broadcast, user_email, agents_backend, flows_user_email
