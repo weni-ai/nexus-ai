@@ -5,6 +5,7 @@ from inline_agents.backends.openai.agent_entities import (
     _final_output_from_tool_dict,
     build_reasoning_settings,
     resolve_agent_model,
+    supports_reasoning_mode,
 )
 from inline_agents.backends.openai.prompt_cache import PromptCachingOpenAIResponsesModel
 
@@ -112,3 +113,41 @@ class BuildReasoningSettingsTests(SimpleTestCase):
 
     def test_returns_none_when_no_reasoning_fields(self):
         self.assertIsNone(build_reasoning_settings())
+
+    def test_omits_mode_for_luna_on_aws_mantle(self):
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=True,
+            reasoning_effort="high",
+            reasoning_summary="auto",
+            reasoning_mode="pro",
+            model="openai.gpt-5.6-luna",
+            model_vendor="aws_mantle",
+        )
+
+        dumped = reasoning.model_dump(exclude_unset=True)
+        self.assertEqual(reasoning.effort, "high")
+        self.assertEqual(reasoning.summary, "auto")
+        self.assertNotIn("mode", dumped)
+
+    def test_includes_mode_for_luna_on_openai_vendor(self):
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=True,
+            reasoning_effort="high",
+            reasoning_summary="auto",
+            reasoning_mode="pro",
+            model="openai.gpt-5.6-luna",
+            model_vendor="OpenAI",
+        )
+
+        self.assertEqual(reasoning.mode, "pro")
+
+
+class SupportsReasoningModeTests(SimpleTestCase):
+    def test_luna_on_aws_mantle_is_unsupported(self):
+        self.assertFalse(supports_reasoning_mode("openai.gpt-5.6-luna", "aws_mantle"))
+
+    def test_luna_on_openai_vendor_is_supported(self):
+        self.assertTrue(supports_reasoning_mode("openai.gpt-5.6-luna", "OpenAI"))
+
+    def test_other_mantle_models_keep_mode(self):
+        self.assertTrue(supports_reasoning_mode("openai.gpt-5.4-mini", "aws_mantle"))
