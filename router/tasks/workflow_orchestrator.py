@@ -31,7 +31,7 @@ from nexus.projects.websockets.consumers import send_preview_message_to_websocke
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.services.sqs_producer import get_conversation_events_producer
-from router.tasks.actions_client import get_action_clients, resolve_guardrail_block_broadcast_client
+from router.tasks.actions_client import get_action_clients, get_guardrail_block_broadcast_client
 from router.tasks.exceptions import EmptyFinalResponseException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
@@ -202,10 +202,11 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         turn_id=ctx.turn_id,
     )
 
-    broadcast = resolve_guardrail_block_broadcast_client(
+    broadcast = get_guardrail_block_broadcast_client(
         preview=ctx.preview,
-        preview_websocket=ctx.preview_websocket,
-        turn_broadcast=ctx.broadcast,
+        project_use_components=(
+            ctx.cached_data.project_dict.get("use_components", False) if ctx.cached_data else False
+        ),
     )
 
     if ctx.preview or ctx.preview_websocket:
