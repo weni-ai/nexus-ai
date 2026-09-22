@@ -121,19 +121,31 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
+REASONING_MODE_UNSUPPORTED_MODELS = frozenset({"openai.gpt-5.6-luna"})
+
+
+def supports_reasoning_mode(model: str, model_vendor: str) -> bool:
+    """GPT-5.6 Luna on AWS Mantle rejects `reasoning.mode` with a 400."""
+    return not (
+        (model_vendor or "").lower() == "aws_mantle" and model in REASONING_MODE_UNSUPPORTED_MODELS
+    )
+
+
 def build_reasoning_settings(
     *,
     model_has_reasoning: bool = False,
     reasoning_effort: str | None = None,
     reasoning_summary: str | None = None,
     reasoning_mode: str | None = None,
+    model: str = "",
+    model_vendor: str = "",
 ) -> Reasoning | None:
-    """Build Responses API reasoning settings, omitting blank mode."""
+    """Build Responses API reasoning settings, omitting blank or unsupported mode."""
     kwargs: Dict[str, Any] = {}
     if model_has_reasoning and reasoning_effort:
         kwargs["effort"] = reasoning_effort
         kwargs["summary"] = reasoning_summary
-    if reasoning_mode:
+    if reasoning_mode and supports_reasoning_mode(model, model_vendor):
         kwargs["mode"] = reasoning_mode
     if not kwargs:
         return None
@@ -257,6 +269,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
     ):
         tools.extend(self.function_tools())
 
+        foundation_model = model
         model = resolve_agent_model(model, user_model_credentials, model_vendor=model_vendor)
 
         model_settings_kwargs: Dict[str, Any] = {
@@ -273,6 +286,8 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
             reasoning_effort=reasoning_effort,
             reasoning_summary=reasoning_summary,
             reasoning_mode=reasoning_mode,
+            model=foundation_model,
+            model_vendor=model_vendor,
         )
         if reasoning is not None:
             model_settings_kwargs["reasoning"] = reasoning
