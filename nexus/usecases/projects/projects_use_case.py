@@ -27,6 +27,7 @@ from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 
 from .create import ProjectAuthUseCase
+from .live_desk_copilot import assign_parent_project
 
 
 class ProjectsUseCase:
@@ -135,7 +136,10 @@ class ProjectsUseCase:
             agents_backend=backend,
             manager_agent=manager_agent,
             inline_agent_switch=project_dto.inline_agent_switch,
+            is_live_desk_copilot=project_dto.is_live_desk_copilot,
         )
+        if assign_parent_project(project, project_dto.parent_uuid):
+            project.save(update_fields=["parent_project"])
 
         self.create_brain_project_base(project_dto=project_dto, user_email=user_email, project=project)
 
