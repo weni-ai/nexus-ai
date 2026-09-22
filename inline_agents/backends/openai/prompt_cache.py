@@ -3,7 +3,6 @@
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import replace
-from functools import lru_cache
 from threading import Lock
 
 from agents import ModelSettings
@@ -30,8 +29,13 @@ def supports_explicit_prompt_cache(model: str, model_vendor: str) -> bool:
     return (model_vendor or "").lower() == "aws_mantle" and model in PROMPT_CACHE_MODELS
 
 
-@lru_cache(maxsize=None)
+_warned_models: set[str] = set()
+
+
 def _log_missing_markers_once(model: str) -> None:
+    if model in _warned_models:
+        return
+    _warned_models.add(model)
     logger.warning(
         "Explicit prompt caching disabled for %s because Manager 2.8 markers are missing: %s, %s",
         model,
@@ -119,17 +123,12 @@ class PromptCachingOpenAIResponsesModel(Model):
         self._responses_model_lock = Lock()
 
     def _model(self) -> OpenAIResponsesModel:
-        if self._responses_model is not None:
-            return self._responses_model
-
         with self._responses_model_lock:
-            if self._responses_model is not None:
-                return self._responses_model
-
-            client = get_default_openai_client()
-            if client is None:
-                raise RuntimeError("The default OpenAI client must be configured before invoking AWS Mantle")
-            self._responses_model = OpenAIResponsesModel(model=self.model, openai_client=client)
+            if self._responses_model is None:
+                client = get_default_openai_client()
+                if client is None:
+                    raise RuntimeError("The default OpenAI client must be configured before invoking AWS Mantle")
+                self._responses_model = OpenAIResponsesModel(model=self.model, openai_client=client)
             return self._responses_model
 
     def _prepare(
