@@ -13,6 +13,30 @@ from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.workflow_orchestrator import WorkflowContext, _handle_guardrails_block
 
 
+def _build_context(task_manager, *, preview: bool, preview_websocket: bool) -> WorkflowContext:
+    return WorkflowContext(
+        workflow_id="wf-1",
+        project_uuid="proj-1",
+        contact_urn="ext:user@example.com",
+        message={
+            "project_uuid": "proj-1",
+            "contact_urn": "ext:user@example.com",
+            "text": "fale sobre politica",
+            "channel_uuid": "ch-1",
+        },
+        preview=preview,
+        preview_websocket=preview_websocket,
+        simulation_channel=True,
+        language="pt-br",
+        user_email="user@example.com",
+        task_id="task-1",
+        task_manager=task_manager,
+        broadcast=MagicMock(name="grpc_stream_broadcast"),
+        agents_backend="OpenAIBackend",
+        flows_user_email="flows@example.com",
+    )
+
+
 class GetGuardrailBlockBroadcastClientTestCase(SimpleTestCase):
     def test_preview_uses_simulate_broadcast(self):
         client = get_guardrail_block_broadcast_client(preview=True)
@@ -35,6 +59,27 @@ class HandleGuardrailsBlockBroadcastTestCase(SimpleTestCase):
     @patch("router.tasks.workflow_orchestrator.notify_async")
     @patch("router.tasks.workflow_orchestrator.get_guardrail_block_broadcast_client")
     def test_uses_guardrail_block_client_not_ctx_broadcast(self, mock_get_client, _mock_notify, mock_dispatch):
+        classic = MagicMock(name="classic_broadcast")
+        mock_get_client.return_value = classic
+        mock_dispatch.return_value = "ok"
+
+        task_manager = MagicMock(spec=RedisTaskManager)
+        ctx = _build_context(task_manager, preview=False, preview_websocket=False)
+
+        result = _handle_guardrails_block(ctx, UnsafeMessageException("blocked"))
+
+        self.assertEqual(result, "ok")
+        mock_get_client.assert_called_once_with(
+            preview=False,
+            force_instagram_comment_broadcast=False,
+        )
+        mock_dispatch.assert_called_once()
+        self.assertIs(mock_dispatch.call_args.kwargs["direct_message"], classic)
+
+    @patch("router.tasks.workflow_orchestrator.dispatch")
+    @patch("router.tasks.workflow_orchestrator.notify_async")
+    @patch("router.tasks.workflow_orchestrator.get_guardrail_block_broadcast_client")
+    def test_instagram_comment_forces_comment_broadcast(self, mock_get_client, _mock_notify, mock_dispatch):
         classic = MagicMock(name="classic_broadcast")
         mock_get_client.return_value = classic
         mock_dispatch.return_value = "ok"
@@ -72,3 +117,22 @@ class HandleGuardrailsBlockBroadcastTestCase(SimpleTestCase):
         )
         mock_dispatch.assert_called_once()
         self.assertIs(mock_dispatch.call_args.kwargs["direct_message"], classic)
+
+    @patch("router.tasks.workflow_orchestrator.dispatch_preview")
+    @patch("router.tasks.workflow_orchestrator.notify_async")
+    @patch("router.tasks.workflow_orchestrator.get_guardrail_block_broadcast_client")
+    def test_websocket_preview_uses_simulator_client(self, mock_get_client, _mock_notify, mock_dispatch_preview):
+        """Websocket preview has preview=False, but the block reply must not hit the WhatsApp endpoint."""
+        mock_dispatch_preview.return_value = "ok"
+
+        task_manager = MagicMock(spec=RedisTaskManager)
+        ctx = _build_context(task_manager, preview=False, preview_websocket=True)
+
+        result = _handle_guardrails_block(ctx, UnsafeMessageException("blocked"))
+
+        self.assertEqual(result, "ok")
+        mock_get_client.assert_called_once_with(
+            preview=True,
+            force_instagram_comment_broadcast=False,
+        )
+        mock_dispatch_preview.assert_called_once()
