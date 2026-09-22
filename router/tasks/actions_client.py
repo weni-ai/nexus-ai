@@ -65,44 +65,43 @@ def get_action_clients(
 def get_guardrail_block_broadcast_client(
     *,
     preview: bool = False,
+    project_use_components: bool = False,
     force_instagram_comment_broadcast: bool = False,
 ):
     """
     Broadcast client for ApplyGuardrail early-exit replies.
+
+    Mirrors get_action_clients so the refusal reaches Flows through the same
+    endpoint as a normal reply, with streaming always off: the guardrail blocks
+    during preprocessing, before the backend opens a gRPC session, so a message
+    posted to the stream endpoint would have no session to be delivered on.
     """
     if preview:
+        if project_use_components:
+            return SimulateWhatsAppBroadcastHTTPClient(
+                os.environ.get("FLOWS_REST_ENDPOINT"),
+                os.environ.get("FLOWS_INTERNAL_TOKEN"),
+            )
         return SimulateBroadcast(
             os.environ.get("FLOWS_REST_ENDPOINT"),
             os.environ.get("FLOWS_INTERNAL_TOKEN"),
             get_file_info,
         )
-    broadcast_client = (
-        InstagramCommentBroadcastHTTPClient if force_instagram_comment_broadcast else WhatsAppBroadcastHTTPClient
-    )
-    return broadcast_client(
+
+    if force_instagram_comment_broadcast:
+        return InstagramCommentBroadcastHTTPClient(
+            os.environ.get("FLOWS_REST_ENDPOINT"),
+            os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
+        )
+
+    if settings.AGENT_USE_COMPONENTS or project_use_components:
+        return WhatsAppBroadcastHTTPClient(
+            os.environ.get("FLOWS_REST_ENDPOINT"),
+            os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
+        )
+
+    return SendMessageHTTPClient(
         os.environ.get("FLOWS_REST_ENDPOINT"),
         os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
-    )
-
-
-def resolve_guardrail_block_broadcast_client(
-    *,
-    preview: bool = False,
-    preview_websocket: bool = False,
-    turn_broadcast=None,
-    force_instagram_comment_broadcast: bool = False,
-):
-    """
-    Broadcast client for ApplyGuardrail early-exit replies, per execution mode.
-
-    The webchat preview (preview_websocket without preview) renders from the Flows
-    socket, so the block reply has to reuse the turn's client and reach the same
-    stream endpoint as normal replies. Classic preview and production keep the
-    dedicated client.
-    """
-    if preview_websocket and not preview and turn_broadcast is not None:
-        return turn_broadcast
-    return get_guardrail_block_broadcast_client(
-        preview=preview,
-        force_instagram_comment_broadcast=force_instagram_comment_broadcast,
+        use_grpc=False,
     )
