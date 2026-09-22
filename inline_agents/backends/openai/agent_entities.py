@@ -13,6 +13,10 @@ from openai.types.shared import Reasoning
 from inline_agents.backends.openai.custom_providers import resolve_custom_model
 from inline_agents.backends.openai.entities import Context
 from inline_agents.backends.openai.knowledge_base import retrieve_knowledge_base
+from inline_agents.backends.openai.prompt_cache import (
+    PromptCachingOpenAIResponsesModel,
+    supports_explicit_prompt_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +146,9 @@ def resolve_agent_model(
     model_vendor: str = "",
 ) -> Union[Model, LitellmModel, str]:
     """Return a custom Model, LitellmModel, or the model string unchanged."""
+    if supports_explicit_prompt_cache(model, model_vendor):
+        return PromptCachingOpenAIResponsesModel(model=model)
+
     credentials = user_model_credentials or {}
     custom = resolve_custom_model(model, credentials, model_vendor=model_vendor)
     if custom is not None:
