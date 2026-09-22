@@ -202,7 +202,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         turn_id=ctx.turn_id,
     )
 
-    broadcast = get_guardrail_block_broadcast_client(preview=ctx.preview)
+    broadcast = get_guardrail_block_broadcast_client(preview=ctx.preview or ctx.preview_websocket)
 
     if ctx.preview or ctx.preview_websocket:
         return dispatch_preview(

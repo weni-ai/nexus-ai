@@ -750,7 +750,7 @@ def start_inline_agents(  # noqa: C901
                 message_conversation_log_uuid=message_conversation_log_uuid,
                 turn_id=turn_id,
             )
-            block_broadcast = get_guardrail_block_broadcast_client(preview=preview)
+            block_broadcast = get_guardrail_block_broadcast_client(preview=preview or preview_websocket)
             if preview or preview_websocket:
                 return dispatch_preview(
                     e.message, message_obj, block_broadcast, user_email, agents_backend, flows_user_email
