@@ -156,6 +156,19 @@ class PromptCachingOpenAIResponsesModelTests(SimpleTestCase):
         self.assertEqual(input_items, "Hello")
         self.assertIs(resulting_settings, settings)
 
+    def test_missing_markers_warns_once_per_model(self):
+        from inline_agents.backends.openai import prompt_cache
+
+        model = PromptCachingOpenAIResponsesModel("openai.gpt-5.6-luna")
+        prompt_cache._warned_models.discard(model.model)
+
+        with self.assertLogs(prompt_cache.logger.name, level="WARNING") as captured:
+            model._prepare("Prompt without markers", "Hello", ModelSettings())
+            model._prepare("Prompt without markers", "Hello", ModelSettings())
+
+        self.assertEqual(len(captured.records), 1)
+        prompt_cache._warned_models.discard(model.model)
+
     def test_prepare_keeps_empty_instructions_unchanged(self):
         model = PromptCachingOpenAIResponsesModel("openai.gpt-5.6-luna")
         settings = ModelSettings()
