@@ -6,9 +6,10 @@ import base64
 import logging
 import os
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import httpx
+import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,51 @@ class WhirlpoolAPIError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
+
+
+def _payload_turn_shape(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Describe the outgoing ``contents`` without exposing message text.
+
+    Gemini rejects requests ending with a model turn, so the role sequence is
+    what we need on the error event; the part keys tell text turns apart from
+    functionCall/functionResponse ones.
+    """
+    system_instruction = payload.get("systemInstruction")
+    system_parts = system_instruction.get("parts") if isinstance(system_instruction, dict) else None
+    system_text = "\n".join(
+        str(part.get("text") or "")
+        for part in (system_parts or [])
+        if isinstance(part, dict)
+    )
+    instruction_shape = {
+        "has_system_instruction": bool(system_text),
+        "has_safety_guardrails": "<safety_guardrails>" in system_text,
+    }
+
+    contents = payload.get("contents")
+    if not isinstance(contents, list):
+        return {**instruction_shape, "turns": None, "trailing_role": None}
+
+    turns = []
+    for turn in contents:
+        if not isinstance(turn, dict):
+            turns.append({"role": None, "parts": []})
+            continue
+        parts = turn.get("parts")
+        part_keys = (
+            ["+".join(sorted(p)) if isinstance(p, dict) else type(p).__name__ for p in parts]
+            if isinstance(parts, list)
+            else []
+        )
+        turns.append({"role": turn.get("role"), "parts": part_keys})
+
+    return {
+        **instruction_shape,
+        "turn_count": len(turns),
+        "roles": [turn["role"] for turn in turns],
+        "turns": turns,
+        "trailing_role": turns[-1]["role"] if turns else None,
+    }
 
 
 class WhirlpoolClient:
@@ -127,6 +173,7 @@ class WhirlpoolClient:
 
         body = _safe_json(response)
         if response.status_code >= 400:
+            sentry_sdk.set_context("whirlpool_request", _payload_turn_shape(payload))
             raise WhirlpoolAPIError(
                 f"Whirlpool generateContent failed with status {response.status_code}: {body}",
                 status_code=response.status_code,
