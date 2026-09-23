@@ -234,11 +234,25 @@ class InstagramCommentBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
         text = "\n\n".join(texts) if texts else str(msg)
         return [{"msg": {"text": text}}]
 
-    def format_response_for_bedrock(
-        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
-    ) -> List[Dict]:
-        formatted_msgs = super().format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
-        return self._single_text_message(msg, formatted_msgs)
+    def send_direct_message(
+        self,
+        msg: str,
+        urns: List,
+        project_uuid: str,
+        user: str,
+        full_chunks: List[Dict] = None,
+        backend: str = "BedrockBackend",
+        **kwargs,
+    ) -> None:
+        super().send_direct_message(
+            msg,
+            urns,
+            project_uuid,
+            user,
+            full_chunks=full_chunks,
+            backend="OpenAIBackend",
+            **kwargs,
+        )
 
     def format_message_for_openai(
         self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
