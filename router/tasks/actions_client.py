@@ -6,6 +6,7 @@ from inline_agents.backends.openai.grpc import is_grpc_enabled
 from nexus.usecases.intelligences.retrieve import get_file_info
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import (
+    InstagramCommentBroadcastHTTPClient,
     SendMessageHTTPClient,
     WhatsAppBroadcastHTTPClient,
 )
@@ -19,6 +20,7 @@ def get_action_clients(
     project_use_components: bool = False,
     project_uuid: str = None,
     stream_support: bool = False,
+    force_instagram_comment_broadcast: bool = False,
 ):
     if preview:
         flow_start = SimulateFlowStart(os.environ.get("FLOWS_REST_ENDPOINT"), os.environ.get("FLOWS_INTERNAL_TOKEN"))
@@ -37,7 +39,14 @@ def get_action_clients(
         multi_agents and project_uuid and is_grpc_enabled(project_uuid, project_use_components, stream_support)
     )
 
-    if multi_agents and settings.AGENT_USE_COMPONENTS or project_use_components:
+    uses_components = (multi_agents and settings.AGENT_USE_COMPONENTS) or project_use_components
+
+    if force_instagram_comment_broadcast:
+        broadcast = InstagramCommentBroadcastHTTPClient(
+            os.environ.get("FLOWS_REST_ENDPOINT"),
+            os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
+        )
+    elif uses_components:
         broadcast = WhatsAppBroadcastHTTPClient(
             os.environ.get("FLOWS_REST_ENDPOINT"),
             os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
@@ -53,7 +62,12 @@ def get_action_clients(
     return broadcast, flow_start
 
 
-def get_guardrail_block_broadcast_client(*, preview: bool = False, project_use_components: bool = False):
+def get_guardrail_block_broadcast_client(
+    *,
+    preview: bool = False,
+    project_use_components: bool = False,
+    force_instagram_comment_broadcast: bool = False,
+):
     """
     Broadcast client for ApplyGuardrail early-exit replies.
 
@@ -72,6 +86,12 @@ def get_guardrail_block_broadcast_client(*, preview: bool = False, project_use_c
             os.environ.get("FLOWS_REST_ENDPOINT"),
             os.environ.get("FLOWS_INTERNAL_TOKEN"),
             get_file_info,
+        )
+
+    if force_instagram_comment_broadcast:
+        return InstagramCommentBroadcastHTTPClient(
+            os.environ.get("FLOWS_REST_ENDPOINT"),
+            os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN"),
         )
 
     if settings.AGENT_USE_COMPONENTS or project_use_components:

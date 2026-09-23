@@ -32,8 +32,8 @@ def assign_parent_project(project: Project, parent_uuid: Optional[str]) -> bool:
 
     if str(project.uuid) == str(parent_uuid):
         logger.warning(
-            "[LiveDeskCopilot] Ignoring self-referential parent_project",
-            extra={"project_uuid": str(project.uuid)},
+            "[LiveDeskCopilot] Ignoring self-referential parent_project project_uuid=%s",
+            str(project.uuid),
         )
         return False
 
@@ -41,8 +41,9 @@ def assign_parent_project(project: Project, parent_uuid: Optional[str]) -> bool:
         parent = Project.objects.get(uuid=parent_uuid)
     except Project.DoesNotExist:
         logger.warning(
-            "[LiveDeskCopilot] Parent project not found",
-            extra={"project_uuid": str(project.uuid), "parent_uuid": parent_uuid},
+            "[LiveDeskCopilot] Parent project not found project_uuid=%s parent_uuid=%s",
+            str(project.uuid),
+            parent_uuid,
         )
         return False
 
@@ -55,7 +56,7 @@ def assign_parent_project(project: Project, parent_uuid: Optional[str]) -> bool:
 def vtex_runtime_fields(project: Project) -> dict[str, Optional[str]]:
     """VTEX fields agents should use: parent account for Live Desk copilots."""
     source = project
-    if project.is_live_desk_copilot is True:
+    if project.is_live_desk_copilot:
         parent = project.parent_project
         if parent is None and project.parent_project_id:
             parent = Project.objects.filter(pk=project.parent_project_id).first()

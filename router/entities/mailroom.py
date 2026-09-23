@@ -10,7 +10,8 @@ def extract_ig_comment_broadcast_fields(metadata: Optional[Dict] = None) -> Dict
 
     Existing overwrite_message can be a string; that path is unchanged.
     If mailroom sent ig_comment, id is required — a broken payload must raise.
-    ig_response_type is forwarded only when mailroom sent it.
+    ig_response_type is forwarded only when mailroom sent it, either alongside
+    ig_comment or inside it; the outer value wins when both are present.
     """
     overwrite_message = (metadata or {}).get("overwrite_message")
     if not isinstance(overwrite_message, dict) or "ig_comment" not in overwrite_message:
@@ -23,6 +24,27 @@ def extract_ig_comment_broadcast_fields(metadata: Optional[Dict] = None) -> Dict
     elif "ig_response_type" in ig_comment:
         fields["ig_response_type"] = ig_comment["ig_response_type"]
     return fields
+
+
+def is_instagram_comment_message(contact_urn: str, metadata: Optional[Dict] = None) -> bool:
+    """Return whether this message is an Instagram comment, not a regular DM."""
+    if not (contact_urn or "").startswith("instagram:"):
+        return False
+
+    overwrite_message = (metadata or {}).get("overwrite_message")
+    if not isinstance(overwrite_message, dict):
+        return False
+
+    ig_comment = overwrite_message.get("ig_comment")
+    return isinstance(ig_comment, dict) and bool(ig_comment.get("id"))
+
+
+def stream_support_for_message(message: Dict) -> bool:
+    """Disable streaming when a reply must be linked to an Instagram comment."""
+    return bool(
+        message.get("stream_support", False)
+        and not is_instagram_comment_message(message.get("contact_urn", ""), message.get("metadata"))
+    )
 
 
 class ContactField(BaseModel):

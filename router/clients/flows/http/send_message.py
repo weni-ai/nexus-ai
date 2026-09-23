@@ -41,10 +41,9 @@ class SendMessageHTTPClient(DirectMessage):
     def send_direct_message(
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ) -> None:
-        ig_fields = ig_comment_fields_from_kwargs(kwargs)
         if self.__use_grpc:
             # Use same format as whatsapp_broadcasts endpoint
-            msg = {"msg": {"text": text, **ig_fields}}
+            msg = {"msg": {"text": text}}
             channel_uuid = kwargs.get("channel_uuid", "")
             logger.info(
                 f"[SendMessageHTTPClient] Using GRPC stream endpoint - "
@@ -65,7 +64,7 @@ class SendMessageHTTPClient(DirectMessage):
 
         url = f"{self.__host}/mr/msg/send"
 
-        payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text, **ig_fields}
+        payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
         headers = {"Authorization": f"Token {self.__access_token}", "Content-Type": "application/json"}
 
         payload = json.dumps(payload).encode("utf-8")
@@ -79,6 +78,8 @@ class SendMessageHTTPClient(DirectMessage):
 
 
 class WhatsAppBroadcastHTTPClient(DirectMessage):
+    broadcast_timeout = None
+
     def __init__(self, host: str, access_token: str) -> None:
         self.__host = host
         self.__access_token = access_token
@@ -147,7 +148,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
 
     def send_direct_message(
         self,
-        msg: Dict,
+        msg: str,
         urns: List,
         project_uuid: str,
         user: str,
@@ -163,23 +164,28 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         apply_ig_comment_fields_to_broadcast_msgs(msgs, ig_comment_fields_from_kwargs(kwargs))
 
         for msg in msgs:
-            response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
+            response = FlowsRESTClient().whatsapp_broadcast(
+                urns,
+                msg,
+                project_uuid,
+                timeout=self.broadcast_timeout,
+            )
             try:
                 response.raise_for_status()
             except Exception as error:
                 raise exceptions.UnableToSendMessage(str(error)) from error
 
     def format_response_for_bedrock(
-        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
-    ) -> None:
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> List[Dict]:
         msgs = self.get_json_strings(msg)
         if not msgs:
             msgs = [{"msg": {"text": str(msg)}}]
         return msgs
 
     def format_message_for_openai(
-        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
-    ) -> Dict:
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> List[Dict]:
         msgs = None
 
         if isinstance(msg, str):
@@ -209,3 +215,33 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
 
     def string_to_simple_text(self, text):
         return {"msg": {"text": text}}
+
+
+class InstagramCommentBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
+    """Send a plain-text Instagram comment reply through the broadcast API."""
+
+    broadcast_timeout = 30
+
+    @staticmethod
+    def _single_text_message(msg: str, formatted_msgs: List[Dict]) -> List[Dict]:
+        texts = []
+        for item in formatted_msgs:
+            item_msg = item.get("msg") if isinstance(item, dict) else None
+            text = item_msg.get("text") if isinstance(item_msg, dict) else None
+            if text is not None:
+                texts.append(str(text))
+
+        text = "\n\n".join(texts) if texts else str(msg)
+        return [{"msg": {"text": text}}]
+
+    def format_response_for_bedrock(
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> List[Dict]:
+        formatted_msgs = super().format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
+        return self._single_text_message(msg, formatted_msgs)
+
+    def format_message_for_openai(
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> List[Dict]:
+        formatted_msgs = super().format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
+        return self._single_text_message(msg, formatted_msgs)

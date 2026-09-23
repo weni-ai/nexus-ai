@@ -31,6 +31,7 @@ from nexus.projects.websockets.consumers import send_preview_message_to_websocke
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
 from router.entities import message_factory
+from router.entities.mailroom import is_instagram_comment_message, stream_support_for_message
 from router.services.pre_generation_service import PreGenerationService
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
@@ -547,6 +548,11 @@ def start_inline_agents(  # noqa: C901
     status = TURN_STATUS_SUCCESS
     flows_user_email = os.environ.get("FLOW_USER_EMAIL")
     agents_backend = "OpenAIBackend"
+    instagram_comment_message = is_instagram_comment_message(
+        message.get("contact_urn", ""),
+        message.get("metadata"),
+    )
+    effective_stream_support = stream_support_for_message(message)
 
     try:
         try:
@@ -578,7 +584,8 @@ def start_inline_agents(  # noqa: C901
                     multi_agents=True,
                     project_use_components=project_dict["use_components"],
                     project_uuid=project_uuid,
-                    stream_support=message.get("stream_support", False),
+                    stream_support=effective_stream_support,
+                    force_instagram_comment_broadcast=instagram_comment_message,
                 )
 
                 processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(
@@ -665,7 +672,7 @@ def start_inline_agents(  # noqa: C901
                     foundation_model=foundation_model,
                     turn_off_rationale=turn_off_rationale,
                     channel_type=message.get("channel_type", ""),
-                    stream_support=message.get("stream_support", False),
+                    stream_support=effective_stream_support,
                     supervisor_agent_uuid=supervisor_agent_uuid,
                     message_conversation_log_uuid=message_conversation_log_uuid,
                     preview_websocket=preview_websocket,
@@ -753,6 +760,7 @@ def start_inline_agents(  # noqa: C901
             block_broadcast = get_guardrail_block_broadcast_client(
                 preview=preview,
                 project_use_components=project_dict["use_components"],
+                force_instagram_comment_broadcast=instagram_comment_message,
             )
             if preview or preview_websocket:
                 return dispatch_preview(

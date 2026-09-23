@@ -2,7 +2,11 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from router.clients.flows.http.send_message import SendMessageHTTPClient, WhatsAppBroadcastHTTPClient
+from router.clients.flows.http.send_message import (
+    InstagramCommentBroadcastHTTPClient,
+    SendMessageHTTPClient,
+    WhatsAppBroadcastHTTPClient,
+)
 from router.clients.preview.simulator.broadcast import SimulateBroadcast, SimulateWhatsAppBroadcastHTTPClient
 from router.tasks.actions_client import get_guardrail_block_broadcast_client
 from router.tasks.invocation_context import CachedProjectData
@@ -58,6 +62,13 @@ class GetGuardrailBlockBroadcastClientTestCase(SimpleTestCase):
         client = get_guardrail_block_broadcast_client(preview=False)
         self.assertFalse(client._SendMessageHTTPClient__use_grpc)
 
+    def test_instagram_comment_uses_single_text_broadcast(self):
+        client = get_guardrail_block_broadcast_client(
+            preview=False,
+            force_instagram_comment_broadcast=True,
+        )
+        self.assertIs(type(client), InstagramCommentBroadcastHTTPClient)
+
 
 class HandleGuardrailsBlockBroadcastTestCase(SimpleTestCase):
     @patch("router.tasks.workflow_orchestrator.dispatch")
@@ -74,7 +85,11 @@ class HandleGuardrailsBlockBroadcastTestCase(SimpleTestCase):
         result = _handle_guardrails_block(ctx, UnsafeMessageException("blocked"))
 
         self.assertEqual(result, "ok")
-        mock_get_client.assert_called_once_with(preview=False, project_use_components=False)
+        mock_get_client.assert_called_once_with(
+            preview=False,
+            project_use_components=False,
+            force_instagram_comment_broadcast=False,
+        )
         mock_dispatch.assert_called_once()
         self.assertIs(mock_dispatch.call_args.kwargs["direct_message"], dedicated)
 
@@ -93,7 +108,11 @@ class HandleGuardrailsBlockBroadcastTestCase(SimpleTestCase):
         result = _handle_guardrails_block(ctx, UnsafeMessageException("blocked"))
 
         self.assertEqual(result, "ok")
-        mock_get_client.assert_called_once_with(preview=False, project_use_components=False)
+        mock_get_client.assert_called_once_with(
+            preview=False,
+            project_use_components=False,
+            force_instagram_comment_broadcast=False,
+        )
         self.assertIs(mock_dispatch_preview.call_args.args[2], dedicated)
         self.assertIsNot(mock_dispatch_preview.call_args.args[2], ctx.broadcast)
 
@@ -110,4 +129,33 @@ class HandleGuardrailsBlockBroadcastTestCase(SimpleTestCase):
 
         _handle_guardrails_block(ctx, UnsafeMessageException("blocked"))
 
-        mock_get_client.assert_called_once_with(preview=False, project_use_components=True)
+        mock_get_client.assert_called_once_with(
+            preview=False,
+            project_use_components=True,
+            force_instagram_comment_broadcast=False,
+        )
+
+    @patch("router.tasks.workflow_orchestrator.dispatch")
+    @patch("router.tasks.workflow_orchestrator.notify_async")
+    @patch("router.tasks.workflow_orchestrator.get_guardrail_block_broadcast_client")
+    def test_instagram_comment_forces_broadcast_client(self, mock_get_client, _mock_notify, mock_dispatch):
+        mock_dispatch.return_value = "ok"
+
+        task_manager = MagicMock(spec=RedisTaskManager)
+        ctx = _build_context(task_manager, preview=False, preview_websocket=False)
+        ctx.contact_urn = "instagram:5467890213"
+        ctx.message = {
+            "project_uuid": "proj-1",
+            "contact_urn": "instagram:5467890213",
+            "text": "fale sobre politica",
+            "channel_uuid": "ch-1",
+            "metadata": {"overwrite_message": {"ig_comment": {"id": "30065221"}}},
+        }
+
+        _handle_guardrails_block(ctx, UnsafeMessageException("blocked"))
+
+        mock_get_client.assert_called_once_with(
+            preview=False,
+            project_use_components=False,
+            force_instagram_comment_broadcast=True,
+        )

@@ -21,10 +21,7 @@ class SyncLiveDeskCopilotUseCase:
         try:
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
-            logger.warning(
-                "[SyncLiveDeskCopilotUseCase] Project not found",
-                extra={"project_uuid": project_uuid},
-            )
+            logger.warning("[SyncLiveDeskCopilotUseCase] Project not found project_uuid=%s", project_uuid)
             return None
 
         update_fields: list[str] = []
@@ -48,7 +45,9 @@ class SyncLiveDeskCopilotUseCase:
 
         notify_async(event="cache_invalidation:project", project=project)
         logger.info(
-            "[SyncLiveDeskCopilotUseCase] Live Desk copilot fields synced",
-            extra={"project_uuid": project_uuid, "update_fields": update_fields, "mode": mode},
+            "[SyncLiveDeskCopilotUseCase] Live Desk copilot fields synced project_uuid=%s update_fields=%s mode=%s",
+            project_uuid,
+            update_fields,
+            mode,
         )
         return project
