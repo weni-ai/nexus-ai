@@ -241,9 +241,9 @@ class InstagramCommentBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
         project_uuid: str,
         user: str,
         full_chunks: List[Dict] = None,
-        backend: str = "BedrockBackend",
         **kwargs,
     ) -> None:
+        kwargs.pop("backend", None)
         super().send_direct_message(
             msg,
             urns,
