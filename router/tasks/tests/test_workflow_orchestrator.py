@@ -10,6 +10,8 @@ from router.tasks.workflow_orchestrator import (
     _finalize_workflow,
     _handle_workflow_error,
     _initialize_workflow,
+    _run_generation,
+    _run_pre_generation,
 )
 
 
@@ -172,6 +174,98 @@ class InitializeWorkflowTestCase(SimpleTestCase):
 
         # Typing indicator observer is dispatched but handles preview internally
         mock_notify_async.assert_called_once()
+
+
+class InstagramCommentWorkflowRoutingTestCase(SimpleTestCase):
+    def _context(self):
+        return WorkflowContext(
+            workflow_id="wf-ig-comment",
+            project_uuid="project-uuid",
+            contact_urn="instagram:5467890213",
+            message={
+                "project_uuid": "project-uuid",
+                "contact_urn": "instagram:5467890213",
+                "text": "Legal!",
+                "metadata": {
+                    "overwrite_message": {
+                        "ig_comment": {"id": "30065221"},
+                        "ig_response_type": "dm_comment",
+                    }
+                },
+                "stream_support": True,
+            },
+            preview=False,
+            preview_websocket=False,
+            simulation_channel=False,
+            language="pt-br",
+            user_email="user@example.com",
+            task_id="task-123",
+            task_manager=MagicMock(),
+            flows_user_email="flows@example.com",
+        )
+
+    @patch("router.tasks.workflow_orchestrator.get_action_clients")
+    @patch("router.tasks.workflow_orchestrator.deserialize_cached_data")
+    @patch("router.tasks.workflow_orchestrator.pre_generation_task")
+    def test_pre_generation_forces_broadcast_and_disables_streaming(
+        self,
+        mock_pre_generation_task,
+        mock_deserialize_cached_data,
+        mock_get_action_clients,
+    ):
+        ctx = self._context()
+        cached_data = MagicMock()
+        cached_data.project_dict = {"use_components": False}
+        mock_deserialize_cached_data.return_value = cached_data
+        mock_pre_generation_task.run.return_value = {
+            "status": "success",
+            "cached_data": {},
+            "agents_backend": "OpenAIBackend",
+        }
+        mock_get_action_clients.return_value = (MagicMock(), MagicMock())
+
+        _run_pre_generation(ctx)
+
+        mock_get_action_clients.assert_called_once_with(
+            preview=False,
+            multi_agents=True,
+            project_use_components=False,
+            project_uuid="project-uuid",
+            stream_support=False,
+            force_instagram_comment_broadcast=True,
+        )
+
+    @patch("router.tasks.workflow_orchestrator._invoke_backend")
+    @patch("router.tasks.workflow_orchestrator.BackendsRegistry.get_backend")
+    @patch("router.tasks.workflow_orchestrator.should_skip_conversation_sqs", return_value=True)
+    @patch("router.tasks.workflow_orchestrator._extract_and_apply_message_context")
+    @patch("router.tasks.workflow_orchestrator._create_message_object")
+    @patch("router.tasks.workflow_orchestrator.apply_simulation_foundation_model_override")
+    @patch("router.tasks.workflow_orchestrator._preprocess_message_input")
+    def test_generation_disables_grpc_streaming_for_comment(
+        self,
+        mock_preprocess,
+        mock_apply_model_override,
+        mock_create_message,
+        _mock_extract_context,
+        _mock_skip_sqs,
+        _mock_get_backend,
+        mock_invoke_backend,
+    ):
+        ctx = self._context()
+        ctx.cached_data = MagicMock(guardrails_config={})
+        ctx.agents_backend = "OpenAIBackend"
+        mock_preprocess.return_value = (ctx.message, None, False)
+        mock_apply_model_override.return_value = None
+        mock_create_message.return_value = MagicMock(
+            text="Legal!",
+            channel_uuid="channel-uuid",
+            contact_name="",
+        )
+        mock_invoke_backend.return_value = ("Obrigado!", False)
+
+        self.assertEqual(_run_generation(ctx), ("Obrigado!", False))
+        self.assertFalse(mock_invoke_backend.call_args.kwargs["stream_support"])
 
 
 class FinalizeWorkflowTestCase(SimpleTestCase):
