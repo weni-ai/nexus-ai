@@ -10,7 +10,9 @@ from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.event_driven.parsers import JSONParser
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.usecases.projects.live_desk_copilot import extract_parent_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.usecases.projects.sync_live_desk_copilot import SyncLiveDeskCopilotUseCase
 from nexus.usecases.projects.sync_vtex import (
     SyncProjectVtexUseCase,
     extract_vtex_fields,
@@ -25,6 +27,7 @@ def _extract_project_payload(body: dict) -> dict:
 
 
 def _build_project_dto(body: dict) -> ProjectCreationDTO:
+    parent_uuid, _ = extract_parent_uuid(body)
     return ProjectCreationDTO(
         uuid=body.get("uuid"),
         name=body.get("name"),
@@ -35,6 +38,8 @@ def _build_project_dto(body: dict) -> ProjectCreationDTO:
         authorizations=body.get("authorizations"),
         indexer_database=body.get("indexer_database") or Project.BEDROCK,
         inline_agent_switch=body.get("inline_agent_switch", True),
+        is_live_desk_copilot=bool(body.get("is_live_desk_copilot", False)),
+        parent_uuid=parent_uuid,
     )
 
 
@@ -42,6 +47,12 @@ def _sync_created_project_vtex(project_uuid: str | None, vtex_fields) -> None:
     if not project_uuid:
         return
     SyncProjectVtexUseCase().sync_project_vtex(project_uuid, vtex_fields, mode="create")
+
+
+def _sync_created_live_desk_copilot(project_uuid: str | None, payload: dict) -> None:
+    if not project_uuid:
+        return
+    SyncLiveDeskCopilotUseCase().sync(project_uuid, payload, mode="create")
 
 
 def _handle_project_created(body: dict) -> str:
@@ -62,6 +73,7 @@ def _handle_project_created(body: dict) -> str:
                 extra={"uuid": project_uuid},
             )
             _sync_created_project_vtex(project_uuid, vtex_fields)
+            _sync_created_live_desk_copilot(project_uuid, payload)
         else:
             raise
 
