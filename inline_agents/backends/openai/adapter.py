@@ -16,12 +16,14 @@ from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
 from inline_agents.backends.openai.agent_entities import Collaborator as CollaboratorEntity
 from inline_agents.backends.openai.agent_entities import Supervisor as SupervisorEntity
+from inline_agents.backends.openai.agent_entities import resolve_collaborator_model_name
 from inline_agents.backends.openai.components_tools import all_component_tool_names
 from inline_agents.backends.openai.components_tools_stream import streaming_merge_tool_names
 from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
+from inline_agents.backends.openai.prompt_cache import OBJECTIVE_MARKER, supports_explicit_prompt_cache
 from inline_agents.backends.openai.prompts_progressive_feedback import (
     get_progressive_feedback_orchestration_instruction,
     inject_progressive_feedback_instruction,
@@ -100,7 +102,16 @@ class OpenAITeamAdapter(TeamAdapter):
         cls,
         agent_instructions: str,
         supervisor_default_collaborator_instructions: str,
+        explicit_cache: bool = False,
     ) -> str:
+        if explicit_cache and supervisor_default_collaborator_instructions:
+            parts = [
+                supervisor_default_collaborator_instructions,
+                OBJECTIVE_MARKER,
+                agent_instructions,
+            ]
+            return "\n".join(filter(None, parts))
+
         parts = [
             agent_instructions,
             supervisor_default_collaborator_instructions,
@@ -152,9 +163,21 @@ class OpenAITeamAdapter(TeamAdapter):
             collaborator_extra_args = {**collaborator_extra_args, **manager_extra_args}
 
         for agent in agents:
+            collaborator_model = resolve_collaborator_model_name(
+                agent.get("foundationModel"),
+                collaborator_configurations,
+            )
+            default_collaborator_instructions = collaborator_configurations.get(
+                "default_instructions_for_collaborators"
+            )
+            collaborator_cache_enabled = supports_explicit_prompt_cache(
+                collaborator_model,
+                supervisor.get("model_vendor", ""),
+            ) and bool(default_collaborator_instructions)
             agent_instructions = cls.prepare_agent_instructions(
                 agent.get("instruction"),
-                supervisor.get("collaborator_configurations", {}).get("default_instructions_for_collaborators"),
+                default_collaborator_instructions,
+                explicit_cache=collaborator_cache_enabled,
             )
             agent_name = agent.get("agentName")
             hooks = CollaboratorHooks(
@@ -183,7 +206,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 user_model_credentials=user_model_credentials,
                 hooks=hooks,
                 model_settings=model_settings,
-                collaborator_configurations=supervisor.get("collaborator_configurations", {}),
+                collaborator_configurations=collaborator_configurations,
                 model_vendor=supervisor.get("model_vendor", ""),
             )
 

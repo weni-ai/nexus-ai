@@ -5,6 +5,9 @@ from django.test import SimpleTestCase
 
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.prompt_cache import (
+    COLLABORATOR_CACHE_PROFILE,
+    COLLABORATOR_PROMPT_CACHE_KEY,
+    MANAGER_CACHE_PROFILE,
     OBJECTIVE_MARKER,
     PROMPT_CACHE_BREAKPOINT,
     PROMPT_CACHE_KEY_PREFIX,
@@ -12,7 +15,9 @@ from inline_agents.backends.openai.prompt_cache import (
     SESSION_CONTEXT_MARKER,
     PromptCachingOpenAIResponsesModel,
     build_cacheable_input,
+    build_collaborator_cacheable_input,
     split_cacheable_instructions,
+    split_collaborator_cacheable_instructions,
     supports_explicit_prompt_cache,
     with_explicit_cache_settings,
 )
@@ -21,6 +26,7 @@ GLOBAL_STATIC = "# Manager\n" + ("Always follow the global rules. " * 50)
 PROJECT_STATIC = f"{OBJECTIVE_MARKER}\nHelp this project.\n<personality>\nBe concise.\n"
 SESSION_CONTEXT = f"{SESSION_CONTEXT_MARKER}\nPROJECT_ID: project-1\nCONTACT_ID: contact-1"
 MANAGER_PROMPT = f"{GLOBAL_STATIC}{PROJECT_STATIC}{SESSION_CONTEXT}"
+COLLABORATOR_PROMPT = f"{GLOBAL_STATIC}{PROJECT_STATIC}"
 
 
 class SplitCacheableInstructionsTests(SimpleTestCase):
@@ -80,6 +86,40 @@ class BuildCacheableInputTests(SimpleTestCase):
         )
 
         self.assertEqual(first_key, second_key)
+
+
+class CollaboratorCacheableInputTests(SimpleTestCase):
+    def test_splits_only_at_objective_marker(self):
+        self.assertEqual(
+            split_collaborator_cacheable_instructions(COLLABORATOR_PROMPT),
+            (GLOBAL_STATIC, PROJECT_STATIC),
+        )
+
+    def test_returns_none_when_objective_marker_is_missing(self):
+        self.assertIsNone(split_collaborator_cacheable_instructions(GLOBAL_STATIC))
+
+    def test_builds_two_breakpoints_and_keeps_question_as_user_input(self):
+        result = build_collaborator_cacheable_input(COLLABORATOR_PROMPT, "Where is order 1001?")
+
+        self.assertIsNotNone(result)
+        input_items, cache_key = result
+        content = input_items[0]["content"]
+
+        self.assertEqual(content[0]["text"], GLOBAL_STATIC)
+        self.assertEqual(content[0]["prompt_cache_breakpoint"], PROMPT_CACHE_BREAKPOINT)
+        self.assertEqual(content[1]["text"], PROJECT_STATIC)
+        self.assertEqual(content[1]["prompt_cache_breakpoint"], PROMPT_CACHE_BREAKPOINT)
+        self.assertEqual(input_items[1], {"role": "user", "content": "Where is order 1001?"})
+        self.assertEqual(cache_key, COLLABORATOR_PROMPT_CACHE_KEY)
+
+    def test_prepends_developer_message_to_existing_conversation(self):
+        history = [{"role": "user", "content": "Previous manager question"}]
+
+        result = build_collaborator_cacheable_input(COLLABORATOR_PROMPT, history)
+
+        self.assertIsNotNone(result)
+        input_items, _ = result
+        self.assertEqual(input_items[1:], history)
 
 
 class ExplicitCacheSettingsTests(SimpleTestCase):
@@ -160,14 +200,72 @@ class PromptCachingOpenAIResponsesModelTests(SimpleTestCase):
         from inline_agents.backends.openai import prompt_cache
 
         model = PromptCachingOpenAIResponsesModel("openai.gpt-5.6-luna")
-        prompt_cache._warned_models.discard(model.model)
+        warning_key = (model.model, MANAGER_CACHE_PROFILE)
+        prompt_cache._warned_models.discard(warning_key)
 
         with self.assertLogs(prompt_cache.logger.name, level="WARNING") as captured:
             model._prepare("Prompt without markers", "Hello", ModelSettings())
             model._prepare("Prompt without markers", "Hello", ModelSettings())
 
         self.assertEqual(len(captured.records), 1)
-        prompt_cache._warned_models.discard(model.model)
+        prompt_cache._warned_models.discard(warning_key)
+
+    def test_collaborator_profile_uses_objective_only_layout(self):
+        model = PromptCachingOpenAIResponsesModel(
+            "openai.gpt-5.6-luna",
+            cache_profile=COLLABORATOR_CACHE_PROFILE,
+        )
+
+        instructions, input_items, settings = model._prepare(
+            COLLABORATOR_PROMPT,
+            "Where is order 1001?",
+            ModelSettings(),
+        )
+
+        self.assertIsNone(instructions)
+        self.assertEqual(len(input_items[0]["content"]), 2)
+        self.assertEqual(input_items[1]["role"], "user")
+        self.assertEqual(settings.extra_args["prompt_cache_key"], COLLABORATOR_PROMPT_CACHE_KEY)
+
+    def test_collaborator_missing_objective_falls_back_without_manager_layout(self):
+        model = PromptCachingOpenAIResponsesModel(
+            "openai.gpt-5.6-luna",
+            cache_profile=COLLABORATOR_CACHE_PROFILE,
+        )
+        settings = ModelSettings()
+
+        instructions, input_items, resulting_settings = model._prepare(
+            "Prompt without marker",
+            "Hello",
+            settings,
+        )
+
+        self.assertEqual(instructions, "Prompt without marker")
+        self.assertEqual(input_items, "Hello")
+        self.assertIs(resulting_settings, settings)
+
+    def test_manager_and_collaborator_missing_marker_warnings_are_independent(self):
+        from inline_agents.backends.openai import prompt_cache
+
+        model_name = "openai.gpt-5.6-luna"
+        manager_key = (model_name, MANAGER_CACHE_PROFILE)
+        collaborator_key = (model_name, COLLABORATOR_CACHE_PROFILE)
+        prompt_cache._warned_models.discard(manager_key)
+        prompt_cache._warned_models.discard(collaborator_key)
+
+        manager = PromptCachingOpenAIResponsesModel(model_name)
+        collaborator = PromptCachingOpenAIResponsesModel(
+            model_name,
+            cache_profile=COLLABORATOR_CACHE_PROFILE,
+        )
+
+        with self.assertLogs(prompt_cache.logger.name, level="WARNING") as captured:
+            manager._prepare("Prompt without markers", "Hello", ModelSettings())
+            collaborator._prepare("Prompt without markers", "Hello", ModelSettings())
+
+        self.assertEqual(len(captured.records), 2)
+        prompt_cache._warned_models.discard(manager_key)
+        prompt_cache._warned_models.discard(collaborator_key)
 
     def test_prepare_keeps_empty_instructions_unchanged(self):
         model = PromptCachingOpenAIResponsesModel("openai.gpt-5.6-luna")
