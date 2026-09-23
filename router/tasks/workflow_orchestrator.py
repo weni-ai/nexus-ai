@@ -203,12 +203,13 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         turn_id=ctx.turn_id,
     )
 
+    instagram_comment_message = is_instagram_comment_message(
+        ctx.message.get("contact_urn", ""),
+        ctx.message.get("metadata"),
+    )
     broadcast = get_guardrail_block_broadcast_client(
         preview=ctx.preview,
-        force_instagram_comment_broadcast=is_instagram_comment_message(
-            ctx.message.get("contact_urn", ""),
-            ctx.message.get("metadata"),
-        ),
+        force_instagram_comment_broadcast=instagram_comment_message,
     )
 
     if ctx.preview or ctx.preview_websocket:

@@ -10,7 +10,8 @@ def extract_ig_comment_broadcast_fields(metadata: Optional[Dict] = None) -> Dict
 
     Existing overwrite_message can be a string; that path is unchanged.
     If mailroom sent ig_comment, id is required — a broken payload must raise.
-    ig_response_type is forwarded only when mailroom sent it.
+    ig_response_type is forwarded only when mailroom sent it, either alongside
+    ig_comment or inside it; the outer value wins when both are present.
     """
     overwrite_message = (metadata or {}).get("overwrite_message")
     if not isinstance(overwrite_message, dict) or "ig_comment" not in overwrite_message:

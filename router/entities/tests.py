@@ -103,6 +103,29 @@ class MailroomMessageTest(TestCase):
             {"ig_comment_id": "30065221", "ig_response_type": "dm_comment"},
         )
 
+    def test_extract_ig_comment_repasses_response_type_nested_in_ig_comment(self):
+        metadata = {
+            "overwrite_message": {
+                "ig_comment": {"id": "30065221", "ig_response_type": "dm_comment"},
+            }
+        }
+        self.assertEqual(
+            extract_ig_comment_broadcast_fields(metadata),
+            {"ig_comment_id": "30065221", "ig_response_type": "dm_comment"},
+        )
+
+    def test_extract_ig_comment_prefers_response_type_from_overwrite_message(self):
+        metadata = {
+            "overwrite_message": {
+                "ig_comment": {"id": "30065221", "ig_response_type": "comment"},
+                "ig_response_type": "dm_comment",
+            }
+        }
+        self.assertEqual(
+            extract_ig_comment_broadcast_fields(metadata)["ig_response_type"],
+            "dm_comment",
+        )
+
     def test_extract_ig_comment_skips_when_mailroom_did_not_send_it(self):
         self.assertEqual(extract_ig_comment_broadcast_fields(None), {})
         self.assertEqual(extract_ig_comment_broadcast_fields({}), {})

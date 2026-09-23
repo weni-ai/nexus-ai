@@ -148,7 +148,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
 
     def send_direct_message(
         self,
-        msg: Dict,
+        msg: str,
         urns: List,
         project_uuid: str,
         user: str,
@@ -176,16 +176,16 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                 raise exceptions.UnableToSendMessage(str(error)) from error
 
     def format_response_for_bedrock(
-        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
-    ) -> None:
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> List[Dict]:
         msgs = self.get_json_strings(msg)
         if not msgs:
             msgs = [{"msg": {"text": str(msg)}}]
         return msgs
 
     def format_message_for_openai(
-        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
-    ) -> Dict:
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> List[Dict]:
         msgs = None
 
         if isinstance(msg, str):
@@ -223,7 +223,7 @@ class InstagramCommentBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
     broadcast_timeout = 30
 
     @staticmethod
-    def _single_text_message(msg, formatted_msgs: List[Dict]) -> List[Dict]:
+    def _single_text_message(msg: str, formatted_msgs: List[Dict]) -> List[Dict]:
         texts = []
         for item in formatted_msgs:
             item_msg = item.get("msg") if isinstance(item, dict) else None
@@ -235,13 +235,13 @@ class InstagramCommentBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
         return [{"msg": {"text": text}}]
 
     def format_response_for_bedrock(
-        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
     ) -> List[Dict]:
         formatted_msgs = super().format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
         return self._single_text_message(msg, formatted_msgs)
 
     def format_message_for_openai(
-        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+        self, msg: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
     ) -> List[Dict]:
         formatted_msgs = super().format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
         return self._single_text_message(msg, formatted_msgs)
