@@ -2,12 +2,18 @@ from agents.extensions.models.litellm_model import LitellmModel
 from django.test import SimpleTestCase
 
 from inline_agents.backends.openai.agent_entities import (
+    Collaborator,
     _final_output_from_tool_dict,
     build_reasoning_settings,
     resolve_agent_model,
+    resolve_collaborator_model_name,
     supports_reasoning_mode,
 )
-from inline_agents.backends.openai.prompt_cache import PromptCachingOpenAIResponsesModel
+from inline_agents.backends.openai.prompt_cache import (
+    COLLABORATOR_CACHE_PROFILE,
+    MANAGER_CACHE_PROFILE,
+    PromptCachingOpenAIResponsesModel,
+)
 
 
 class FinalOutputFromToolDictTests(SimpleTestCase):
@@ -54,6 +60,18 @@ class ResolveAgentModelTests(SimpleTestCase):
 
         self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
         self.assertEqual(model.model, "openai.gpt-5.6-luna")
+        self.assertEqual(model.cache_profile, MANAGER_CACHE_PROFILE)
+
+    def test_mantle_collaborator_uses_collaborator_cache_profile(self):
+        model = resolve_agent_model(
+            "openai.gpt-5.6-luna",
+            {},
+            model_vendor="aws_mantle",
+            cache_profile=COLLABORATOR_CACHE_PROFILE,
+        )
+
+        self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(model.cache_profile, COLLABORATOR_CACHE_PROFILE)
 
     def test_litellm_azure_with_credentials(self):
         credentials = {
@@ -73,6 +91,62 @@ class ResolveAgentModelTests(SimpleTestCase):
         self.assertEqual(model.model, "azure/gpt-4.1")
         self.assertIsNone(model.api_key)
         self.assertIsNone(model.base_url)
+
+
+class ResolveCollaboratorModelNameTests(SimpleTestCase):
+    def test_uses_agent_model_when_manager_override_is_disabled(self):
+        result = resolve_collaborator_model_name(
+            "project-default-model",
+            {
+                "override_collaborators_foundation_model": False,
+                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+            },
+        )
+
+        self.assertEqual(result, "project-default-model")
+
+    def test_uses_manager_collaborator_model_when_override_is_enabled(self):
+        result = resolve_collaborator_model_name(
+            "project-default-model",
+            {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+            },
+        )
+
+        self.assertEqual(result, "openai.gpt-5.6-luna")
+
+    def test_empty_manager_override_falls_back_to_agent_model(self):
+        result = resolve_collaborator_model_name(
+            "project-default-model",
+            {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "",
+            },
+        )
+
+        self.assertEqual(result, "project-default-model")
+
+
+class CollaboratorModelTests(SimpleTestCase):
+    def test_luna_mantle_collaborator_uses_collaborator_cache_profile(self):
+        collaborator = Collaborator(
+            name="orders",
+            instructions="Shared guidelines\n<objective>\nTrack orders.",
+            tools=[],
+            foundation_model="project-default-model",
+            user_model_credentials={},
+            hooks=None,
+            model_settings={},
+            collaborator_configurations={
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+            },
+            model_vendor="aws_mantle",
+        )
+
+        self.assertIsInstance(collaborator.model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(collaborator.model.cache_profile, COLLABORATOR_CACHE_PROFILE)
 
 
 class BuildReasoningSettingsTests(SimpleTestCase):

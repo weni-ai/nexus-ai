@@ -7,13 +7,15 @@ from agents import Agent, ModelSettings, RunContextWrapper, function_tool
 from agents.agent import FunctionToolResult, ToolsToFinalOutputResult
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.interface import Model
-from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.custom_providers import resolve_custom_model
 from inline_agents.backends.openai.entities import Context
 from inline_agents.backends.openai.knowledge_base import retrieve_knowledge_base
 from inline_agents.backends.openai.prompt_cache import (
+    COLLABORATOR_CACHE_PROFILE,
+    MANAGER_CACHE_PROFILE,
+    CacheProfile,
     PromptCachingOpenAIResponsesModel,
     supports_explicit_prompt_cache,
 )
@@ -156,10 +158,11 @@ def resolve_agent_model(
     model: str,
     user_model_credentials: Dict[str, Any] | None,
     model_vendor: str = "",
+    cache_profile: CacheProfile = MANAGER_CACHE_PROFILE,
 ) -> Union[Model, LitellmModel, str]:
     """Return a custom Model, LitellmModel, or the model string unchanged."""
     if supports_explicit_prompt_cache(model, model_vendor):
-        return PromptCachingOpenAIResponsesModel(model=model)
+        return PromptCachingOpenAIResponsesModel(model=model, cache_profile=cache_profile)
 
     credentials = user_model_credentials or {}
     custom = resolve_custom_model(model, credentials, model_vendor=model_vendor)
@@ -183,6 +186,16 @@ def resolve_agent_model(
         kwargs["base_url"] = api_base
 
     return LitellmModel(**kwargs)
+
+
+def resolve_collaborator_model_name(
+    foundation_model: str,
+    collaborator_configurations: Dict[str, Any],
+) -> str:
+    """Resolve the collaborator model from its project default or manager override."""
+    if collaborator_configurations.get("override_collaborators_foundation_model"):
+        return collaborator_configurations.get("collaborators_foundation_model") or foundation_model
+    return foundation_model
 
 
 class AgentModel:
@@ -222,12 +235,14 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
         model_has_reasoning: bool = False,
         model_vendor: str = "",
     ):
-        if collaborator_configurations.get("override_collaborators_foundation_model"):
-            model_name = collaborator_configurations.get("collaborators_foundation_model")
-        else:
-            model_name = foundation_model
+        model_name = resolve_collaborator_model_name(foundation_model, collaborator_configurations)
 
-        model = resolve_agent_model(model_name, user_model_credentials, model_vendor=model_vendor)
+        model = resolve_agent_model(
+            model_name,
+            user_model_credentials,
+            model_vendor=model_vendor,
+            cache_profile=COLLABORATOR_CACHE_PROFILE,
+        )
         model_settings_kw = dict(model_settings)
         if isinstance(model, Model):
             model_settings_kw["include_usage"] = True
