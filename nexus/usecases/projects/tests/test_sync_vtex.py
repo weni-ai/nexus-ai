@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from django.test import TestCase
 
+from nexus.event_driven.parsers.exceptions import ParseError
 from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer
 from nexus.projects.consumers.project_update_consumer import (
     ProjectUpdateConsumer,
@@ -12,14 +13,14 @@ from nexus.projects.consumers.project_update_consumer import (
 from nexus.projects.models import Project
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.sync_vtex import (
-    SyncProjectVtexUseCase,
-    extract_vtex_fields,
+    SyncProjectFieldsUseCase,
+    extract_project_fields,
     unwrap_eda_payload,
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
-class UnwrapAndExtractVtexFieldsTestCase(TestCase):
+class UnwrapAndExtractProjectFieldsTestCase(TestCase):
     def test_unwrap_flat_payload(self):
         body = {"uuid": "abc", "vtex_account": "store"}
         self.assertEqual(unwrap_eda_payload(body), body)
@@ -42,9 +43,10 @@ class UnwrapAndExtractVtexFieldsTestCase(TestCase):
         self.assertEqual(unwrap_eda_payload(body), body)
 
     def test_extract_with_config(self):
-        fields = extract_vtex_fields(
+        fields = extract_project_fields(
             {
                 "vtex_account": "mystore",
+                "timezone": "America/Sao_Paulo",
                 "config": {
                     "storefront_type": "vtex_io",
                     "vtex_host_store": "https://www.mystore.com.br",
@@ -54,105 +56,128 @@ class UnwrapAndExtractVtexFieldsTestCase(TestCase):
         self.assertEqual(fields.vtex_account, "mystore")
         self.assertEqual(fields.vtex_host_store, "https://www.mystore.com.br")
         self.assertEqual(fields.storefront_type, "vtex_io")
+        self.assertEqual(fields.timezone, "America/Sao_Paulo")
         self.assertTrue(fields.has_vtex_account)
         self.assertTrue(fields.has_vtex_host_store)
         self.assertTrue(fields.has_storefront_type)
+        self.assertTrue(fields.has_timezone)
 
     def test_extract_null_config(self):
-        fields = extract_vtex_fields({"vtex_account": None, "config": None})
+        fields = extract_project_fields({"vtex_account": None, "timezone": None, "config": None})
         self.assertIsNone(fields.vtex_account)
+        self.assertIsNone(fields.timezone)
         self.assertTrue(fields.has_vtex_account)
+        self.assertTrue(fields.has_timezone)
         self.assertFalse(fields.has_vtex_host_store)
         self.assertFalse(fields.has_storefront_type)
 
-    def test_extract_missing_vtex_fields(self):
-        fields = extract_vtex_fields({"uuid": "abc", "config": {}})
+    def test_extract_missing_project_fields(self):
+        fields = extract_project_fields({"uuid": "abc", "config": {}})
         self.assertFalse(fields.has_vtex_account)
         self.assertFalse(fields.has_vtex_host_store)
         self.assertFalse(fields.has_storefront_type)
+        self.assertFalse(fields.has_timezone)
 
 
-class SyncProjectVtexUseCaseTestCase(TestCase):
+class SyncProjectFieldsUseCaseTestCase(TestCase):
     def setUp(self):
         self.project = ProjectFactory()
-        self.usecase = SyncProjectVtexUseCase()
+        self.usecase = SyncProjectFieldsUseCase()
         self.notify_patcher = patch("nexus.usecases.projects.sync_vtex.notify_async")
         self.mock_notify = self.notify_patcher.start()
         self.addCleanup(self.notify_patcher.stop)
 
     def test_create_mode_sets_filled_fields(self):
-        fields = extract_vtex_fields(
+        fields = extract_project_fields(
             {
                 "vtex_account": "mystore",
+                "timezone": "America/Sao_Paulo",
                 "config": {
                     "vtex_host_store": "https://www.mystore.com.br",
                     "storefront_type": "vtex_io",
                 },
             }
         )
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="create")
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="create")
         self.project.refresh_from_db()
         self.assertEqual(self.project.vtex_account, "mystore")
         self.assertEqual(self.project.vtex_host_store, "https://www.mystore.com.br")
         self.assertEqual(self.project.storefront_type, "vtex_io")
+        self.assertEqual(self.project.timezone, "America/Sao_Paulo")
 
     def test_create_mode_ignores_empty_fields(self):
-        fields = extract_vtex_fields({"vtex_account": None, "config": {}})
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="create")
+        fields = extract_project_fields({"vtex_account": None, "timezone": None, "config": {}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="create")
         self.project.refresh_from_db()
         self.assertIsNone(self.project.vtex_account)
         self.assertIsNone(self.project.vtex_host_store)
+        self.assertIsNone(self.project.timezone)
 
     def test_create_mode_redelivery_keeps_values_synced_by_update(self):
         self.project.vtex_account = "mystore"
         self.project.vtex_host_store = "https://www.mystore.com.br"
         self.project.storefront_type = "vtex_io"
+        self.project.timezone = "America/New_York"
         self.project.save()
 
-        fields = extract_vtex_fields({"vtex_account": None, "config": {"vtex_host_store": ""}})
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="create")
+        fields = extract_project_fields({"vtex_account": None, "timezone": None, "config": {"vtex_host_store": ""}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="create")
 
         self.project.refresh_from_db()
         self.assertEqual(self.project.vtex_account, "mystore")
         self.assertEqual(self.project.vtex_host_store, "https://www.mystore.com.br")
         self.assertEqual(self.project.storefront_type, "vtex_io")
+        self.assertEqual(self.project.timezone, "America/New_York")
 
     def test_update_mode_applies_snapshot_including_null(self):
         self.project.vtex_account = "oldstore"
         self.project.vtex_host_store = "https://old.com"
         self.project.storefront_type = "legacy"
+        self.project.timezone = "America/New_York"
         self.project.save()
 
-        fields = extract_vtex_fields(
+        fields = extract_project_fields(
             {
                 "vtex_account": None,
+                "timezone": None,
                 "config": {
                     "vtex_host_store": "https://www.mystore.com.br",
                     "storefront_type": "vtex_io",
                 },
             }
         )
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="update")
         self.project.refresh_from_db()
         self.assertIsNone(self.project.vtex_account)
         self.assertEqual(self.project.vtex_host_store, "https://www.mystore.com.br")
         self.assertEqual(self.project.storefront_type, "vtex_io")
+        self.assertIsNone(self.project.timezone)
 
     def test_update_mode_link_account(self):
-        fields = extract_vtex_fields({"vtex_account": "linked", "config": {}})
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        fields = extract_project_fields({"vtex_account": "linked", "config": {}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="update")
         self.project.refresh_from_db()
         self.assertEqual(self.project.vtex_account, "linked")
 
+    def test_update_mode_keeps_timezone_when_key_is_absent(self):
+        self.project.timezone = "America/Sao_Paulo"
+        self.project.save(update_fields=["timezone"])
+
+        fields = extract_project_fields({"name": "only-name", "config": {}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="update")
+
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.timezone, "America/Sao_Paulo")
+
     def test_project_not_found_returns_none(self):
-        fields = extract_vtex_fields({"vtex_account": "x"})
-        result = self.usecase.sync_project_vtex(str(uuid4()), fields, mode="update")
+        fields = extract_project_fields({"vtex_account": "x"})
+        result = self.usecase.sync_project_fields(str(uuid4()), fields, mode="update")
         self.assertIsNone(result)
 
     def test_unique_vtex_account_conflict_does_not_raise(self):
         other = ProjectFactory(vtex_account="taken")
-        fields = extract_vtex_fields({"vtex_account": "taken", "config": {}})
-        result = self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        fields = extract_project_fields({"vtex_account": "taken", "config": {}})
+        result = self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="update")
         self.assertEqual(result.uuid, self.project.uuid)
         self.assertIsNone(result.vtex_account)
         self.project.refresh_from_db()
@@ -160,21 +185,21 @@ class SyncProjectVtexUseCaseTestCase(TestCase):
         self.assertEqual(Project.objects.get(uuid=other.uuid).vtex_account, "taken")
 
     def test_successful_save_invalidates_project_cache(self):
-        fields = extract_vtex_fields({"vtex_account": "mystore", "config": {}})
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        fields = extract_project_fields({"vtex_account": "mystore", "config": {}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="update")
         self.mock_notify.assert_called_once()
         self.assertEqual(self.mock_notify.call_args.kwargs["event"], "cache_invalidation:project")
         self.assertEqual(self.mock_notify.call_args.kwargs["project"].uuid, self.project.uuid)
 
     def test_no_field_changes_does_not_invalidate_cache(self):
-        fields = extract_vtex_fields({"uuid": "abc", "config": {}})
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        fields = extract_project_fields({"uuid": "abc", "config": {}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="update")
         self.mock_notify.assert_not_called()
 
     def test_integrity_error_does_not_invalidate_cache(self):
         ProjectFactory(vtex_account="taken")
-        fields = extract_vtex_fields({"vtex_account": "taken", "config": {}})
-        self.usecase.sync_project_vtex(str(self.project.uuid), fields, mode="update")
+        fields = extract_project_fields({"vtex_account": "taken", "config": {}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="update")
         self.mock_notify.assert_not_called()
 
 
@@ -230,6 +255,33 @@ class ProjectUpdateConsumerTestCase(TestCase):
         self.project.refresh_from_db()
         self.assertEqual(self.project.storefront_type, "vtex_io")
 
+    def test_update_timezone(self):
+        msg = self._message(
+            {
+                "project_uuid": str(self.project.uuid),
+                "action": "updated",
+                "timezone": "America/Sao_Paulo",
+            }
+        )
+        self.consumer.consume(msg)
+        msg.channel.basic_ack.assert_called_once_with(42)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.timezone, "America/Sao_Paulo")
+
+    def test_update_timezone_to_null(self):
+        self.project.timezone = "America/Sao_Paulo"
+        self.project.save(update_fields=["timezone"])
+        msg = self._message(
+            {
+                "project_uuid": str(self.project.uuid),
+                "action": "updated",
+                "timezone": None,
+            }
+        )
+        self.consumer.consume(msg)
+        self.project.refresh_from_db()
+        self.assertIsNone(self.project.timezone)
+
     def test_update_without_config_or_vtex_account(self):
         msg = self._message(
             {
@@ -269,6 +321,19 @@ class ProjectUpdateConsumerTestCase(TestCase):
         self.project.refresh_from_db()
         self.assertIsNone(self.project.vtex_account)
 
+    def test_ignores_status_updated_action(self):
+        msg = self._message(
+            {
+                "project_uuid": str(self.project.uuid),
+                "action": "status_updated",
+                "timezone": "America/Sao_Paulo",
+            }
+        )
+        self.consumer.consume(msg)
+        msg.channel.basic_ack.assert_called_once_with(42)
+        self.project.refresh_from_db()
+        self.assertIsNone(self.project.timezone)
+
     def test_missing_project_acks_and_skips(self):
         msg = self._message(
             {
@@ -294,7 +359,7 @@ class ProjectUpdateConsumerTestCase(TestCase):
         )
         self.consumer.consume(msg)
         mock_logger.info.assert_any_call(
-            "[ProjectUpdateConsumer] Project VTEX fields updated",
+            "[ProjectUpdateConsumer] Project fields updated",
             extra={"uuid": project_uuid},
         )
 
@@ -334,6 +399,7 @@ class WeniEDAProjectUpdateConsumerTestCase(TestCase):
                 "project_uuid": str(self.project.uuid),
                 "action": "updated",
                 "vtex_account": "enveloped",
+                "timezone": "America/Sao_Paulo",
                 "config": {"storefront_type": "vtex_io"},
             },
         }
@@ -347,6 +413,7 @@ class WeniEDAProjectUpdateConsumerTestCase(TestCase):
         self.project.refresh_from_db()
         self.assertEqual(self.project.vtex_account, "enveloped")
         self.assertEqual(self.project.storefront_type, "vtex_io")
+        self.assertEqual(self.project.timezone, "America/Sao_Paulo")
         self.assertEqual(self.channel.acked, [1])
 
     @patch("nexus.projects.consumers.project_update_consumer.capture_exception")
@@ -356,7 +423,7 @@ class WeniEDAProjectUpdateConsumerTestCase(TestCase):
 
         weni_message = WeniMessage(body=b"not-json", delivery_tag=9, channel=self.channel)
         self.consumer._message = weni_message
-        with self.assertRaises(Exception):
+        with self.assertRaises(ParseError):
             self.consumer.consume(weni_message)
         mock_logger.error.assert_called_once_with(
             "[WeniEDAProjectUpdateConsumer] Message rejected",
@@ -415,6 +482,7 @@ class ProjectConsumerVtexTestCase(TestCase):
                 "brain_on": False,
                 "authorizations": [],
                 "vtex_account": "mystore",
+                "timezone": "America/Sao_Paulo",
                 "config": {},
             }
         )
@@ -423,6 +491,7 @@ class ProjectConsumerVtexTestCase(TestCase):
         self.assertEqual(channel.acked, [7])
         project = Project.objects.get(uuid=project_uuid)
         self.assertEqual(project.vtex_account, "mystore")
+        self.assertEqual(project.timezone, "America/Sao_Paulo")
 
     @patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
     def test_create_with_vtex_config(self, mock_usecase):
@@ -465,6 +534,7 @@ class ProjectConsumerVtexTestCase(TestCase):
                 "template_type_uuid": None,
                 "brain_on": False,
                 "authorizations": [],
+                "timezone": "America/Manaus",
             }
         )
         self.consumer._message = msg
@@ -472,6 +542,7 @@ class ProjectConsumerVtexTestCase(TestCase):
         self.assertEqual(channel.acked, [7])
         project = Project.objects.get(uuid=project_uuid)
         self.assertIsNone(project.vtex_account)
+        self.assertEqual(project.timezone, "America/Manaus")
 
     @patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
     def test_create_envelope_amazonmq(self, mock_usecase):
@@ -491,6 +562,7 @@ class ProjectConsumerVtexTestCase(TestCase):
                     "brain_on": False,
                     "authorizations": [],
                     "vtex_account": "enveloped",
+                    "timezone": "America/Sao_Paulo",
                     "config": {"storefront_type": "vtex_io"},
                 },
             }
@@ -500,6 +572,7 @@ class ProjectConsumerVtexTestCase(TestCase):
         project = Project.objects.get(uuid=project_uuid)
         self.assertEqual(project.vtex_account, "enveloped")
         self.assertEqual(project.storefront_type, "vtex_io")
+        self.assertEqual(project.timezone, "America/Sao_Paulo")
 
     @patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
     def test_create_reprocess_is_idempotent(self, mock_usecase):
@@ -518,6 +591,7 @@ class ProjectConsumerVtexTestCase(TestCase):
                 "brain_on": False,
                 "authorizations": [],
                 "vtex_account": "reprocessed",
+                "timezone": "America/Sao_Paulo",
                 "config": {"vtex_host_store": "https://www.reprocessed.com"},
             }
         )
@@ -528,3 +602,4 @@ class ProjectConsumerVtexTestCase(TestCase):
         project.refresh_from_db()
         self.assertEqual(project.vtex_account, "reprocessed")
         self.assertEqual(project.vtex_host_store, "https://www.reprocessed.com")
+        self.assertEqual(project.timezone, "America/Sao_Paulo")

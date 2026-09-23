@@ -35,11 +35,14 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
             channel=self.channel,
         )
         self.consumer = WeniEDAProjectConsumer()
-        self._sync_patcher = mock.patch("nexus.projects.consumers.project_consumer.SyncProjectVtexUseCase")
+        self._sync_patcher = mock.patch("nexus.projects.consumers.project_consumer.SyncProjectFieldsUseCase")
+        self._copilot_sync_patcher = mock.patch("nexus.projects.consumers.project_consumer.SyncLiveDeskCopilotUseCase")
         self._atomic_patcher = mock.patch("nexus.projects.consumers.project_consumer.transaction.atomic")
         self.addCleanup(self._sync_patcher.stop)
+        self.addCleanup(self._copilot_sync_patcher.stop)
         self.addCleanup(self._atomic_patcher.stop)
         self.mock_sync_cls = self._sync_patcher.start()
+        self._copilot_sync_patcher.start()
         self._atomic_patcher.start()
 
     @mock.patch(
@@ -52,9 +55,7 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         },
     )
     @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
-    def test_weni_eda_project_consumer_triggers_creation_and_acks(
-        self, mock_usecase_cls, _
-    ):
+    def test_weni_eda_project_consumer_triggers_creation_and_acks(self, mock_usecase_cls, _):
         self.consumer._message = self.weni_message
         self.consumer.consume(self.weni_message)
 
@@ -78,9 +79,7 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         },
     )
     @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
-    def test_weni_eda_project_consumer_unwraps_event_envelope(
-        self, mock_usecase_cls, _
-    ):
+    def test_weni_eda_project_consumer_unwraps_event_envelope(self, mock_usecase_cls, _):
         self.consumer._message = self.weni_message
         self.consumer.consume(self.weni_message)
 
@@ -137,9 +136,7 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
     )
     @mock.patch("nexus.projects.consumers.project_consumer.Project.objects.filter")
     @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
-    def test_weni_eda_project_consumer_acks_duplicate_project_message(
-        self, mock_usecase_cls, mock_filter, _
-    ):
+    def test_weni_eda_project_consumer_acks_duplicate_project_message(self, mock_usecase_cls, mock_filter, _):
         from django.db import IntegrityError
 
         mock_usecase_cls.return_value.create_project.side_effect = IntegrityError("duplicate key")
@@ -149,7 +146,7 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
         self.consumer.consume(self.weni_message)
 
         self.assertEqual(self.channel.acked, [1])
-        self.mock_sync_cls.return_value.sync_project_vtex.assert_called_once()
+        self.mock_sync_cls.return_value.sync_project_fields.assert_called_once()
 
     @mock.patch(
         "nexus.projects.consumers.project_consumer.JSONParser.parse",
@@ -162,7 +159,7 @@ class WeniEDAProjectConsumerTests(SimpleTestCase):
     )
     @mock.patch("nexus.projects.consumers.project_consumer.ProjectsUseCase")
     def test_weni_eda_project_consumer_does_not_ack_when_vtex_sync_fails(self, mock_usecase_cls, _):
-        self.mock_sync_cls.return_value.sync_project_vtex.side_effect = RuntimeError("vtex boom")
+        self.mock_sync_cls.return_value.sync_project_fields.side_effect = RuntimeError("sync boom")
         self.consumer._message = self.weni_message
         with self.assertRaises(RuntimeError):
             self.consumer.consume(self.weni_message)

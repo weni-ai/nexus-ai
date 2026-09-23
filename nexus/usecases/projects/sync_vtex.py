@@ -10,15 +10,24 @@ from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
 
+SYNCED_FIELD_PRESENCE = (
+    ("vtex_account", "has_vtex_account"),
+    ("vtex_host_store", "has_vtex_host_store"),
+    ("storefront_type", "has_storefront_type"),
+    ("timezone", "has_timezone"),
+)
+
 
 @dataclass(frozen=True)
-class VtexFields:
+class ProjectFields:
     vtex_account: Optional[str] = None
     vtex_host_store: Optional[str] = None
     storefront_type: Optional[str] = None
+    timezone: Optional[str] = None
     has_vtex_account: bool = False
     has_vtex_host_store: bool = False
     has_storefront_type: bool = False
+    has_timezone: bool = False
 
 
 def unwrap_eda_payload(body: dict) -> dict:
@@ -36,34 +45,36 @@ def unwrap_eda_payload(body: dict) -> dict:
     return body
 
 
-def extract_vtex_fields(payload: dict) -> VtexFields:
-    """Read VTEX fields from a Connect project create/update payload."""
+def extract_project_fields(payload: dict) -> ProjectFields:
+    """Read synchronized fields from a Connect project create/update payload."""
     if not isinstance(payload, dict):
-        return VtexFields()
+        return ProjectFields()
 
     config = payload.get("config")
     if not isinstance(config, dict):
         config = {}
 
-    return VtexFields(
+    return ProjectFields(
         vtex_account=payload.get("vtex_account"),
         vtex_host_store=config.get("vtex_host_store"),
         storefront_type=config.get("storefront_type"),
+        timezone=payload.get("timezone"),
         has_vtex_account="vtex_account" in payload,
         has_vtex_host_store="vtex_host_store" in config,
         has_storefront_type="storefront_type" in config,
+        has_timezone="timezone" in payload,
     )
 
 
-class SyncProjectVtexUseCase:
-    def sync_project_vtex(
+class SyncProjectFieldsUseCase:
+    def sync_project_fields(
         self,
         project_uuid: str,
-        fields: VtexFields,
+        fields: ProjectFields,
         *,
         mode: Literal["create", "update"] = "update",
     ) -> Optional[Project]:
-        """Apply the VTEX snapshot of a Connect project event.
+        """Apply synchronized fields from a Connect project event.
 
         The two modes treat empty values differently on purpose. `update` applies
         the payload by key presence, so an explicit null clears the stored value.
@@ -75,33 +86,18 @@ class SyncProjectVtexUseCase:
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
             logger.warning(
-                "[SyncProjectVtexUseCase] Project not found",
+                "[SyncProjectFieldsUseCase] Project not found",
                 extra={"project_uuid": project_uuid},
             )
             return None
 
         update_fields: list[str] = []
-
-        if mode == "create":
-            if fields.vtex_account:
-                project.vtex_account = fields.vtex_account
-                update_fields.append("vtex_account")
-            if fields.vtex_host_store:
-                project.vtex_host_store = fields.vtex_host_store
-                update_fields.append("vtex_host_store")
-            if fields.storefront_type:
-                project.storefront_type = fields.storefront_type
-                update_fields.append("storefront_type")
-        else:
-            if fields.has_vtex_account:
-                project.vtex_account = fields.vtex_account
-                update_fields.append("vtex_account")
-            if fields.has_vtex_host_store:
-                project.vtex_host_store = fields.vtex_host_store
-                update_fields.append("vtex_host_store")
-            if fields.has_storefront_type:
-                project.storefront_type = fields.storefront_type
-                update_fields.append("storefront_type")
+        for field_name, presence_name in SYNCED_FIELD_PRESENCE:
+            value = getattr(fields, field_name)
+            should_apply = bool(value) if mode == "create" else getattr(fields, presence_name)
+            if should_apply:
+                setattr(project, field_name, value)
+                update_fields.append(field_name)
 
         if not update_fields:
             return project
@@ -112,7 +108,7 @@ class SyncProjectVtexUseCase:
         except IntegrityError as exc:
             capture_exception(exc)
             logger.warning(
-                "[SyncProjectVtexUseCase] Unique constraint conflict on vtex_account",
+                "[SyncProjectFieldsUseCase] Unique constraint conflict on vtex_account",
                 extra={
                     "project_uuid": project_uuid,
                     "vtex_account": fields.vtex_account,
@@ -131,7 +127,7 @@ class SyncProjectVtexUseCase:
         for copilot in Project.objects.filter(parent_project=project, is_live_desk_copilot=True):
             notify_async(event="cache_invalidation:project", project=copilot)
         logger.info(
-            "[SyncProjectVtexUseCase] Project VTEX fields synced",
+            "[SyncProjectFieldsUseCase] Project fields synced",
             extra={"project_uuid": project_uuid, "update_fields": update_fields, "mode": mode},
         )
         return project
