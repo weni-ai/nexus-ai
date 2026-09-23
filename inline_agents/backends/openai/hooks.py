@@ -151,9 +151,27 @@ def _get_agent_slug(agent, hooks_state=None) -> str:
 
 
 def _get_agent_model(agent) -> str:
-    if isinstance(agent.model, LitellmModel):
-        return agent.model.model
-    return agent.model
+    """Return a JSON-serializable foundation model id for data-lake metadata.
+
+    Native OpenAI agents store a string on ``agent.model``. LiteLLM and custom
+    providers (e.g. ``WhirlpoolModel``) store a Model instance with a ``.model``
+    string attribute. Celery JSON-encodes the event before ``.delay()``, so a
+    Model instance here drops the event with ``EncodeError``.
+    """
+    model = getattr(agent, "model", None)
+    if isinstance(model, LitellmModel):
+        return model.model
+    if isinstance(model, str):
+        return model
+    if model is not None and hasattr(model, "model"):
+        nested = getattr(model, "model", None)
+        if isinstance(nested, str):
+            return nested
+        if nested is not None:
+            return str(nested)
+    if model is None:
+        return ""
+    return str(model)
 
 
 def _get_events_from_tool_result(
