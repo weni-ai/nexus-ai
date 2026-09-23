@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import requests
 from django.conf import settings
@@ -81,7 +81,13 @@ class FlowsRESTClient(RestClient):
             return {}
 
     def whatsapp_broadcast(
-        self, urns: List[str], msg: Dict, project_uuid: str, use_stream: bool = False, channel_uuid: str = ""
+        self,
+        urns: List[str],
+        msg: Dict,
+        project_uuid: str,
+        use_stream: bool = False,
+        channel_uuid: str = "",
+        timeout: Optional[int] = None,
     ):
         if use_stream:
             url = self._get_url("/api/v2/internals/messages/stream")
@@ -105,7 +111,10 @@ class FlowsRESTClient(RestClient):
             f"project: {project_uuid}, urns: {urns}, body: {body}"
         )
 
-        response = requests.post(url, json=body, headers=headers)
+        request_kwargs = {"json": body, "headers": headers}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        response = requests.post(url, **request_kwargs)
 
         logger.info(
             f"[Broadcast] Response received - url: {url}, use_stream: {use_stream}, "

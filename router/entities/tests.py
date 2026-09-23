@@ -11,6 +11,8 @@ assert _SPEC and _SPEC.loader
 _SPEC.loader.exec_module(_MAILROOM)
 message_factory = _MAILROOM.message_factory
 extract_ig_comment_broadcast_fields = _MAILROOM.extract_ig_comment_broadcast_fields
+is_instagram_comment_message = _MAILROOM.is_instagram_comment_message
+stream_support_for_message = _MAILROOM.stream_support_for_message
 
 
 class MailroomMessageTest(TestCase):
@@ -113,6 +115,54 @@ class MailroomMessageTest(TestCase):
         metadata = {"overwrite_message": {"ig_comment": {"media": {"id": "180615383"}}}}
         with self.assertRaises(KeyError):
             extract_ig_comment_broadcast_fields(metadata)
+
+    def test_identifies_instagram_comment_without_matching_regular_instagram_dm(self):
+        metadata = {"overwrite_message": {"ig_comment": {"id": "30065221"}}}
+
+        self.assertTrue(is_instagram_comment_message("instagram:5467890213", metadata))
+        self.assertFalse(is_instagram_comment_message("instagram:5467890213", {}))
+        self.assertFalse(is_instagram_comment_message("whatsapp:5511999999999", metadata))
+
+    def test_comment_detection_is_safe_for_malformed_metadata(self):
+        self.assertFalse(
+            is_instagram_comment_message(
+                "instagram:5467890213",
+                {"overwrite_message": {"ig_comment": {"media": {"id": "180615383"}}}},
+            )
+        )
+        self.assertFalse(
+            is_instagram_comment_message(
+                "instagram:5467890213",
+                {"overwrite_message": {"ig_comment": "invalid"}},
+            )
+        )
+
+    def test_disables_streaming_only_for_instagram_comment(self):
+        comment_message = {
+            "contact_urn": "instagram:5467890213",
+            "metadata": {"overwrite_message": {"ig_comment": {"id": "30065221"}}},
+            "stream_support": True,
+        }
+
+        self.assertFalse(stream_support_for_message(comment_message))
+        self.assertTrue(
+            stream_support_for_message(
+                {
+                    "contact_urn": "instagram:5467890213",
+                    "metadata": {},
+                    "stream_support": True,
+                }
+            )
+        )
+        self.assertFalse(
+            stream_support_for_message(
+                {
+                    "contact_urn": "instagram:5467890213",
+                    "metadata": {},
+                    "stream_support": False,
+                }
+            )
+        )
 
     def test_metadata_serialization_without_metadata(self):
         message = message_factory(project_uuid="123", text="Hello", contact_urn="123")

@@ -25,6 +25,27 @@ def extract_ig_comment_broadcast_fields(metadata: Optional[Dict] = None) -> Dict
     return fields
 
 
+def is_instagram_comment_message(contact_urn: str, metadata: Optional[Dict] = None) -> bool:
+    """Return whether this message is an Instagram comment, not a regular DM."""
+    if not (contact_urn or "").startswith("instagram:"):
+        return False
+
+    overwrite_message = (metadata or {}).get("overwrite_message")
+    if not isinstance(overwrite_message, dict):
+        return False
+
+    ig_comment = overwrite_message.get("ig_comment")
+    return isinstance(ig_comment, dict) and bool(ig_comment.get("id"))
+
+
+def stream_support_for_message(message: Dict) -> bool:
+    """Disable streaming when a reply must be linked to an Instagram comment."""
+    return bool(
+        message.get("stream_support", False)
+        and not is_instagram_comment_message(message.get("contact_urn", ""), message.get("metadata"))
+    )
+
+
 class ContactField(BaseModel):
     key: str
     value: Any

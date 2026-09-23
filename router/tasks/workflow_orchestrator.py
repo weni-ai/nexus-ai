@@ -30,6 +30,7 @@ from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from router.dispatcher import dispatch
 from router.entities import message_factory
+from router.entities.mailroom import is_instagram_comment_message, stream_support_for_message
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.actions_client import get_action_clients, get_guardrail_block_broadcast_client
 from router.tasks.exceptions import EmptyFinalResponseException
@@ -202,7 +203,13 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         turn_id=ctx.turn_id,
     )
 
-    broadcast = get_guardrail_block_broadcast_client(preview=ctx.preview)
+    broadcast = get_guardrail_block_broadcast_client(
+        preview=ctx.preview,
+        force_instagram_comment_broadcast=is_instagram_comment_message(
+            ctx.message.get("contact_urn", ""),
+            ctx.message.get("metadata"),
+        ),
+    )
 
     if ctx.preview or ctx.preview_websocket:
         return dispatch_preview(
@@ -254,12 +261,19 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     ctx.agents_backend = result["agents_backend"]
 
     # Get action clients (needed for post-generation)
+    instagram_comment_message = is_instagram_comment_message(
+        ctx.message.get("contact_urn", ""),
+        ctx.message.get("metadata"),
+    )
+    effective_stream_support = stream_support_for_message(ctx.message)
+
     ctx.broadcast, _ = get_action_clients(
         preview=ctx.preview,
         multi_agents=True,
         project_use_components=ctx.cached_data.project_dict.get("use_components", False),
         project_uuid=ctx.project_uuid,
-        stream_support=ctx.message.get("stream_support", False),
+        stream_support=effective_stream_support,
+        force_instagram_comment_broadcast=instagram_comment_message,
     )
 
     return result
@@ -333,6 +347,8 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
+    effective_stream_support = stream_support_for_message(ctx.message)
+
     response, skip_dispatch = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
@@ -344,7 +360,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         foundation_model=foundation_model,
         turn_off_rationale=turn_off_rationale,
         channel_type=ctx.message.get("channel_type", ""),
-        stream_support=ctx.message.get("stream_support", False),
+        stream_support=effective_stream_support,
         supervisor_agent_uuid=ctx.supervisor_agent_uuid,
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         preview_websocket=ctx.preview_websocket,
