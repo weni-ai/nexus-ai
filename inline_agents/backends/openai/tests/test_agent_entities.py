@@ -40,6 +40,9 @@ class ResolveAgentModelTests(SimpleTestCase):
     def test_non_litellm_model_returns_string(self):
         self.assertEqual(resolve_agent_model("gpt-4o", {"api_key": "sk"}), "gpt-4o")
 
+    def test_mantle_model_skips_litellm(self):
+        self.assertEqual(resolve_agent_model("openai.gpt-5.6-luna", {}), "openai.gpt-5.6-luna")
+
     def test_litellm_azure_with_credentials(self):
         credentials = {
             "api_key": "azure-key",
