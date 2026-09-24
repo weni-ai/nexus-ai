@@ -75,9 +75,10 @@ class TestBuildAgentsCollaboratorCache(TestCase):
         supervisor = {
             "user_model_credentials": {},
             "model_vendor": "aws_mantle",
+            "enable_explicit_prompt_cache": True,
             "collaborator_configurations": {
                 "override_collaborators_foundation_model": True,
-                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+                "collaborators_foundation_model": "openai.gpt-6-luna",
                 "default_instructions_for_collaborators": "Shared guidelines",
             },
         }
@@ -89,7 +90,51 @@ class TestBuildAgentsCollaboratorCache(TestCase):
             kwargs["instructions"],
             f"Shared guidelines\n{OBJECTIVE_MARKER}\nTrack orders only.",
         )
-        self.assertEqual(kwargs["collaborator_configurations"], supervisor["collaborator_configurations"])
+        self.assertTrue(kwargs["collaborator_configurations"]["enable_explicit_prompt_cache"])
+
+    @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
+    @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
+    def test_cache_flag_off_keeps_uncached_instruction_layout(self, collaborator_entity, _make_proxy):
+        collaborator_entity.return_value.name = "orders"
+        supervisor = {
+            "user_model_credentials": {},
+            "model_vendor": "aws_mantle",
+            "enable_explicit_prompt_cache": False,
+            "collaborator_configurations": {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "default_instructions_for_collaborators": "Shared guidelines",
+            },
+        }
+
+        self._build_agents(supervisor)
+
+        self.assertEqual(
+            collaborator_entity.call_args.kwargs["instructions"],
+            "Track orders only.\nShared guidelines",
+        )
+
+    @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
+    @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
+    def test_openai_vendor_with_flag_keeps_uncached_instruction_layout(self, collaborator_entity, _make_proxy):
+        collaborator_entity.return_value.name = "orders"
+        supervisor = {
+            "user_model_credentials": {},
+            "model_vendor": "openai",
+            "enable_explicit_prompt_cache": True,
+            "collaborator_configurations": {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "default_instructions_for_collaborators": "Shared guidelines",
+            },
+        }
+
+        self._build_agents(supervisor)
+
+        self.assertEqual(
+            collaborator_entity.call_args.kwargs["instructions"],
+            "Track orders only.\nShared guidelines",
+        )
 
     @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
     @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
@@ -98,9 +143,10 @@ class TestBuildAgentsCollaboratorCache(TestCase):
         supervisor = {
             "user_model_credentials": {},
             "model_vendor": "aws_mantle",
+            "enable_explicit_prompt_cache": True,
             "collaborator_configurations": {
                 "override_collaborators_foundation_model": True,
-                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+                "collaborators_foundation_model": "openai.gpt-6-luna",
                 "default_instructions_for_collaborators": "",
             },
         }
@@ -409,9 +455,7 @@ class TestFunctionToolSchema(TestCase):
     """
 
     def build_schema(self, parameters: dict) -> dict:
-        model_class = OpenAITeamAdapter.create_function_args_class(
-            {"name": "TestModel", "parameters": parameters}
-        )
+        model_class = OpenAITeamAdapter.create_function_args_class({"name": "TestModel", "parameters": parameters})
         schema = model_class.model_json_schema()
         OpenAITeamAdapter._clean_schema(schema)
         return schema

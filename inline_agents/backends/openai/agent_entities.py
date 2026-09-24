@@ -128,9 +128,7 @@ REASONING_MODE_UNSUPPORTED_MODELS = frozenset({"openai.gpt-5.6-luna"})
 
 def supports_reasoning_mode(model: str, model_vendor: str) -> bool:
     """GPT-5.6 Luna on AWS Mantle rejects `reasoning.mode` with a 400."""
-    return not (
-        (model_vendor or "").lower() == "aws_mantle" and model in REASONING_MODE_UNSUPPORTED_MODELS
-    )
+    return not ((model_vendor or "").lower() == "aws_mantle" and model in REASONING_MODE_UNSUPPORTED_MODELS)
 
 
 def build_reasoning_settings(
@@ -159,9 +157,10 @@ def resolve_agent_model(
     user_model_credentials: Dict[str, Any] | None,
     model_vendor: str = "",
     cache_profile: CacheProfile = MANAGER_CACHE_PROFILE,
+    enable_explicit_prompt_cache: bool = False,
 ) -> Union[Model, LitellmModel, str]:
     """Return a custom Model, LitellmModel, or the model string unchanged."""
-    if supports_explicit_prompt_cache(model, model_vendor):
+    if supports_explicit_prompt_cache(model_vendor, enable_explicit_prompt_cache):
         return PromptCachingOpenAIResponsesModel(model=model, cache_profile=cache_profile)
 
     credentials = user_model_credentials or {}
@@ -248,6 +247,7 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
             user_model_credentials,
             model_vendor=model_vendor,
             cache_profile=COLLABORATOR_CACHE_PROFILE,
+            enable_explicit_prompt_cache=collaborator_configurations.get("enable_explicit_prompt_cache", False),
         )
         model_settings_kw = dict(model_settings)
         if isinstance(model, Model):
@@ -287,11 +287,17 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         parallel_tool_calls: bool = False,
         extra_args: dict | None = None,
         model_vendor: str = "",
+        enable_explicit_prompt_cache: bool = False,
     ):
         tools.extend(self.function_tools())
 
         foundation_model = model
-        model = resolve_agent_model(model, user_model_credentials, model_vendor=model_vendor)
+        model = resolve_agent_model(
+            model,
+            user_model_credentials,
+            model_vendor=model_vendor,
+            enable_explicit_prompt_cache=enable_explicit_prompt_cache,
+        )
 
         model_settings_kwargs: Dict[str, Any] = {
             "parallel_tool_calls": parallel_tool_calls,
