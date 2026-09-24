@@ -422,6 +422,22 @@ class TestAWSMantleProjectCredentials(TestCase):
         self.project.save()
         self.provider = _create_provider("aws_mantle", manager_agent=self.manager)
 
+    def test_uses_manager_api_base_with_iam_auth(self):
+        self.manager.api_key = ""
+        self.manager.api_base = "https://bedrock-mantle.us-east-1.api.aws/openai/v1"
+        self.manager.save(update_fields=["api_key", "api_base"])
+
+        result = ManagerAgentRepository().get_supervisor(
+            supervisor_agent_uuid=str(self.manager.uuid),
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(result["user_model_credentials"]["api_key"], "")
+        self.assertEqual(
+            result["user_model_credentials"]["api_base"],
+            "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+        )
+
     def test_configures_luna_for_manager_and_collaborators(self):
         api_base = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
         ProjectModelProvider.objects.create(
