@@ -123,12 +123,11 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
-REASONING_MODE_UNSUPPORTED_MODELS = frozenset({"openai.gpt-5.6-luna"})
-
-
 def supports_reasoning_mode(model: str, model_vendor: str) -> bool:
-    """GPT-5.6 Luna on AWS Mantle rejects `reasoning.mode` with a 400."""
-    return not ((model_vendor or "").lower() == "aws_mantle" and model in REASONING_MODE_UNSUPPORTED_MODELS)
+    """Luna on AWS Mantle rejects `reasoning.mode` with a 400."""
+    if (model_vendor or "").lower() != "aws_mantle":
+        return True
+    return "luna" not in (model or "").lower()
 
 
 def build_reasoning_settings(
