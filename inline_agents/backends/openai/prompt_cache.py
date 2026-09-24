@@ -4,6 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from threading import Lock
+from typing import Literal
 
 from agents import ModelSettings
 from agents.agent_output import AgentOutputSchemaBase
@@ -19,7 +20,13 @@ logger = logging.getLogger(__name__)
 
 OBJECTIVE_MARKER = "<objective>"
 SESSION_CONTEXT_MARKER = "<session_context>"
-PROMPT_CACHE_KEY_PREFIX = "cache_manager_2_8_luna_v1"
+MANAGER_CACHE_PROFILE = "manager"
+COLLABORATOR_CACHE_PROFILE = "collaborator"
+CacheProfile = Literal["manager", "collaborator"]
+MANAGER_PROMPT_CACHE_KEY = "cache_manager_2_8_luna_v1"
+COLLABORATOR_PROMPT_CACHE_KEY = "cache_collaborator_2_8_luna_v1"
+# Backwards-compatible alias for callers and tests that still use the original name.
+PROMPT_CACHE_KEY_PREFIX = MANAGER_PROMPT_CACHE_KEY
 PROMPT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
 PROMPT_CACHE_BREAKPOINT = {"mode": "explicit"}
 PROMPT_CACHE_MODELS = frozenset({"openai.gpt-5.6-luna"})
@@ -29,18 +36,22 @@ def supports_explicit_prompt_cache(model: str, model_vendor: str) -> bool:
     return (model_vendor or "").lower() == "aws_mantle" and model in PROMPT_CACHE_MODELS
 
 
-_warned_models: set[str] = set()
+_warned_models: set[tuple[str, CacheProfile]] = set()
 
 
-def _log_missing_markers_once(model: str) -> None:
-    if model in _warned_models:
+def _log_missing_markers_once(model: str, cache_profile: CacheProfile) -> None:
+    warning_key = (model, cache_profile)
+    if warning_key in _warned_models:
         return
-    _warned_models.add(model)
+    _warned_models.add(warning_key)
+    required_markers = (
+        f"{OBJECTIVE_MARKER}, {SESSION_CONTEXT_MARKER}" if cache_profile == MANAGER_CACHE_PROFILE else OBJECTIVE_MARKER
+    )
     logger.warning(
-        "Explicit prompt caching disabled for %s because Manager 2.8 markers are missing: %s, %s",
+        "Explicit prompt caching disabled for %s %s because required markers are missing: %s",
+        cache_profile,
         model,
-        OBJECTIVE_MARKER,
-        SESSION_CONTEXT_MARKER,
+        required_markers,
     )
 
 
@@ -57,6 +68,14 @@ def split_cacheable_instructions(instructions: str) -> tuple[str, str, str] | No
         instructions[objective_index:session_context_index],
         instructions[session_context_index:],
     )
+
+
+def split_collaborator_cacheable_instructions(instructions: str) -> tuple[str, str] | None:
+    """Split collaborator instructions into shared guidelines and its playbook."""
+    objective_index = instructions.find(OBJECTIVE_MARKER)
+    if objective_index < 0:
+        return None
+    return instructions[:objective_index], instructions[objective_index:]
 
 
 def build_cacheable_input(
@@ -95,7 +114,45 @@ def build_cacheable_input(
     else:
         items = [developer_message, *input_items]
 
-    return items, PROMPT_CACHE_KEY_PREFIX
+    return items, MANAGER_PROMPT_CACHE_KEY
+
+
+def build_collaborator_cacheable_input(
+    instructions: str,
+    input_items: str | list[TResponseInputItem],
+) -> tuple[list[TResponseInputItem], str] | None:
+    """Move collaborator instructions to two explicitly cached developer sections."""
+    sections = split_collaborator_cacheable_instructions(instructions)
+    if sections is None:
+        return None
+
+    global_static, project_static = sections
+    developer_message: TResponseInputItem = {
+        "type": "message",
+        "role": "developer",
+        "content": [
+            {
+                "type": "input_text",
+                "text": global_static,
+                "prompt_cache_breakpoint": PROMPT_CACHE_BREAKPOINT,
+            },
+            {
+                "type": "input_text",
+                "text": project_static,
+                "prompt_cache_breakpoint": PROMPT_CACHE_BREAKPOINT,
+            },
+        ],
+    }
+
+    if isinstance(input_items, str):
+        items: list[TResponseInputItem] = [
+            developer_message,
+            {"role": "user", "content": input_items},
+        ]
+    else:
+        items = [developer_message, *input_items]
+
+    return items, COLLABORATOR_PROMPT_CACHE_KEY
 
 
 def with_explicit_cache_settings(model_settings: ModelSettings, cache_key: str) -> ModelSettings:
@@ -110,15 +167,16 @@ def with_explicit_cache_settings(model_settings: ModelSettings, cache_key: str) 
 
 
 class PromptCachingOpenAIResponsesModel(Model):
-    """Responses model that applies Manager 2.8 explicit prompt caching.
+    """Responses model that applies Manager 2.8 and collaborator prompt caching.
 
     The wrapped OpenAIResponsesModel is created on first use, not in __init__.
     Supervisor is built in the adapter before OpenAIBackend._set_openai_client()
     binds the process-wide Mantle client for this invocation.
     """
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, cache_profile: CacheProfile = MANAGER_CACHE_PROFILE):
         self.model = model
+        self.cache_profile = cache_profile
         self._responses_model: OpenAIResponsesModel | None = None
         self._responses_model_lock = Lock()
 
@@ -140,9 +198,12 @@ class PromptCachingOpenAIResponsesModel(Model):
         if not system_instructions:
             return system_instructions, input_items, model_settings
 
-        cacheable = build_cacheable_input(system_instructions, input_items)
+        if self.cache_profile == COLLABORATOR_CACHE_PROFILE:
+            cacheable = build_collaborator_cacheable_input(system_instructions, input_items)
+        else:
+            cacheable = build_cacheable_input(system_instructions, input_items)
         if cacheable is None:
-            _log_missing_markers_once(self.model)
+            _log_missing_markers_once(self.model, self.cache_profile)
             return system_instructions, input_items, model_settings
 
         cached_input, cache_key = cacheable
