@@ -53,21 +53,42 @@ class ResolveAgentModelTests(SimpleTestCase):
 
     def test_mantle_manager_uses_prompt_caching_responses_model(self):
         model = resolve_agent_model(
-            "openai.gpt-5.6-luna",
+            "openai.gpt-6-luna",
+            {},
+            model_vendor="aws_mantle",
+            enable_explicit_prompt_cache=True,
+        )
+
+        self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(model.model, "openai.gpt-6-luna")
+        self.assertEqual(model.cache_profile, MANAGER_CACHE_PROFILE)
+
+    def test_mantle_without_flag_skips_prompt_caching_wrapper(self):
+        model = resolve_agent_model(
+            "openai.gpt-6-luna",
             {},
             model_vendor="aws_mantle",
         )
 
-        self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
-        self.assertEqual(model.model, "openai.gpt-5.6-luna")
-        self.assertEqual(model.cache_profile, MANAGER_CACHE_PROFILE)
+        self.assertEqual(model, "openai.gpt-6-luna")
+
+    def test_openai_vendor_with_flag_skips_prompt_caching_wrapper(self):
+        model = resolve_agent_model(
+            "openai.gpt-6-luna",
+            {},
+            model_vendor="openai",
+            enable_explicit_prompt_cache=True,
+        )
+
+        self.assertEqual(model, "openai.gpt-6-luna")
 
     def test_mantle_collaborator_uses_collaborator_cache_profile(self):
         model = resolve_agent_model(
-            "openai.gpt-5.6-luna",
+            "openai.gpt-6-luna",
             {},
             model_vendor="aws_mantle",
             cache_profile=COLLABORATOR_CACHE_PROFILE,
+            enable_explicit_prompt_cache=True,
         )
 
         self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
@@ -143,7 +164,8 @@ class CollaboratorModelTests(SimpleTestCase):
             model_settings={},
             collaborator_configurations={
                 "override_collaborators_foundation_model": True,
-                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "enable_explicit_prompt_cache": True,
             },
             model_vendor="aws_mantle",
         )

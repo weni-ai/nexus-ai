@@ -16,7 +16,6 @@ from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
 from inline_agents.backends.openai.agent_entities import Collaborator as CollaboratorEntity
 from inline_agents.backends.openai.agent_entities import Supervisor as SupervisorEntity
-from inline_agents.backends.openai.agent_entities import resolve_collaborator_model_name
 from inline_agents.backends.openai.components_tools import all_component_tool_names
 from inline_agents.backends.openai.components_tools_stream import streaming_merge_tool_names
 from inline_agents.backends.openai.entities import Context, HooksState
@@ -163,16 +162,12 @@ class OpenAITeamAdapter(TeamAdapter):
             collaborator_extra_args = {**collaborator_extra_args, **manager_extra_args}
 
         for agent in agents:
-            collaborator_model = resolve_collaborator_model_name(
-                agent.get("foundationModel"),
-                collaborator_configurations,
-            )
             default_collaborator_instructions = collaborator_configurations.get(
                 "default_instructions_for_collaborators"
             )
             collaborator_cache_enabled = supports_explicit_prompt_cache(
-                collaborator_model,
                 supervisor.get("model_vendor", ""),
+                supervisor.get("enable_explicit_prompt_cache", False),
             ) and bool(default_collaborator_instructions)
             agent_instructions = cls.prepare_agent_instructions(
                 agent.get("instruction"),
@@ -206,7 +201,10 @@ class OpenAITeamAdapter(TeamAdapter):
                 user_model_credentials=user_model_credentials,
                 hooks=hooks,
                 model_settings=model_settings,
-                collaborator_configurations=collaborator_configurations,
+                collaborator_configurations={
+                    **collaborator_configurations,
+                    "enable_explicit_prompt_cache": supervisor.get("enable_explicit_prompt_cache", False),
+                },
                 model_vendor=supervisor.get("model_vendor", ""),
             )
 
@@ -358,6 +356,7 @@ class OpenAITeamAdapter(TeamAdapter):
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
             extra_args=supervisor_model_settings.get("manager_extra_args") or {},
             model_vendor=supervisor.get("model_vendor", ""),
+            enable_explicit_prompt_cache=supervisor.get("enable_explicit_prompt_cache", False),
         )
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
         return {

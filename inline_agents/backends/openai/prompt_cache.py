@@ -1,4 +1,4 @@
-"""Explicit prompt caching for GPT-5.6 models served by AWS Mantle."""
+"""Explicit prompt caching for AWS Mantle managers with the Admin flag enabled."""
 
 import logging
 from collections.abc import AsyncIterator
@@ -29,11 +29,10 @@ COLLABORATOR_PROMPT_CACHE_KEY = "cache_collaborator_2_8_luna_v1"
 PROMPT_CACHE_KEY_PREFIX = MANAGER_PROMPT_CACHE_KEY
 PROMPT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
 PROMPT_CACHE_BREAKPOINT = {"mode": "explicit"}
-PROMPT_CACHE_MODELS = frozenset({"openai.gpt-5.6-luna"})
 
 
-def supports_explicit_prompt_cache(model: str, model_vendor: str) -> bool:
-    return (model_vendor or "").lower() == "aws_mantle" and model in PROMPT_CACHE_MODELS
+def supports_explicit_prompt_cache(model_vendor: str, enabled: bool = False) -> bool:
+    return bool(enabled) and (model_vendor or "").lower() == "aws_mantle"
 
 
 _warned_models: set[tuple[str, CacheProfile]] = set()

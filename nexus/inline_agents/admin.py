@@ -716,6 +716,7 @@ class ManagerAgentAdmin(admin.ModelAdmin):
                     "base_prompt",
                     "model_vendor",
                     "foundation_model",
+                    "enable_explicit_prompt_cache",
                     "api_key",
                     "api_base",
                     "api_version",
