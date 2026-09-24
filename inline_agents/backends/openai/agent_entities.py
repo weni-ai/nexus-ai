@@ -194,7 +194,13 @@ def resolve_collaborator_model_name(
 ) -> str:
     """Resolve the collaborator model from its project default or manager override."""
     if collaborator_configurations.get("override_collaborators_foundation_model"):
-        return collaborator_configurations.get("collaborators_foundation_model") or foundation_model
+        override = collaborator_configurations.get("collaborators_foundation_model")
+        if not override:
+            logger.warning(
+                "override_collaborators_foundation_model is set but collaborators_foundation_model "
+                "is empty; falling back to agent model"
+            )
+        return override or foundation_model
     return foundation_model
 
 
