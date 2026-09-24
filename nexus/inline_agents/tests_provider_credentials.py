@@ -446,6 +446,7 @@ class TestAWSMantleProjectCredentials(TestCase):
 
         self.assertEqual(result["foundation_model"], "openai.gpt-5.6-luna")
         self.assertEqual(result["model_vendor"], "aws_mantle")
+        self.assertFalse(result["enable_explicit_prompt_cache"])
         self.assertEqual(result["user_model_credentials"]["api_key"], "bedrock-api-key")
         self.assertEqual(result["user_model_credentials"]["api_base"], api_base)
         self.assertEqual(
@@ -795,9 +796,7 @@ class TestWhirlpoolHiddenFromModelProvidersApi(TestCase):
 
         self.project.manager_agent = self.whirlpool_manager
         self.project.save()
-        response = self.client.post(
-            self.managers_url, {"currentManager": str(self.openai_manager.uuid)}, format="json"
-        )
+        response = self.client.post(self.managers_url, {"currentManager": str(self.openai_manager.uuid)}, format="json")
         self.assertEqual(response.status_code, 403)
         self.project.refresh_from_db()
         self.assertEqual(self.project.manager_agent_id, self.whirlpool_manager.id)

@@ -21,6 +21,7 @@ from inline_agents.backends.openai.prompt_cache import (
     supports_explicit_prompt_cache,
     with_explicit_cache_settings,
 )
+from nexus.inline_agents.admin import ManagerAgentAdmin
 
 GLOBAL_STATIC = "# Manager\n" + ("Always follow the global rules. " * 50)
 PROJECT_STATIC = f"{OBJECTIVE_MARKER}\nHelp this project.\n<personality>\nBe concise.\n"
@@ -365,13 +366,15 @@ class PromptCachingOpenAIResponsesModelTests(SimpleTestCase):
 
 
 class SupportsExplicitPromptCacheTests(SimpleTestCase):
-    def test_supports_manager_2_8_luna_on_aws_mantle(self):
-        self.assertTrue(supports_explicit_prompt_cache("openai.gpt-5.6-luna", "AWS_MANTLE"))
+    def test_requires_flag_and_aws_mantle(self):
+        self.assertTrue(supports_explicit_prompt_cache("AWS_MANTLE", True))
+        self.assertTrue(supports_explicit_prompt_cache("aws_mantle", True))
 
-    def test_rejects_other_models_and_vendors(self):
-        self.assertFalse(supports_explicit_prompt_cache("openai.gpt-5.6-sol", "aws_mantle"))
-        self.assertFalse(supports_explicit_prompt_cache("openai.gpt-5.6-luna", "openai"))
-        self.assertFalse(supports_explicit_prompt_cache("openai.gpt-5.6-luna", None))
+    def test_rejects_flag_off_or_non_mantle_vendor(self):
+        self.assertFalse(supports_explicit_prompt_cache("aws_mantle", False))
+        self.assertFalse(supports_explicit_prompt_cache("aws_mantle"))
+        self.assertFalse(supports_explicit_prompt_cache("openai", True))
+        self.assertFalse(supports_explicit_prompt_cache(None, True))
 
 
 class PromptCacheAdapterWiringTests(SimpleTestCase):
@@ -394,8 +397,9 @@ class PromptCacheAdapterWiringTests(SimpleTestCase):
         supervisor_hooks = MagicMock()
         supervisor = {
             "instruction": MANAGER_PROMPT,
-            "foundation_model": "openai.gpt-5.6-luna",
+            "foundation_model": "openai.gpt-6-luna",
             "model_vendor": "aws_mantle",
+            "enable_explicit_prompt_cache": True,
             "model_settings": {},
             "max_tokens": {},
             "tools": [],
@@ -435,3 +439,13 @@ class PromptCacheAdapterWiringTests(SimpleTestCase):
         )
 
         self.assertEqual(supervisor_entity.call_args.kwargs["model_vendor"], "aws_mantle")
+        self.assertTrue(supervisor_entity.call_args.kwargs["enable_explicit_prompt_cache"])
+
+
+class ManagerAgentAdminPromptCacheFieldTests(SimpleTestCase):
+    def test_enable_explicit_prompt_cache_is_in_fieldsets(self):
+        admin_fields = []
+        for _name, options in ManagerAgentAdmin.fieldsets:
+            admin_fields.extend(options["fields"])
+
+        self.assertIn("enable_explicit_prompt_cache", admin_fields)
