@@ -246,6 +246,22 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
             project = Project.objects.get(uuid=project_uuid)
             return {"human_support": project.human_support, "human_support_prompt": project.human_support_prompt}
 
+    def _notify_contentbase_agent_activity(self, *, agent, user, action_type, **notify_kwargs):
+        if user is None:
+            logger.warning(
+                "contentbase_agent_activity skipped: no user resolved for contentbase %s",
+                getattr(agent.content_base, "uuid", None),
+            )
+            return
+
+        event_manager.notify(
+            event="contentbase_agent_activity",
+            content_base_agent=agent,
+            action_type=action_type,
+            user=user,
+            **notify_kwargs,
+        )
+
     def update(self, instance, validated_data):
         agent_data = validated_data.get("agent")
         instructions_data = self.context.get("request").data.get("instructions")
@@ -309,6 +325,10 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 
         # Handle agent updates
         if agent_data:
+            request = self.context.get("request")
+            user = getattr(request, "user", None) if request else None
+            user = user or getattr(instance, "created_by", None)
+
             try:
                 agent = instance.agent
                 old_agent_data = model_to_dict(agent)
@@ -320,13 +340,12 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 agent.save()
                 new_agent_data = model_to_dict(agent)
 
-                event_manager.notify(
-                    event="contentbase_agent_activity",
-                    content_base_agent=agent,
+                self._notify_contentbase_agent_activity(
+                    agent=agent,
+                    user=user,
                     action_type="U",
                     old_agent_data=old_agent_data,
                     new_agent_data=new_agent_data,
-                    user=self.context.get("request").user,
                 )
 
                 # Fire cache invalidation event
@@ -343,6 +362,13 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     personality=agent_data.get("personality"),
                     goal=agent_data.get("goal"),
                     content_base=instance,
+                )
+
+                self._notify_contentbase_agent_activity(
+                    agent=created_agent,
+                    user=user,
+                    action_type="C",
+                    action_details={"old": "", "new": created_agent.name or ""},
                 )
 
                 # Fire cache invalidation event for agent creation
