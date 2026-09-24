@@ -117,15 +117,18 @@ class ResolveCollaboratorModelNameTests(SimpleTestCase):
         self.assertEqual(result, "openai.gpt-5.6-luna")
 
     def test_empty_manager_override_falls_back_to_agent_model(self):
-        result = resolve_collaborator_model_name(
-            "project-default-model",
-            {
-                "override_collaborators_foundation_model": True,
-                "collaborators_foundation_model": "",
-            },
-        )
+        with self.assertLogs("inline_agents.backends.openai.agent_entities", level="WARNING") as captured:
+            result = resolve_collaborator_model_name(
+                "project-default-model",
+                {
+                    "override_collaborators_foundation_model": True,
+                    "collaborators_foundation_model": "",
+                },
+            )
 
         self.assertEqual(result, "project-default-model")
+        self.assertEqual(len(captured.records), 1)
+        self.assertIn("collaborators_foundation_model is empty", captured.records[0].getMessage())
 
 
 class CollaboratorModelTests(SimpleTestCase):
