@@ -123,11 +123,13 @@ class ManagerAgentRepository(SupervisorRepository):
             user_model_credentials.setdefault("api_key", project_creds.get("api_key", ""))
             user_model_credentials.setdefault("api_base", project_creds.get("api_base", ""))
             user_model_credentials.setdefault("api_version", project_creds.get("api_version", ""))
-        elif supervisor_data["api_key"]:
+        elif supervisor_data["api_key"] or (
+            supervisor_data["model_vendor"].lower() == "aws_mantle" and supervisor_data["api_base"]
+        ):
             user_model_credentials = {
-                "api_key": supervisor_data["api_key"],
-                "api_base": supervisor_data["api_base"],
-                "api_version": supervisor_data["api_version"],
+                "api_key": supervisor_data["api_key"] or "",
+                "api_base": supervisor_data["api_base"] or "",
+                "api_version": supervisor_data["api_version"] or "",
             }
         else:
             user_model_credentials = {}
@@ -165,6 +167,7 @@ class ManagerAgentRepository(SupervisorRepository):
             "tools": self._get_supervisor_agent_tools(supervisor=supervisor_data, use_human_support=use_human_support),
             "foundation_model": supervisor_data["foundation_model"],
             "model_vendor": supervisor_data["model_vendor"],
+            "enable_explicit_prompt_cache": supervisor_data.get("enable_explicit_prompt_cache", False),
             "model_settings": model_settings,
             "knowledge_bases": supervisor_data["knowledge_bases"],
             "max_tokens": {

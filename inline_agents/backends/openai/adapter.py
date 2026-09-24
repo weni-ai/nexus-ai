@@ -22,6 +22,7 @@ from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
 from inline_agents.backends.openai.legacy_formatter_pipeline import is_legacy_pipeline_version
+from inline_agents.backends.openai.prompt_cache import OBJECTIVE_MARKER, supports_explicit_prompt_cache
 from inline_agents.backends.openai.prompts_progressive_feedback import (
     get_progressive_feedback_orchestration_instruction,
     inject_progressive_feedback_instruction,
@@ -100,7 +101,16 @@ class OpenAITeamAdapter(TeamAdapter):
         cls,
         agent_instructions: str,
         supervisor_default_collaborator_instructions: str,
+        explicit_cache: bool = False,
     ) -> str:
+        if explicit_cache and supervisor_default_collaborator_instructions:
+            parts = [
+                supervisor_default_collaborator_instructions,
+                OBJECTIVE_MARKER,
+                agent_instructions,
+            ]
+            return "\n".join(filter(None, parts))
+
         parts = [
             agent_instructions,
             supervisor_default_collaborator_instructions,
@@ -152,9 +162,17 @@ class OpenAITeamAdapter(TeamAdapter):
             collaborator_extra_args = {**collaborator_extra_args, **manager_extra_args}
 
         for agent in agents:
+            default_collaborator_instructions = collaborator_configurations.get(
+                "default_instructions_for_collaborators"
+            )
+            collaborator_cache_enabled = supports_explicit_prompt_cache(
+                supervisor.get("model_vendor", ""),
+                supervisor.get("enable_explicit_prompt_cache", False),
+            ) and bool(default_collaborator_instructions)
             agent_instructions = cls.prepare_agent_instructions(
                 agent.get("instruction"),
-                supervisor.get("collaborator_configurations", {}).get("default_instructions_for_collaborators"),
+                default_collaborator_instructions,
+                explicit_cache=collaborator_cache_enabled,
             )
             agent_name = agent.get("agentName")
             hooks = CollaboratorHooks(
@@ -183,7 +201,10 @@ class OpenAITeamAdapter(TeamAdapter):
                 user_model_credentials=user_model_credentials,
                 hooks=hooks,
                 model_settings=model_settings,
-                collaborator_configurations=supervisor.get("collaborator_configurations", {}),
+                collaborator_configurations={
+                    **collaborator_configurations,
+                    "enable_explicit_prompt_cache": supervisor.get("enable_explicit_prompt_cache", False),
+                },
                 model_vendor=supervisor.get("model_vendor", ""),
             )
 
@@ -335,6 +356,7 @@ class OpenAITeamAdapter(TeamAdapter):
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
             extra_args=supervisor_model_settings.get("manager_extra_args") or {},
             model_vendor=supervisor.get("model_vendor", ""),
+            enable_explicit_prompt_cache=supervisor.get("enable_explicit_prompt_cache", False),
         )
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
         return {

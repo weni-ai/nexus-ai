@@ -122,6 +122,14 @@ class ManagerAgent(models.Model):
     collaborators_foundation_model = models.CharField(max_length=255)
     override_collaborators_foundation_model = models.BooleanField(default=False)
     default_instructions_for_collaborators = models.TextField(null=True, blank=True)
+    enable_explicit_prompt_cache = models.BooleanField(
+        default=False,
+        help_text=(
+            "If True and model_vendor is aws_mantle, send explicit prompt cache "
+            "(prompt_cache_key / breakpoints) for this manager and its collaborators. "
+            "Leave False unless the selected Mantle model supports explicit cache."
+        ),
+    )
 
     # model specific params
     manager_extra_args = models.JSONField(null=True, blank=True)

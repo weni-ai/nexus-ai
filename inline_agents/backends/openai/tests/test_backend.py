@@ -606,6 +606,18 @@ class ManagerAgentRepositoryTestCase(TestCase):
             collaborator_config["default_instructions_for_collaborators"],
             self.manager_agent.default_instructions_for_collaborators,
         )
+        self.assertIn("enable_explicit_prompt_cache", result)
+        self.assertFalse(result["enable_explicit_prompt_cache"])
+
+    def test_get_supervisor_exposes_enable_explicit_prompt_cache_when_true(self):
+        self.manager_agent.enable_explicit_prompt_cache = True
+        self.manager_agent.save(update_fields=["enable_explicit_prompt_cache"])
+
+        result = self.repository.get_supervisor(
+            supervisor_agent_uuid=str(self.manager_agent.uuid),
+        )
+
+        self.assertTrue(result["enable_explicit_prompt_cache"])
 
     def test_get_supervisor_components_instructions(self):
         """Test get_supervisor includes correct components instructions."""

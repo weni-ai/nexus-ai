@@ -2,9 +2,17 @@ from agents.extensions.models.litellm_model import LitellmModel
 from django.test import SimpleTestCase
 
 from inline_agents.backends.openai.agent_entities import (
+    Collaborator,
     _final_output_from_tool_dict,
     build_reasoning_settings,
     resolve_agent_model,
+    resolve_collaborator_model_name,
+    supports_reasoning_mode,
+)
+from inline_agents.backends.openai.prompt_cache import (
+    COLLABORATOR_CACHE_PROFILE,
+    MANAGER_CACHE_PROFILE,
+    PromptCachingOpenAIResponsesModel,
 )
 
 
@@ -43,6 +51,49 @@ class ResolveAgentModelTests(SimpleTestCase):
     def test_mantle_model_skips_litellm(self):
         self.assertEqual(resolve_agent_model("openai.gpt-5.6-luna", {}), "openai.gpt-5.6-luna")
 
+    def test_mantle_manager_uses_prompt_caching_responses_model(self):
+        model = resolve_agent_model(
+            "openai.gpt-6-luna",
+            {},
+            model_vendor="aws_mantle",
+            enable_explicit_prompt_cache=True,
+        )
+
+        self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(model.model, "openai.gpt-6-luna")
+        self.assertEqual(model.cache_profile, MANAGER_CACHE_PROFILE)
+
+    def test_mantle_without_flag_skips_prompt_caching_wrapper(self):
+        model = resolve_agent_model(
+            "openai.gpt-6-luna",
+            {},
+            model_vendor="aws_mantle",
+        )
+
+        self.assertEqual(model, "openai.gpt-6-luna")
+
+    def test_openai_vendor_with_flag_skips_prompt_caching_wrapper(self):
+        model = resolve_agent_model(
+            "openai.gpt-6-luna",
+            {},
+            model_vendor="openai",
+            enable_explicit_prompt_cache=True,
+        )
+
+        self.assertEqual(model, "openai.gpt-6-luna")
+
+    def test_mantle_collaborator_uses_collaborator_cache_profile(self):
+        model = resolve_agent_model(
+            "openai.gpt-6-luna",
+            {},
+            model_vendor="aws_mantle",
+            cache_profile=COLLABORATOR_CACHE_PROFILE,
+            enable_explicit_prompt_cache=True,
+        )
+
+        self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(model.cache_profile, COLLABORATOR_CACHE_PROFILE)
+
     def test_litellm_azure_with_credentials(self):
         credentials = {
             "api_key": "azure-key",
@@ -61,6 +112,66 @@ class ResolveAgentModelTests(SimpleTestCase):
         self.assertEqual(model.model, "azure/gpt-4.1")
         self.assertIsNone(model.api_key)
         self.assertIsNone(model.base_url)
+
+
+class ResolveCollaboratorModelNameTests(SimpleTestCase):
+    def test_uses_agent_model_when_manager_override_is_disabled(self):
+        result = resolve_collaborator_model_name(
+            "project-default-model",
+            {
+                "override_collaborators_foundation_model": False,
+                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+            },
+        )
+
+        self.assertEqual(result, "project-default-model")
+
+    def test_uses_manager_collaborator_model_when_override_is_enabled(self):
+        result = resolve_collaborator_model_name(
+            "project-default-model",
+            {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-5.6-luna",
+            },
+        )
+
+        self.assertEqual(result, "openai.gpt-5.6-luna")
+
+    def test_empty_manager_override_falls_back_to_agent_model(self):
+        with self.assertLogs("inline_agents.backends.openai.agent_entities", level="WARNING") as captured:
+            result = resolve_collaborator_model_name(
+                "project-default-model",
+                {
+                    "override_collaborators_foundation_model": True,
+                    "collaborators_foundation_model": "",
+                },
+            )
+
+        self.assertEqual(result, "project-default-model")
+        self.assertEqual(len(captured.records), 1)
+        self.assertIn("collaborators_foundation_model is empty", captured.records[0].getMessage())
+
+
+class CollaboratorModelTests(SimpleTestCase):
+    def test_luna_mantle_collaborator_uses_collaborator_cache_profile(self):
+        collaborator = Collaborator(
+            name="orders",
+            instructions="Shared guidelines\n<objective>\nTrack orders.",
+            tools=[],
+            foundation_model="project-default-model",
+            user_model_credentials={},
+            hooks=None,
+            model_settings={},
+            collaborator_configurations={
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "enable_explicit_prompt_cache": True,
+            },
+            model_vendor="aws_mantle",
+        )
+
+        self.assertIsInstance(collaborator.model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(collaborator.model.cache_profile, COLLABORATOR_CACHE_PROFILE)
 
 
 class BuildReasoningSettingsTests(SimpleTestCase):
@@ -101,3 +212,44 @@ class BuildReasoningSettingsTests(SimpleTestCase):
 
     def test_returns_none_when_no_reasoning_fields(self):
         self.assertIsNone(build_reasoning_settings())
+
+    def test_omits_mode_for_luna_on_aws_mantle(self):
+        for model in ("openai.gpt-5.6-luna", "openai.gpt-6-luna"):
+            with self.subTest(model=model):
+                reasoning = build_reasoning_settings(
+                    model_has_reasoning=True,
+                    reasoning_effort="high",
+                    reasoning_summary="auto",
+                    reasoning_mode="pro",
+                    model=model,
+                    model_vendor="aws_mantle",
+                )
+
+                dumped = reasoning.model_dump(exclude_unset=True)
+                self.assertEqual(reasoning.effort, "high")
+                self.assertEqual(reasoning.summary, "auto")
+                self.assertNotIn("mode", dumped)
+
+    def test_includes_mode_for_luna_on_openai_vendor(self):
+        reasoning = build_reasoning_settings(
+            model_has_reasoning=True,
+            reasoning_effort="high",
+            reasoning_summary="auto",
+            reasoning_mode="pro",
+            model="openai.gpt-5.6-luna",
+            model_vendor="OpenAI",
+        )
+
+        self.assertEqual(reasoning.mode, "pro")
+
+
+class SupportsReasoningModeTests(SimpleTestCase):
+    def test_luna_on_aws_mantle_is_unsupported(self):
+        self.assertFalse(supports_reasoning_mode("openai.gpt-5.6-luna", "aws_mantle"))
+        self.assertFalse(supports_reasoning_mode("openai.gpt-6-luna", "aws_mantle"))
+
+    def test_luna_on_openai_vendor_is_supported(self):
+        self.assertTrue(supports_reasoning_mode("openai.gpt-5.6-luna", "OpenAI"))
+
+    def test_other_mantle_models_keep_mode(self):
+        self.assertTrue(supports_reasoning_mode("openai.gpt-5.4-mini", "aws_mantle"))
