@@ -291,9 +291,9 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
     ):
         tools.extend(self.function_tools())
 
-        foundation_model = model
+        model_name = model
         model = resolve_agent_model(
-            model,
+            model_name,
             user_model_credentials,
             model_vendor=model_vendor,
             enable_explicit_prompt_cache=enable_explicit_prompt_cache,
@@ -313,7 +313,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
             reasoning_effort=reasoning_effort,
             reasoning_summary=reasoning_summary,
             reasoning_mode=reasoning_mode,
-            model=foundation_model,
+            model=model_name,
             model_vendor=model_vendor,
         )
         if reasoning is not None:
