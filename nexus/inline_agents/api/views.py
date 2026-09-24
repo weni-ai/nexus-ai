@@ -48,6 +48,7 @@ from nexus.inline_agents.backends.openai.models import (
     project_has_api_visible_own_engine,
 )
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
+from nexus.inline_agents.manager_rollout import can_select_manager_via_api
 from nexus.inline_agents.models import MCP, Agent, AgentGroup, IntegratedAgent
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.api.serializers import ProjectMinimalSerializer
@@ -1372,7 +1373,11 @@ class ApiHiddenProviderChangeNotAllowed(Exception):
     """Raised when the API tries to change an admin-only custom provider."""
 
 
-def set_project_manager_agent(project_uuid, manager_identifier: str):
+def set_project_manager_agent(
+    project_uuid,
+    manager_identifier: str,
+    user_email: str | None = None,
+):
     project = get_project_by_uuid(project_uuid)
 
     if is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)):
@@ -1392,6 +1397,8 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
 
     manager = ManagerAgent.objects.get(uuid=manager_identifier)
     if is_api_hidden_model_vendor(manager.model_vendor):
+        raise ManagerAgent.DoesNotExist()
+    if not can_select_manager_via_api(manager, project, user_email):
         raise ManagerAgent.DoesNotExist()
 
     if project.is_live_desk_copilot:
@@ -1423,7 +1430,11 @@ class AgentManagersView(APIView):
             return Response(data={"error": "currentManager is required"}, status=400)
 
         try:
-            manager_agent_uuid = set_project_manager_agent(project_uuid, str(manager_uuid))
+            manager_agent_uuid = set_project_manager_agent(
+                project_uuid,
+                str(manager_uuid),
+                _multi_agent_request_user_email(request),
+            )
         except ManagerChangeNotAllowedForLiveDeskCopilot as e:
             return Response(data={"error": e.message}, status=403)
         except ManagerAgent.DoesNotExist:
@@ -1577,6 +1588,12 @@ class ProjectModelProvidersView(APIView):
 
         if not provider.manager_agent:
             return Response(data={"error": "Provider has no associated manager agent"}, status=400)
+        if not can_select_manager_via_api(
+            provider.manager_agent,
+            project,
+            _multi_agent_request_user_email(request),
+        ):
+            return Response(data={"error": "Provider not found"}, status=404)
 
         active_hidden = (
             ProjectModelProvider.objects.filter(project=project, is_active=True).select_related("provider").first()
