@@ -214,19 +214,21 @@ class BuildReasoningSettingsTests(SimpleTestCase):
         self.assertIsNone(build_reasoning_settings())
 
     def test_omits_mode_for_luna_on_aws_mantle(self):
-        reasoning = build_reasoning_settings(
-            model_has_reasoning=True,
-            reasoning_effort="high",
-            reasoning_summary="auto",
-            reasoning_mode="pro",
-            model="openai.gpt-5.6-luna",
-            model_vendor="aws_mantle",
-        )
+        for model in ("openai.gpt-5.6-luna", "openai.gpt-6-luna"):
+            with self.subTest(model=model):
+                reasoning = build_reasoning_settings(
+                    model_has_reasoning=True,
+                    reasoning_effort="high",
+                    reasoning_summary="auto",
+                    reasoning_mode="pro",
+                    model=model,
+                    model_vendor="aws_mantle",
+                )
 
-        dumped = reasoning.model_dump(exclude_unset=True)
-        self.assertEqual(reasoning.effort, "high")
-        self.assertEqual(reasoning.summary, "auto")
-        self.assertNotIn("mode", dumped)
+                dumped = reasoning.model_dump(exclude_unset=True)
+                self.assertEqual(reasoning.effort, "high")
+                self.assertEqual(reasoning.summary, "auto")
+                self.assertNotIn("mode", dumped)
 
     def test_includes_mode_for_luna_on_openai_vendor(self):
         reasoning = build_reasoning_settings(
@@ -244,6 +246,7 @@ class BuildReasoningSettingsTests(SimpleTestCase):
 class SupportsReasoningModeTests(SimpleTestCase):
     def test_luna_on_aws_mantle_is_unsupported(self):
         self.assertFalse(supports_reasoning_mode("openai.gpt-5.6-luna", "aws_mantle"))
+        self.assertFalse(supports_reasoning_mode("openai.gpt-6-luna", "aws_mantle"))
 
     def test_luna_on_openai_vendor_is_supported(self):
         self.assertTrue(supports_reasoning_mode("openai.gpt-5.6-luna", "OpenAI"))
