@@ -76,11 +76,11 @@ class SyncProjectFieldsUseCase:
     ) -> Optional[Project]:
         """Apply synchronized fields from a Connect project event.
 
-        The two modes treat empty values differently on purpose. `update` applies
-        the payload by key presence, so an explicit null clears the stored value.
-        `create` only applies filled values because it also runs when a creation
-        event is redelivered for an existing project; a stale creation payload
-        must not wipe values already synced by a later update event.
+        Both modes require the payload key (`has_*`). `update` then writes the
+        snapshot as-is, so an explicit null clears the stored value. `create`
+        also requires `value is not None` so a redelivered creation event with
+        nulls does not wipe values already synced by a later update. Empty
+        strings are applied when the key is present.
         """
         try:
             project = Project.objects.get(uuid=project_uuid)
@@ -94,7 +94,10 @@ class SyncProjectFieldsUseCase:
         update_fields: list[str] = []
         for field_name, presence_name in SYNCED_FIELD_PRESENCE:
             value = getattr(fields, field_name)
-            should_apply = bool(value) if mode == "create" else getattr(fields, presence_name)
+            if mode == "create":
+                should_apply = getattr(fields, presence_name) and value is not None
+            else:
+                should_apply = getattr(fields, presence_name)
             if should_apply:
                 setattr(project, field_name, value)
                 update_fields.append(field_name)
