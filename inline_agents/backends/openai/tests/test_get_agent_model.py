@@ -69,13 +69,10 @@ class GetAgentModelDataLakeSerializationTests(SimpleTestCase):
         self.mock_service.send_validated_event = fake_send_validated_event
         self.adapter._event_service = self.mock_service
 
-    def test_tool_result_event_with_whirlpool_foundation_model_is_json_serializable(self):
-        agent = SimpleNamespace(model=_WhirlpoolModelLike("custom/whirlpool/generateContent"))
-        foundation_model = _get_agent_model(agent)
-
+    def _send_tool_result(self, agent, expected_foundation_model: str) -> dict:
         self.mock_service.clear_events()
         result = self.adapter.to_data_lake_event(
-            project_uuid="f2c1960a-27b7-438c-8a88-5af49c9e704a",
+            project_uuid="proj-123",
             contact_urn="urn:test",
             tool_result_data={
                 "tool_name": "get_spec",
@@ -84,12 +81,31 @@ class GetAgentModelDataLakeSerializationTests(SimpleTestCase):
                 "function_name": "get_spec",
             },
             agent_data={"agent_name": "get_spec"},
-            foundation_model=foundation_model,
+            foundation_model=_get_agent_model(agent),
             backend="openai",
         )
-
         self.assertIsNotNone(result)
         self.assertEqual(len(self.mock_service.sent_events_async), 1)
         queued = self.mock_service.sent_events_async[0]
-        self.assertEqual(queued["metadata"]["foundation_model"], "custom/whirlpool/generateContent")
+        self.assertEqual(queued["metadata"]["foundation_model"], expected_foundation_model)
         json.dumps(queued)
+        return queued
+
+    def test_native_openai_string_model_unchanged_on_datalake_event(self):
+        """Native OpenAI: agent.model is already a string; metadata must keep that id."""
+        agent = SimpleNamespace(model="gpt-4.1-mini")
+        queued = self._send_tool_result(agent, "gpt-4.1-mini")
+        self.assertIsInstance(queued["metadata"]["foundation_model"], str)
+
+    def test_litellm_model_unwraps_on_datalake_event(self):
+        class FakeLitellm:
+            def __init__(self):
+                self.model = "litellm/gemini/gemini-2.0-flash"
+
+        with patch("inline_agents.backends.openai.hooks.LitellmModel", FakeLitellm):
+            agent = SimpleNamespace(model=FakeLitellm())
+            self._send_tool_result(agent, "litellm/gemini/gemini-2.0-flash")
+
+    def test_tool_result_event_with_whirlpool_foundation_model_is_json_serializable(self):
+        agent = SimpleNamespace(model=_WhirlpoolModelLike("custom/whirlpool/generateContent"))
+        self._send_tool_result(agent, "custom/whirlpool/generateContent")

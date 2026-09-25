@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+from unittest.mock import patch
 
 from agents.model_settings import ModelSettings
 from agents.models.chatcmpl_converter import Converter
@@ -580,3 +581,17 @@ class WhirlpoolGuardBlockTests(SimpleTestCase):
     def test_no_configured_messages_means_no_match(self):
         body = {"error_description": GUARD_MESSAGE}
         self.assertIsNone(guard_block_message(400, body))
+
+
+@override_settings(WHIRLPOOL_TRANSLATOR="litellm")
+class WhirlpoolLiteLLMTranslateTests(WhirlpoolTranslateTests):
+    """Same contracts as the native translator, via LiteLLM Gemini transforms."""
+
+    def test_litellm_transform_does_not_call_completion(self):
+        with patch("litellm.completion") as mock_completion:
+            payload = build_generate_content_payload(
+                messages=[{"role": "user", "content": "Hello"}],
+            )
+            mock_completion.assert_not_called()
+        self.assertEqual(payload["contents"][0]["parts"][0]["text"], "Hello")
+        self.assertNotIn("model", payload)

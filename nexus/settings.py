@@ -807,6 +807,15 @@ GUARDRAILS_NEW_PROJECTS_BLOCKED_BY_DEFAULT = env.bool("GUARDRAILS_NEW_PROJECTS_B
 # contact as the model reply; any other 400 stays an error.
 WHIRLPOOL_GUARD_BLOCK_MESSAGES = env.json("WHIRLPOOL_GUARD_BLOCK_MESSAGES", [])
 
+# Whirlpool generateContent payload translator. ``native`` is the hand-written
+# Gemini adapter in whirlpool/translate.py. ``litellm`` uses LiteLLM 1.94.1
+# Vertex Gemini transforms in-process; HTTP still goes through WhirlpoolClient.
+WHIRLPOOL_TRANSLATOR = env.str("WHIRLPOOL_TRANSLATOR", default="native")
+
+# Gemini model id for LiteLLM's request/response mapping only. Not sent on the
+# Whirlpool HTTP body until they confirm accepted values.
+WHIRLPOOL_GEMINI_MODEL = env.str("WHIRLPOOL_GEMINI_MODEL", default="gemini-2.5-flash")
+
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")
 AWS_LAMBDA_MEMORY_SIZE = env.int("AWS_LAMBDA_MEMORY_SIZE", 512)
