@@ -1,6 +1,7 @@
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
+import pendulum
 from django.test import TestCase
 from pydantic import BaseModel, ValidationError
 
@@ -727,3 +728,55 @@ class TestOpenAITeamAdapterGetContext(TestCase):
         self.assertIsNone(context.project["vtex_account"])
         self.assertIsNone(context.project["vtex_host_store"])
         self.assertIsNone(context.project["storefront_type"])
+
+
+class TestOpenAITeamAdapterTimezone(TestCase):
+    @patch(
+        "inline_agents.backends.openai.adapter.resolve_effective_project_timezone",
+        return_value="America/Manaus",
+    )
+    @patch("inline_agents.backends.openai.adapter.pendulum.now")
+    def test_prepare_time_uses_project_timezone(self, mock_now, mock_resolve_timezone):
+        mock_now.return_value = pendulum.datetime(2026, 9, 25, 10, 30, tz="America/Manaus")
+
+        result = OpenAITeamAdapter.prepare_time("America/Manaus")
+
+        mock_resolve_timezone.assert_called_once_with("America/Manaus")
+        mock_now.assert_called_once_with("America/Manaus")
+        self.assertIn("Friday, September 25, 2026 at 10:30:00", result)
+
+    @patch("inline_agents.backends.openai.adapter.pendulum.now")
+    def test_prepare_time_defaults_to_sao_paulo(self, mock_now):
+        mock_now.return_value = pendulum.datetime(2026, 9, 25, 11, 30, tz="America/Sao_Paulo")
+
+        result = OpenAITeamAdapter.prepare_time(None)
+
+        mock_now.assert_called_once_with("America/Sao_Paulo")
+        self.assertIn("Friday, September 25, 2026 at 11:30:00", result)
+
+    def test_human_support_instructions_receive_date_time_now(self):
+        date_time_now = "Today is Friday, September 25, 2026 at 10:30:00 -04"
+
+        result = OpenAITeamAdapter.get_supervisor_instructions(
+            instruction="{{ HUMAN_SUPPORT_INSTRUCTIONS }}",
+            date_time_now=date_time_now,
+            contact_fields="",
+            supervisor_name="Manager",
+            supervisor_role="Leader",
+            supervisor_goal="Help customers",
+            supervisor_adjective="Helpful",
+            supervisor_instructions="",
+            business_rules="",
+            project_id="project-1",
+            contact_id="tel:123",
+            contact_name="Ana",
+            channel_uuid="channel-1",
+            content_base_uuid="content-1",
+            use_components=False,
+            use_human_support=True,
+            components_instructions="",
+            components_instructions_up="",
+            human_support_instructions="Current project time: {{ DATE_TIME_NOW }}",
+        )
+
+        self.assertEqual(result, f"Current project time: {date_time_now}")
