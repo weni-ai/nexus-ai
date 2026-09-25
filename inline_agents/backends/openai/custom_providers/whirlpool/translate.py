@@ -177,10 +177,28 @@ def _thought_signature_from_tool_call(tool_call: Any) -> str | None:
     return None
 
 
+def _translator() -> str:
+    value = getattr(settings, "WHIRLPOOL_TRANSLATOR", "native") or "native"
+    return str(value).strip().lower()
+
+
 def chat_messages_to_gemini_contents(
     messages: Sequence[ChatCompletionMessageParam],
 ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
     """Convert OpenAI chat messages to Gemini ``systemInstruction`` + ``contents``."""
+    if _translator() == "litellm":
+        from inline_agents.backends.openai.custom_providers.whirlpool.litellm_translate import (
+            chat_messages_to_gemini_contents as litellm_chat_messages_to_gemini_contents,
+        )
+
+        return litellm_chat_messages_to_gemini_contents(messages)
+    return _native_chat_messages_to_gemini_contents(messages)
+
+
+def _native_chat_messages_to_gemini_contents(
+    messages: Sequence[ChatCompletionMessageParam],
+) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Hand-written OpenAI chat → Gemini contents (WHIRLPOOL_TRANSLATOR=native)."""
     system_parts: List[str] = []
     contents: List[Dict[str, Any]] = []
     tool_names_by_call_id: Dict[str, str] = {}
@@ -344,7 +362,36 @@ def build_generate_content_payload(
     max_tokens: int | None = None,
     tool_choice: Any = None,
 ) -> Dict[str, Any]:
-    system_instruction, contents = chat_messages_to_gemini_contents(messages)
+    if _translator() == "litellm":
+        from inline_agents.backends.openai.custom_providers.whirlpool.litellm_translate import (
+            build_generate_content_payload as litellm_build_generate_content_payload,
+        )
+
+        return litellm_build_generate_content_payload(
+            messages=messages,
+            tools=tools,
+            handoffs=handoffs,
+            max_tokens=max_tokens,
+            tool_choice=tool_choice,
+        )
+    return _native_build_generate_content_payload(
+        messages=messages,
+        tools=tools,
+        handoffs=handoffs,
+        max_tokens=max_tokens,
+        tool_choice=tool_choice,
+    )
+
+
+def _native_build_generate_content_payload(
+    *,
+    messages: Sequence[ChatCompletionMessageParam],
+    tools: Sequence[Tool] | None = None,
+    handoffs: Sequence[Handoff] | None = None,
+    max_tokens: int | None = None,
+    tool_choice: Any = None,
+) -> Dict[str, Any]:
+    system_instruction, contents = _native_chat_messages_to_gemini_contents(messages)
     payload: Dict[str, Any] = {"contents": contents}
     if system_instruction:
         payload["systemInstruction"] = system_instruction
@@ -364,6 +411,17 @@ def build_generate_content_payload(
 
 def gemini_response_to_chat_message(response: Dict[str, Any]) -> ChatCompletionMessage:
     """Map Whirlpool/Gemini generateContent JSON to ChatCompletionMessage."""
+    if _translator() == "litellm":
+        from inline_agents.backends.openai.custom_providers.whirlpool.litellm_translate import (
+            gemini_response_to_chat_message as litellm_gemini_response_to_chat_message,
+        )
+
+        return litellm_gemini_response_to_chat_message(response)
+    return _native_gemini_response_to_chat_message(response)
+
+
+def _native_gemini_response_to_chat_message(response: Dict[str, Any]) -> ChatCompletionMessage:
+    """Hand-written Gemini generateContent → ChatCompletionMessage."""
     candidates = response.get("candidates") or []
     if not candidates:
         # Some gateways may return a flatter shape; try common alternatives.
