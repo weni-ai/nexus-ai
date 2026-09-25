@@ -935,11 +935,13 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
                 sanitized_urn="test_urn",
                 contact_fields="",
                 preview=True,
+                timezone="America/Manaus",
             )
 
         self.assertIsInstance(result, InvokeAgentsResult)
         self.assertEqual(result.text, _TEST_ERROR_MESSAGES["es"])
         self.assertFalse(result.skip_dispatch)
+        self.assertEqual(_mock_to_external.call_args.kwargs["project_timezone"], "America/Manaus")
         mock_sentry.capture_exception.assert_called_once()
 
     @patch("inline_agents.backends.openai.backend.sentry_sdk")

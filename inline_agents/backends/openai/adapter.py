@@ -42,6 +42,7 @@ from nexus.inline_agents.models import (
     InlineAgentsConfiguration,
     IntegratedAgent,
 )
+from nexus.projects.services.reconcile_window import resolve_effective_project_timezone
 from nexus.usecases.inline_agents.agent_constants_sync import iter_agent_constant_defaults
 
 logger = logging.getLogger(__name__)
@@ -118,8 +119,8 @@ class OpenAITeamAdapter(TeamAdapter):
         return "\n".join(filter(None, parts))
 
     @classmethod
-    def prepare_time(cls) -> str:
-        time_now = pendulum.now("America/Sao_Paulo")
+    def prepare_time(cls, project_timezone: Optional[str] = None) -> str:
+        time_now = pendulum.now(resolve_effective_project_timezone(project_timezone))
         llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
         return llm_formatted_time
 
@@ -259,9 +260,10 @@ class OpenAITeamAdapter(TeamAdapter):
         vtex_account: Optional[str] = None,
         vtex_host_store: Optional[str] = None,
         storefront_type: Optional[str] = None,
+        project_timezone: Optional[str] = None,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
-        llm_formatted_time: str = cls.prepare_time()
+        llm_formatted_time: str = cls.prepare_time(project_timezone)
         max_tokens: Dict[str, Optional[int]] = supervisor.get("max_tokens") or {}
         max_tokens_supervisor: Optional[int] = max_tokens.get("supervisor")
         supervisor_model_settings = supervisor.get("model_settings", {})
@@ -424,6 +426,7 @@ class OpenAITeamAdapter(TeamAdapter):
         vtex_account: Optional[str] = None,
         vtex_host_store: Optional[str] = None,
         storefront_type: Optional[str] = None,
+        project_timezone: Optional[str] = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
@@ -439,8 +442,7 @@ class OpenAITeamAdapter(TeamAdapter):
 
         supervisor_instructions = "\n".join(instructions) if instructions else ""
 
-        time_now = pendulum.now("America/Sao_Paulo")
-        llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
+        llm_formatted_time = cls.prepare_time(project_timezone)
 
         max_tokens = supervisor.get("max_tokens", 2048)
 

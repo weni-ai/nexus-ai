@@ -105,13 +105,20 @@ class SyncProjectFieldsUseCaseTestCase(TestCase):
         self.assertEqual(self.project.storefront_type, "vtex_io")
         self.assertEqual(self.project.timezone, "America/Sao_Paulo")
 
-    def test_create_mode_ignores_empty_fields(self):
+    def test_create_mode_ignores_null_fields(self):
         fields = extract_project_fields({"vtex_account": None, "timezone": None, "config": {}})
         self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="create")
         self.project.refresh_from_db()
         self.assertIsNone(self.project.vtex_account)
         self.assertIsNone(self.project.vtex_host_store)
         self.assertIsNone(self.project.timezone)
+
+    def test_create_mode_applies_empty_string_when_key_is_present(self):
+        fields = extract_project_fields({"vtex_account": "", "config": {"vtex_host_store": ""}})
+        self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="create")
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.vtex_account, "")
+        self.assertEqual(self.project.vtex_host_store, "")
 
     def test_create_mode_redelivery_keeps_values_synced_by_update(self):
         self.project.vtex_account = "mystore"
@@ -120,7 +127,9 @@ class SyncProjectFieldsUseCaseTestCase(TestCase):
         self.project.timezone = "America/New_York"
         self.project.save()
 
-        fields = extract_project_fields({"vtex_account": None, "timezone": None, "config": {"vtex_host_store": ""}})
+        fields = extract_project_fields(
+            {"vtex_account": None, "timezone": None, "config": {"vtex_host_store": None}}
+        )
         self.usecase.sync_project_fields(str(self.project.uuid), fields, mode="create")
 
         self.project.refresh_from_db()
