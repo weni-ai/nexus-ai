@@ -15,11 +15,11 @@ the transports, not detecting anything:
 
 | Stage | Call site | File |
 |---|---|---|
-| `rationale` | `RationaleObserver.task_send_rationale_message` | `router/traces_observers/rationale/observer.py:263` |
-| `final_response` | `dispatch` | `router/dispatcher.py:12` |
-| `final_response` | `dispatch_preview` | `router/tasks/invoke.py:285` |
-| `final_response` | `_run_post_generation` skip-dispatch branch | `router/tasks/workflow_orchestrator.py:415` |
-| `final_response` | `grpc_session.send_completed` | `inline_agents/backends/openai/backend.py:599` |
+| `rationale` | `RationaleObserver.task_send_rationale_message` | `router/traces_observers/rationale/observer.py` |
+| `final_response` | `dispatch` | `router/dispatcher.py` |
+| `final_response` | `dispatch_preview` | `router/tasks/invoke.py` |
+| `final_response` | `_run_post_generation` skip-dispatch branch | `router/tasks/workflow_orchestrator.py` |
+| `final_response` | `grpc_session.send_completed` | `inline_agents/backends/openai/backend.py` |
 
 Guardrail refusals need no extra work: `_handle_guardrails_block` reuses `dispatch` / `dispatch_preview`.
 

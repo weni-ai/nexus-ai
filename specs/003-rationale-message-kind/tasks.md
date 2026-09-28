@@ -33,7 +33,7 @@ All contract questions were decided in `/speckit-clarify` (spec `## Clarificatio
 confirming and unblocking, which runs in parallel with implementation.
 
 - [ ] T001 Confirm the decided contract with the shopping assistant front-end team (Cristian / Paulo Bernardo) by sharing `specs/003-rationale-message-kind/contracts/outgoing-message-kind.md`; if they request a change, update the contract and the spec `## Clarifications` before Phase 3 lands
-- [ ] T002 Open the Flows/mailroom passthrough request for `message_kind` on the production send path and link it in `spec.md` under Dependencies; this gates only end-to-end production delivery, never Nexus-side work (spec FR-008)
+- [ ] T002 Open the Flows/mailroom passthrough request for `message_kind`. Nexus owner is whoever implements this task; the consumer side is the shopping assistant front (Cristian / Paulo Bernardo, thread [#weni-corner-experience-nexus](https://vtex.slack.com/archives/C0ADFJF6WP8/p1789999017171009)); the transport owner is whoever owns `/mr/msg/send` and the webchat socket, and T002 must name that person in `spec.md` under Dependencies when the request is opened. There is no committed date. Fallback, already specified as FR-008: if the field is dropped, production delivery is unchanged and the front keeps today's rendering. Preview does not wait on this request (spec SC-004). The request gates only end-to-end production delivery, never Nexus-side work
 - [ ] T003 Confirm with infra whether the shopping assistant project is listed in `GRPC_ENABLED_PROJECTS`; the answer changes which transport carries its final response and therefore how Phase 7 is prioritized, but not whether Phase 7 happens (spec FR-007)
 
 ---
@@ -86,10 +86,10 @@ full contract without waiting on Flows or mailroom.
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Tag the rationale kind in `RationaleObserver.task_send_rationale_message` (`router/traces_observers/rationale/observer.py`, around line 263) on both preview websocket sends — the `preview` branch via `_handle_preview_message` and the `preview_websocket` branch at the tail of the task
-- [ ] T015 [US1] Tag the rationale kind in `RationaleObserver._handle_preview_message` (`router/traces_observers/rationale/observer.py`, around line 90) where it builds `{"type": "preview", "content": ...}`
-- [ ] T016 [P] [US1] Tag the final-response kind in `dispatch_preview` (`router/tasks/invoke.py`, around line 285) at the envelope level, sibling of `content`, not inside it
-- [ ] T017 [P] [US1] Tag the final-response kind in the `skip_dispatch` preview branch of `_run_post_generation` (`router/tasks/workflow_orchestrator.py`, around line 417)
+- [ ] T014 [US1] Tag the rationale kind in `RationaleObserver.task_send_rationale_message` (`router/traces_observers/rationale/observer.py`) on both preview websocket sends — the `preview` branch via `_handle_preview_message` and the `preview_websocket` branch at the tail of the task
+- [ ] T015 [US1] Tag the rationale kind in `RationaleObserver._handle_preview_message` (`router/traces_observers/rationale/observer.py`) where it builds `{"type": "preview", "content": ...}`
+- [ ] T016 [P] [US1] Tag the final-response kind in `dispatch_preview` (`router/tasks/invoke.py`) at the envelope level, sibling of `content`, not inside it
+- [ ] T017 [P] [US1] Tag the final-response kind in the `skip_dispatch` preview branch of `_run_post_generation` (`router/tasks/workflow_orchestrator.py`)
 - [ ] T018 [US1] Verify `nexus/projects/websockets/consumers.py` needs no change — `message_data` is serialized verbatim by `preview_message`, so the key added by callers already reaches the socket; if serialization drops it, fix it here and note why in the PR
 
 **Checkpoint**: US1 complete. The front-end team can validate the contract end to end on preview.
@@ -116,7 +116,7 @@ likely thing to break silently.
 the downstream transport forwards it.
 
 **Independent Test**: Trigger a production-path turn and confirm from the Flows request logs
-(`nexus/internals/flows.py:109`, `SendMessageHTTPClient` debug log) that the field is in the body Nexus
+(`FlowsRESTClient.whatsapp_broadcast` logs the body; `SendMessageHTTPClient` logs at debug) that the field is in the body Nexus
 sends. Nexus is done when the field is on the wire, independent of mailroom readiness.
 
 **Not gated by T002.** The mailroom passthrough gates end-to-end delivery to the front, never the
@@ -130,11 +130,11 @@ Nexus-side work (spec FR-008).
 
 ### Implementation for User Story 2
 
-- [ ] T025 [US2] Thread the kind through `dispatch` (`router/dispatcher.py:12`) into `direct_message.send_direct_message(...)`, alongside the existing `ig_comment_fields` pattern
-- [ ] T026 [US2] Accept and forward the kind in `SendMessageHTTPClient.send_direct_message` (`router/clients/flows/http/send_message.py`, around line 41), on both the `/mr/msg/send` payload and the `use_grpc=True` stream body
-- [ ] T027 [US2] Accept and forward the kind in `WhatsAppBroadcastHTTPClient.send_direct_message` (`router/clients/flows/http/send_message.py`, around line 149), placing it at the body top level; confirm `InstagramCommentBroadcastHTTPClient` inherits the behaviour without change
-- [ ] T028 [US2] Pass the rationale kind through the production branch of `RationaleObserver.task_send_rationale_message`, where it builds `SendMessageHTTPClient` directly (`observer.py`, around line 284)
-- [ ] T029 [US2] Confirm `FlowsRESTClient.whatsapp_broadcast` (`nexus/internals/flows.py:83`) forwards the top-level key unchanged through its `body.update(msg)` merge, and that the key cannot be shadowed by an agent-authored `msg` payload
+- [ ] T025 [US2] Thread the kind through `dispatch` (`router/dispatcher.py`) into `direct_message.send_direct_message(...)`, alongside the existing `ig_comment_fields` pattern
+- [ ] T026 [US2] Accept and forward the kind in `SendMessageHTTPClient.send_direct_message` (`router/clients/flows/http/send_message.py`), on both the `/mr/msg/send` payload and the `use_grpc=True` stream body
+- [ ] T027 [US2] Accept and forward the kind in `WhatsAppBroadcastHTTPClient.send_direct_message` (`router/clients/flows/http/send_message.py`), placing it at the body top level; confirm `InstagramCommentBroadcastHTTPClient` inherits the behaviour without change
+- [ ] T028 [US2] Pass the rationale kind through the production branch of `RationaleObserver.task_send_rationale_message`, where it builds `SendMessageHTTPClient` directly (`router/traces_observers/rationale/observer.py`)
+- [ ] T029 [US2] Confirm `FlowsRESTClient.whatsapp_broadcast` (`nexus/internals/flows.py`) forwards the top-level key unchanged through its `body.update(msg)` merge, and that the key cannot be shadowed by an agent-authored `msg` payload
 
 **Checkpoint**: The field is on the wire for every production transport Nexus controls.
 
@@ -148,8 +148,9 @@ bubbles.
 **Independent Test**: Run a turn with rationale, read the conversation history back, and assert
 previously-rationale messages are still identifiable.
 
-**Note**: the write side (T032–T035) is fully specified and can land on its own. The read side (T036)
-first has to locate the history serializer, which is still an open research item (`research.md` R7).
+**Note**: the write side (T032–T035) and the Nexus read side (T036) are both in this repository.
+A customer reload that reads mailroom history instead of `GET /api/<project_uuid>/conversations/` is
+the same external dependency as T002, not a missing serializer.
 
 ### Tests for User Story 3
 
@@ -158,11 +159,11 @@ first has to locate the history serializer, which is still an open research item
 
 ### Implementation for User Story 3
 
-- [ ] T032 [US3] Add a nullable `message_kind` field to `InlineAgentMessage` (`nexus/inline_agents/models.py:227`) using `MESSAGE_KIND_CHOICES` from T005, `null=True`, **no default** (`data-model.md` §3)
+- [ ] T032 [US3] Add a nullable `message_kind` field to `InlineAgentMessage` (`nexus/inline_agents/models.py`) using `MESSAGE_KIND_CHOICES` from T005, `null=True`, **no default** (`data-model.md` §3)
 - [ ] T033 [US3] Generate the migration and verify it is metadata-only: additive nullable column, no default, no backfill, no table rewrite — `poetry run python manage.py makemigrations inline_agents && poetry run python manage.py sqlmigrate inline_agents <NNNN>`
-- [ ] T034 [US3] Add an optional `message_kind` kwarg to `save_inline_message_to_database` (`router/traces_observers/save_traces.py:151`), defaulted so every existing caller is unaffected
-- [ ] T035 [US3] Pass the rationale kind from `RationaleMessageSender.send_rationale_message` (`router/traces_observers/rationale/handlers.py:36`) into `save_inline_message_to_database`
-- [ ] T036 [US3] Locate the serializer or endpoint that returns conversation history to the shopping assistant and expose the new column there (`research.md` R7 — not yet identified, may live outside this repository). If it is owned by another service, record where it lives in `research.md` R7 and raise the change with that team; do not close US3 without an answer, since FR-012 requires history to report the kind
+- [ ] T034 [US3] Add an optional `message_kind` kwarg to `save_inline_message_to_database` (`router/traces_observers/save_traces.py`), defaulted so every existing caller is unaffected
+- [ ] T035 [US3] Pass the rationale kind from `RationaleMessageSender.send_rationale_message` (`router/traces_observers/rationale/handlers.py`) into `save_inline_message_to_database`, and pass `final_response` from `save_inline_trace_events` in the same file, which is the write path for the end-of-turn answer
+- [ ] T036 [US3] Expose `message_kind` on `InlineConversationSerializer` (`nexus/logs/api/serializers.py`), served by `InlineConversationsViewset` at `GET /api/<project_uuid>/conversations/` (`nexus/logs/api/routers.py`). Fields today are `id`, `uuid`, `text`, `source_type`, `created_at`. Null stays null so pre-feature rows fall back to today's rendering. If the shopping assistant reloads from mailroom history instead of this endpoint, that gap is T002, not a second serializer to find
 
 **Checkpoint**: The distinction survives a page refresh.
 
@@ -171,16 +172,17 @@ first has to locate the history serializer, which is still an open research item
 ## Phase 7: gRPC streaming projects (in scope — spec FR-007)
 
 **Purpose**: Carry the kind on the gRPC stream. Not optional: `is_grpc_enabled`
-(`streaming_client.py:25`) returns false when components are on, so streaming is the **non-components**
-path, and rationale eligibility is independent of it (`backend.py:349`). A streaming-enabled webchat
-project therefore emits rationale over `/mr/msg/send` and its final response over the gRPC stream —
-skipping this phase would leave the final response untagged for exactly the shopping assistant's
-profile (`research.md` R3 correction).
+(`inline_agents/backends/openai/grpc/streaming_client.py`) returns false when components are on, so
+streaming is the **non-components** path, and rationale eligibility is independent of it
+(`OpenAIBackend.invoke_agents` in `inline_agents/backends/openai/backend.py`). A streaming-enabled
+webchat project therefore emits rationale over `/mr/msg/send` and its final response over the gRPC
+stream — skipping this phase would leave the final response untagged for exactly the shopping
+assistant's profile (`research.md` R3 correction).
 
-- [ ] T037 Let `StreamingSession._create_message` (`inline_agents/backends/openai/grpc/streaming_client.py:91`) merge a per-message metadata override on top of the session-level `self.metadata`, so a single session can stamp different kinds
-- [ ] T038 Pass the final-response kind from `send_completed` (`streaming_client.py:242`) where the backend closes the turn (`inline_agents/backends/openai/backend.py:599`)
+- [ ] T037 Let `StreamingSession._create_message` (`inline_agents/backends/openai/grpc/streaming_client.py`) merge a per-message metadata override on top of the session-level `self.metadata`, so a single session can stamp different kinds
+- [ ] T038 Pass the final-response kind from `StreamingSession.send_completed` where `OpenAIBackend` closes the turn (`inline_agents/backends/openai/backend.py`)
 - [ ] T039 [P] Test the per-message override without changing `message_stream_service.proto` — `map<string, string> metadata` (field 6) already exists on every `StreamMessage`, so no regeneration is needed
-- [ ] T039a Check the gRPC error path: `_send_grpc_error_message` (`backend.py:614`) sends a default error message on failure, which is a terminal message and must be tagged `final_response` like any other
+- [ ] T039a Check the gRPC error path: `OpenAIBackend._send_grpc_error_message` sends a default error message on failure, which is a terminal message and must be tagged `final_response` like any other
 
 ---
 
@@ -204,7 +206,7 @@ profile (`research.md` R3 correction).
 - **US1 (Phase 3)**: needs Phase 2
 - **Regression guard (Phase 4)**: needs Phase 3; required before merging anything
 - **US2 (Phase 5)**: needs Phase 2; independent of US1, but shipping it without US1 delivers no user-visible value
-- **US3 (Phase 6)**: needs Phase 2; write side independent, read side (T036) needs the R7 research
+- **US3 (Phase 6)**: needs Phase 2; write side and the Nexus read side (T036) are both in this repo
 - **gRPC (Phase 7)**: needs Phase 2; in scope per FR-007
 - **Polish (Phase 8)**: needs every other phase complete
 
@@ -277,8 +279,7 @@ should be reviewable and revertible on its own.
 ## Notes
 
 - `[P]` means different files with no dependency on incomplete work
-- Line numbers in task descriptions are anchors from the Phase 0 research; verify them before editing,
-  since the files move
+- Tasks name the symbol and the file, not a line number. Line numbers go stale; search for the symbol
 - Guardrail refusals need no dedicated implementation task — `_handle_guardrails_block` reuses
   `dispatch` / `dispatch_preview`, so T016 and T025 cover them. T011 exists to prove that.
 - Do not infer the kind from message text under any circumstance (spec FR-009). This is a design
