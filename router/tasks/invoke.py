@@ -29,6 +29,7 @@ from nexus.projects.simulation_model_cache import (
 )
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
+from router.clients.flows.http.send_message import FINAL_RESPONSE
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.entities.mailroom import is_instagram_comment_message, stream_support_for_message
@@ -299,7 +300,7 @@ def dispatch_preview(
     send_preview_message_to_websocket(
         project_uuid=message_obj.project_uuid,
         user_email=user_email,
-        message_data={"type": "preview", "content": ws_content},
+        message_data={"type": "preview", "content": ws_content, "message_kind": FINAL_RESPONSE},
     )
     return response_msg if response_msg is not None else response
 

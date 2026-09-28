@@ -4,14 +4,15 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pendulum
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
 
 from nexus.actions.models import Flow
-from nexus.logs.api.serializers import MessageLogSerializer
+from nexus.inline_agents.models import InlineAgentMessage
+from nexus.logs.api.serializers import InlineConversationSerializer, MessageLogSerializer
 from nexus.logs.api.views import (
     InlineConversationsViewset,
     LogsViewset,
@@ -868,3 +869,28 @@ class InlineConversationsViewsetTestCase(TestCase):
         # Verify message5 is not in the results
         for result in results:
             self.assertNotEqual(result.get("text"), self.message5.text)
+
+
+class InlineConversationMessageKindTestCase(SimpleTestCase):
+    def test_history_payload_includes_kind_and_keeps_null(self):
+        tagged = InlineAgentMessage(
+            uuid=uuid4(),
+            text="checking",
+            source_type="agent",
+            source="router",
+            session_id="s",
+            contact_urn="ext:1",
+            message_kind="rationale",
+        )
+        legacy = InlineAgentMessage(
+            uuid=uuid4(),
+            text="old answer",
+            source_type="agent",
+            source="router",
+            session_id="s",
+            contact_urn="ext:1",
+            message_kind=None,
+        )
+
+        self.assertEqual(InlineConversationSerializer(tagged).data["message_kind"], "rationale")
+        self.assertIsNone(InlineConversationSerializer(legacy).data["message_kind"])

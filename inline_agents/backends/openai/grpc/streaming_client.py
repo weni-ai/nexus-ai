@@ -88,8 +88,16 @@ class StreamingSession:
         self._responses: List[Dict[str, Any]] = []
         self._error: Optional[Exception] = None
 
-    def _create_message(self, msg_type: str, content: str = "") -> message_stream_service_pb2.StreamMessage:
-        """Create a StreamMessage with the given type and content."""
+    def _create_message(
+        self,
+        msg_type: str,
+        content: str = "",
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> message_stream_service_pb2.StreamMessage:
+        """Create a StreamMessage. Extra metadata overrides the session metadata."""
+        merged = dict(self.metadata)
+        if metadata:
+            merged.update(metadata)
         return message_stream_service_pb2.StreamMessage(
             type=msg_type,
             msg_id=self.msg_id,
@@ -97,7 +105,7 @@ class StreamingSession:
             channel_uuid=self.channel_uuid,
             contact_urn=self.contact_urn,
             project_uuid=self.project_uuid,
-            metadata=self.metadata,
+            metadata=merged,
             timestamp=datetime.now().isoformat(),
         )
 
@@ -219,7 +227,7 @@ class StreamingSession:
             self._error = e
             return False
 
-    def send_delta(self, content: str) -> bool:
+    def send_delta(self, content: str, metadata: Optional[Dict[str, str]] = None) -> bool:
         """
         Send a delta message through the persistent stream.
 
@@ -234,12 +242,12 @@ class StreamingSession:
             return False
 
         self._delta_counter += 1
-        delta_msg = self._create_message("delta", content)
+        delta_msg = self._create_message("delta", content, metadata=metadata)
         self._message_queue.put(delta_msg)
         logger.debug(f"[gRPC Session] Queued delta #{self._delta_counter}")
         return True
 
-    def send_completed(self, content: str) -> bool:
+    def send_completed(self, content: str, metadata: Optional[Dict[str, str]] = None) -> bool:
         """
         Send a completed message and close the stream.
 
@@ -254,7 +262,7 @@ class StreamingSession:
             return False
 
         logger.info(f"[gRPC Session] Sending completed message ({len(content)} chars)")
-        completed_msg = self._create_message("completed", content)
+        completed_msg = self._create_message("completed", content, metadata=metadata)
         self._message_queue.put(completed_msg)
 
         # Signal the generator to stop

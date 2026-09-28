@@ -7,6 +7,7 @@ This module extracts complex logic from RationaleObserver to reduce cyclomatic c
 import logging
 from typing import Callable, Dict, Optional
 
+from router.clients.flows.http.send_message import RATIONALE
 from router.traces_observers.rationale.channel_hint import channel_hint_from_contact_urn
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ class RationaleMessageSender:
                 source_type="agent",
                 contact_name=contact_name,
                 channel_uuid=channel_uuid,
+                message_kind=RATIONALE,
             )
         except Exception as e:
             logger.error(f"Error sending rationale message: {str(e)}", exc_info=True)
