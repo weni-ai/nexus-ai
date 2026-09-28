@@ -131,4 +131,10 @@ As a shopping assistant user who refreshes the page mid-conversation, I want the
 ## Dependencies
 
 - **Contract sign-off with the shopping assistant front-end team** (Cristian / Paulo Bernardo): the field name and value set are decided (FR-010) and must be confirmed with them before implementation, so both sides ship against the same contract.
-- **Flows/mailroom passthrough**: the production send path drops unknown fields today. Reaching the production shopping assistant requires the downstream transport to forward `message_kind`. Blocks FR-007 end to end; does not block the preview surface, and does not block Nexus from putting the field on the wire.
+- **Flows/mailroom passthrough**: the production send path drops unknown fields today. Reaching the production shopping assistant requires the downstream transport to forward `message_kind`.
+  - **Nexus owner**: whoever opens the request (tasks T002).
+  - **Consumer owner**: shopping assistant front, Cristian / Paulo Bernardo, in [#weni-corner-experience-nexus](https://vtex.slack.com/archives/C0ADFJF6WP8/p1789999017171009).
+  - **Transport owner**: not named in that thread. T002 records the person who owns `/mr/msg/send` and the webchat socket when the request is opened.
+  - **Timeline**: none committed. Preview validation (SC-004) does not wait.
+  - **Fallback**: FR-008. If the field is dropped, production delivery is unchanged and the front keeps today's rendering. No second code path, no feature flag.
+  - Blocks FR-007 end to end. Does not block the preview surface, and does not block Nexus from putting the field on the wire.

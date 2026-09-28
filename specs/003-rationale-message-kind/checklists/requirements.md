@@ -41,5 +41,6 @@
   clarification), and SC-003's "identical payloads" was reworded to "identical except the additive
   field". The rest was drift cleanup across `plan.md`, `research.md`, `data-model.md`, `contracts/`,
   `quickstart.md` and `tasks.md`, all reconciled.
-- One item is knowingly open and tracked as `research.md` R7: the serializer that returns conversation
-  history to the shopping assistant has not been located. It gates T036 only, not the persistence work.
+- R7 is resolved inside this repository: history is `GET /api/<project_uuid>/conversations/` via
+  `InlineConversationSerializer`. A customer reload that reads mailroom history instead is the same
+  passthrough dependency as the live socket, tracked under Dependencies, not a missing serializer.

@@ -124,12 +124,18 @@ Current model (`nexus/inline_agents/models.py:227`) has no stage column.
   lock. Safe on a large table.
 - No backfill. Pre-existing rows stay `NULL`, which the front reads as "legacy" and renders the old way
   (spec US3 acceptance scenario 2).
-- Write sites: `save_inline_message_to_database` (`router/traces_observers/save_traces.py:151`) gains an
-  optional `message_kind` kwarg, defaulted so existing callers are unaffected.
+- Write sites: `save_inline_message_to_database` (`router/traces_observers/save_traces.py`) gains an
+  optional `message_kind` kwarg, defaulted so existing callers are unaffected. Rationale passes it
+  from `RationaleMessageSender.send_rationale_message`; the end-of-turn answer passes it from
+  `save_inline_trace_events`.
 
-**Read site**: whichever endpoint serves conversation history to the shopping assistant must expose the
-column. That serializer has **not been located yet** (`research.md` R7) and may live outside this
-repository. Identifying it is a task in `tasks.md`; the write side can land independently.
+**Read site**: `InlineConversationSerializer` (`nexus/logs/api/serializers.py`), served by
+`InlineConversationsViewset` at `GET /api/<project_uuid>/conversations/`. Add `message_kind` to its
+`fields`. Null stays null.
+
+That endpoint is project-authenticated. A shopping assistant reload that reads the webchat transcript
+from Flows/mailroom does not hit it; that reload is the same passthrough dependency as the live
+socket (`research.md` R7).
 
 ---
 
