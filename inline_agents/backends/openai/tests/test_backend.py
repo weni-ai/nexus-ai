@@ -1134,3 +1134,24 @@ class SetOpenAIClientTestCase(SimpleTestCase):
         async_openai.assert_not_called()
         set_client.assert_not_called()
         log_exception.assert_called_once()
+
+
+class StreamingSessionMessageKindTestCase(SimpleTestCase):
+    def test_completed_overrides_session_metadata_without_dropping_it(self):
+        from inline_agents.backends.openai.grpc.streaming_client import StreamingSession
+        from router.clients.flows.http.send_message import FINAL_RESPONSE
+
+        session = StreamingSession(
+            stub=MagicMock(),
+            msg_id="m1",
+            channel_uuid="ch",
+            contact_urn="ext:1",
+            project_uuid="proj-1",
+            metadata={"language": "pt"},
+        )
+        session._stream_active = True
+        session.send_completed("the answer", metadata={"message_kind": FINAL_RESPONSE})
+
+        message = session._message_queue.get_nowait()
+        self.assertEqual(dict(message.metadata)["message_kind"], FINAL_RESPONSE)
+        self.assertEqual(dict(message.metadata)["language"], "pt")
