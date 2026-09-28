@@ -193,16 +193,30 @@ exactly what a per-call-site assertion catches.
 
 ## R7 — Where history is read back
 
-**Finding**: **Unresolved.** FR-012 requires the persisted kind to be visible when conversation history
-is read back, but no read path has been identified. `InlineAgentMessage` is written by
-`save_inline_message_to_database`; the serializer or endpoint that serves this history to the shopping
-assistant has not been located, and it may live outside this repository.
+**Finding**: The Nexus read path is in this repository.
 
-**Decision**: Treat this as a research task during implementation, not a design decision. The write
-side (column + migration + write path) is fully specified and can land independently of the read side.
+`InlineConversationsViewset` (`nexus/logs/api/views.py`) serves
+`GET /api/<project_uuid>/conversations/` (`nexus/logs/api/routers.py`, mounted under `api/` in
+`nexus/urls.py`). It serializes `InlineAgentMessage` through `InlineConversationSerializer`
+(`nexus/logs/api/serializers.py`), whose fields today are `id`, `uuid`, `text`, `source_type`,
+`created_at`. Auth is `IsAuthenticated` + `ProjectPermission`, so this is the project-scoped history
+Nexus itself exposes, not an anonymous widget endpoint.
 
-**Rationale**: The persistence decision is settled; only its consumer is unknown. Blocking the column on
-an unlocated serializer would stall work that is otherwise ready.
+Writes split in two. Rationale goes through `RationaleMessageSender.send_rationale_message`. The
+end-of-turn answer goes through `save_inline_trace_events` (`router/traces_observers/save_traces.py`),
+which calls the same `save_inline_message_to_database`. Both have to pass the kind or history only
+tags one of them.
+
+What this does **not** cover: a shopping assistant reload that reads the webchat transcript stored by
+Flows/mailroom. That store is the same external dependency as the live passthrough (R3). Persisting
+the column and exposing it here does not fix that reload.
+
+**Decision**: T036 adds `message_kind` to `InlineConversationSerializer`. Null stays null. A customer
+reload from mailroom history is tracked with T002, not as a missing serializer.
+
+**Rationale**: The earlier "may live outside this repository" was a search that stopped too early. The
+in-repo endpoint is concrete; the remaining gap is the transport team, which already has an owner
+path in the spec Dependencies section.
 
 ---
 
@@ -221,5 +235,5 @@ an unlocated serializer would stall work that is otherwise ready.
 
 | Ref | Question | Owner |
 |---|---|---|
-| R7 | Which serializer/endpoint serves conversation history to the shopping assistant? | Implementation-time research |
-| — | Is the shopping assistant project actually in `GRPC_ENABLED_PROJECTS`? Env-configured, not visible in the repo | Deploy/infra |
+| — | Is the shopping assistant project actually in `GRPC_ENABLED_PROJECTS`? Env-configured, not visible in the repo | Deploy/infra (T003) |
+| — | Who on Flows/mailroom accepts the passthrough, and when? No committed date. Preview does not wait | T002 names them when the request is opened |
