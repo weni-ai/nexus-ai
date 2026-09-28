@@ -9,6 +9,7 @@ from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from nexus.inline_agents.models import InlineAgentMessage
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from router.clients.flows.http.send_message import FINAL_RESPONSE
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ def save_inline_trace_events(
             contact_name=contact_name,
             channel_uuid=channel_uuid,
             message_uuid=message_uuid,
+            message_kind=FINAL_RESPONSE if source_type == "agent" else None,
         )
 
         data = _prepare_trace_data(trace_events)
@@ -158,6 +160,7 @@ def save_inline_message_to_database(
     contact_name: str,
     channel_uuid: str = None,
     message_uuid: str = None,
+    message_kind: str = None,
 ) -> InlineAgentMessage:
     message_service = _get_message_service()
     message_service.handle_message_cache(
@@ -183,6 +186,8 @@ def save_inline_message_to_database(
 
     if message_uuid:
         create_kwargs["uuid"] = message_uuid
+    if message_kind is not None:
+        create_kwargs["message_kind"] = message_kind
 
     return InlineAgentMessage.objects.create(**create_kwargs)
 

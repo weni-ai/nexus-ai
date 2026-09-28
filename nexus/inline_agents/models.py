@@ -235,6 +235,12 @@ class InlineAgentMessage(models.Model):
     contact_urn = models.CharField(max_length=255)
     source_type = models.CharField(max_length=255)
     source = models.CharField(max_length=255)
+    message_kind = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        choices=(("rationale", "Rationale"), ("final_response", "Final response")),
+    )
 
     class Meta:
         indexes = [

@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
+from router.clients.flows.http.send_message import FINAL_RESPONSE
+from router.tasks.invoke import dispatch_preview
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.workflow_orchestrator import (
     WorkflowContext,
@@ -11,6 +13,7 @@ from router.tasks.workflow_orchestrator import (
     _handle_workflow_error,
     _initialize_workflow,
     _run_generation,
+    _run_post_generation,
     _run_pre_generation,
 )
 
@@ -351,3 +354,46 @@ class HandleWorkflowErrorTestCase(SimpleTestCase):
         # Verify workflow state was cleared (finalize clears state after updating)
         state = task_manager.get_workflow_state("proj-123", "urn:test")
         self.assertIsNone(state)
+
+
+class MessageKindPreviewTestCase(SimpleTestCase):
+    @patch("router.tasks.workflow_orchestrator.send_preview_message_to_websocket")
+    @patch("router.tasks.workflow_orchestrator.notify_async")
+    def test_skip_dispatch_preview_is_final_response(self, _notify, mock_ws):
+        ctx = WorkflowContext(
+            workflow_id="wf-1",
+            project_uuid="proj-1",
+            contact_urn="ext:user@example.com",
+            message={
+                "project_uuid": "proj-1",
+                "contact_urn": "ext:user@example.com",
+                "text": "oi",
+                "channel_uuid": "ch-1",
+            },
+            preview=False,
+            preview_websocket=True,
+            simulation_channel=True,
+            language="pt-br",
+            user_email="user@example.com",
+            task_id="task-1",
+            task_manager=MagicMock(),
+        )
+
+        _run_post_generation(ctx, response="already sent", skip_dispatch=True)
+
+        payload = mock_ws.call_args.kwargs["message_data"]
+        self.assertEqual(payload["message_kind"], FINAL_RESPONSE)
+        self.assertEqual(payload["content"]["message"], "already sent")
+        self.assertNotIn("message_kind", payload["content"])
+
+    @patch("router.tasks.invoke.send_preview_message_to_websocket")
+    @patch("router.tasks.invoke.dispatch", return_value={"type": "broadcast", "message": "done", "fonts": []})
+    def test_dispatch_preview_tags_the_envelope(self, _dispatch, mock_ws):
+        message = MagicMock()
+        message.project_uuid = "proj-1"
+
+        dispatch_preview("done", message, MagicMock(), "user@example.com", "OpenAIBackend", "flows@example.com")
+
+        payload = mock_ws.call_args.kwargs["message_data"]
+        self.assertEqual(payload["message_kind"], FINAL_RESPONSE)
+        self.assertNotIn("message_kind", payload["content"])
