@@ -199,7 +199,3 @@ celerybeat-schedule.*
 .cursor/*
 !.cursor/skills/
 !.cursor/skills/speckit-*/
-# Feature specs — version 001 only (additional specs in follow-up PRs)
-specs/*
-!specs/001-project-guardrails-config/
-!specs/001-project-guardrails-config/**
