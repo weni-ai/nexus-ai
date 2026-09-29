@@ -452,6 +452,8 @@ class OpenAIBackend(InlineAgentsBackend):
         vtex_host_store_cached = kwargs.pop("vtex_host_store", None)
         storefront_type_cached = kwargs.pop("storefront_type", None)
         project_timezone_cached = kwargs.pop("timezone", None)
+        is_live_desk_copilot_cached = bool(kwargs.pop("is_live_desk_copilot", False))
+        room_uuid_cached = kwargs.pop("room_uuid", None)
 
         if supervisor_agent_uuid:
             external_team = self.team_adapter.to_external_enhanced(
@@ -491,6 +493,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 vtex_host_store=vtex_host_store_cached,
                 storefront_type=storefront_type_cached,
                 project_timezone=project_timezone_cached,
+                is_live_desk_copilot=is_live_desk_copilot_cached,
+                room_uuid=room_uuid_cached,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -533,6 +537,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 vtex_host_store=vtex_host_store_cached,
                 storefront_type=storefront_type_cached,
                 project_timezone=project_timezone_cached,
+                is_live_desk_copilot=is_live_desk_copilot_cached,
+                room_uuid=room_uuid_cached,
             )
 
         client = self._get_client()

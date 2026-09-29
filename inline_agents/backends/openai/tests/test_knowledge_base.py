@@ -6,6 +6,7 @@ from django.test import SimpleTestCase, override_settings
 from inline_agents.backends.openai.entities import HooksState
 from inline_agents.backends.openai.knowledge_base import (
     NO_KNOWLEDGE_BASE_RESPONSE,
+    combine_knowledge_results,
     consume_knowledge_base_retrieved_references,
     format_knowledge_base_retrieval_results,
     retrieve_knowledge_base,
@@ -177,3 +178,92 @@ class RetrieveKnowledgeBaseTests(SimpleTestCase):
 
         self.assertEqual(result, NO_KNOWLEDGE_BASE_RESPONSE)
         self.assertEqual(hooks_state.knowledge_base_retrieved_references, [])
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+        AWS_BEDROCK_KNOWLEDGE_BASE_ID="kb-id",
+    )
+    @patch("inline_agents.backends.openai.knowledge_base.get_datasource_id", return_value="ds-id")
+    @patch("inline_agents.backends.openai.knowledge_base.boto3.client")
+    @patch("nexus.usecases.projects.specialized_knowledge.retrieve_specialized_knowledge")
+    def test_copilot_combines_specialized_entries(self, mock_specialized, mock_boto_client, _mock_ds):
+        mock_client = MagicMock()
+        mock_boto_client.return_value = mock_client
+        mock_client.retrieve.return_value = {
+            "retrievalResults": [
+                {"content": {"text": "Shipping is free over 100."}, "metadata": {"filename": "faq.docx"}}
+            ]
+        }
+        mock_specialized.return_value = [
+            {
+                "content": "Shipping is free over 100.",
+                "source": "Operator specialized KB",
+                "score": 1,
+                "metadata": {"origin": "agent"},
+            },
+            {
+                "content": "Trocas acima de 30 dias precisam de protocolo.",
+                "source": "Operator specialized KB (agent-provided, room room-1)",
+                "score": 0.8,
+                "metadata": {"origin": "agent", "room_uuid": "room-1"},
+            },
+        ]
+        hooks_state = HooksState(agents=[])
+        ctx = SimpleNamespace(
+            context=SimpleNamespace(
+                content_base={"uuid": "cb-uuid"},
+                project={"uuid": "proj-uuid", "is_live_desk_copilot": True, "room_uuid": "room-1"},
+                hooks_state=hooks_state,
+            )
+        )
+
+        result = retrieve_knowledge_base(ctx, "shipping")
+        mock_specialized.assert_called_once_with(
+            project_uuid="proj-uuid",
+            query="shipping",
+            filters={"room_uuid": "room-1"},
+        )
+
+        self.assertIn("[project] Shipping is free over 100.", result)
+        self.assertNotIn("[specialized] (Operator specialized KB) Shipping is free over 100.", result)
+        self.assertIn("Trocas acima de 30 dias", result)
+        self.assertEqual(hooks_state.knowledge_base_retrieved_references[1]["knowledge_base"], "specialized")
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+        AWS_BEDROCK_KNOWLEDGE_BASE_ID="kb-id",
+    )
+    @patch("inline_agents.backends.openai.knowledge_base.get_datasource_id", return_value="ds-id")
+    @patch("inline_agents.backends.openai.knowledge_base.boto3.client")
+    @patch(
+        "nexus.usecases.projects.specialized_knowledge.retrieve_specialized_knowledge",
+        side_effect=RuntimeError("down"),
+    )
+    def test_copilot_keeps_project_kb_when_specialized_fails(self, _mock_specialized, mock_boto_client, _mock_ds):
+        mock_client = MagicMock()
+        mock_boto_client.return_value = mock_client
+        mock_client.retrieve.return_value = {
+            "retrievalResults": [{"content": {"text": "Answer chunk"}, "metadata": {}}]
+        }
+        ctx = SimpleNamespace(
+            context=SimpleNamespace(
+                content_base={"uuid": "cb-uuid"},
+                project={"uuid": "proj-uuid", "is_live_desk_copilot": True},
+                hooks_state=HooksState(agents=[]),
+            )
+        )
+
+        result = retrieve_knowledge_base(ctx, "policy")
+
+        self.assertEqual(result, "Answer chunk")
+
+
+class CombineKnowledgeResultsTests(SimpleTestCase):
+    def test_returns_specialized_when_project_kb_is_empty(self):
+        text, references = combine_knowledge_results(
+            NO_KNOWLEDGE_BASE_RESPONSE,
+            [],
+            [{"content": "O boleto vence em 3 dias.", "source": "operator", "score": 0.5, "metadata": {}}],
+        )
+        self.assertEqual(text, "[specialized] (operator) O boleto vence em 3 dias.")
+        self.assertEqual(references[0]["knowledge_base"], "specialized")
