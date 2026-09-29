@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from django.db import OperationalError
 from django.test import SimpleTestCase, override_settings
 
 from inline_agents.backends.openai.entities import HooksState
@@ -237,7 +238,7 @@ class RetrieveKnowledgeBaseTests(SimpleTestCase):
     @patch("inline_agents.backends.openai.knowledge_base.boto3.client")
     @patch(
         "nexus.usecases.projects.specialized_knowledge.retrieve_specialized_knowledge",
-        side_effect=RuntimeError("down"),
+        side_effect=OperationalError("down"),
     )
     def test_copilot_keeps_project_kb_when_specialized_fails(self, _mock_specialized, mock_boto_client, _mock_ds):
         mock_client = MagicMock()
@@ -256,6 +257,31 @@ class RetrieveKnowledgeBaseTests(SimpleTestCase):
         result = retrieve_knowledge_base(ctx, "policy")
 
         self.assertEqual(result, "Answer chunk")
+
+    @override_settings(
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+        AWS_BEDROCK_KNOWLEDGE_BASE_ID="kb-id",
+    )
+    @patch("inline_agents.backends.openai.knowledge_base.get_datasource_id", return_value="ds-id")
+    @patch("inline_agents.backends.openai.knowledge_base.boto3.client")
+    @patch(
+        "nexus.usecases.projects.specialized_knowledge.retrieve_specialized_knowledge",
+        side_effect=TypeError("bug"),
+    )
+    def test_programming_errors_from_specialized_retrieval_surface(self, _mock_specialized, mock_boto_client, _mock_ds):
+        mock_boto_client.return_value.retrieve.return_value = {
+            "retrievalResults": [{"content": {"text": "Answer chunk"}, "metadata": {}}]
+        }
+        ctx = SimpleNamespace(
+            context=SimpleNamespace(
+                content_base={"uuid": "cb-uuid"},
+                project={"uuid": "proj-uuid", "is_live_desk_copilot": True},
+                hooks_state=HooksState(agents=[]),
+            )
+        )
+
+        with self.assertRaises(TypeError):
+            retrieve_knowledge_base(ctx, "policy")
 
 
 class CombineKnowledgeResultsTests(SimpleTestCase):

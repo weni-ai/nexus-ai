@@ -4,6 +4,7 @@ from typing import Any
 import boto3
 from agents import RunContextWrapper
 from django.conf import settings
+from django.db import DatabaseError
 
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
@@ -147,15 +148,15 @@ def _with_specialized_knowledge(
     project_references: list[dict[str, Any]],
     filters: dict[str, Any] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
-    try:
-        from nexus.usecases.projects.specialized_knowledge import retrieve_specialized_knowledge
+    from nexus.usecases.projects.specialized_knowledge import retrieve_specialized_knowledge
 
+    try:
         entries = retrieve_specialized_knowledge(
             project_uuid=str(project_uuid or ""),
             query=question,
             filters=filters,
         )
-    except Exception:
+    except DatabaseError:
         logger.exception("Specialized knowledge retrieval failed project_uuid=%s", project_uuid)
         return project_text, project_references
     return combine_knowledge_results(project_text, project_references, entries)
