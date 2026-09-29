@@ -119,7 +119,6 @@ class TestCreateProjectLiveDeskCopilotFlag(TestCase):
         self.assertEqual(project.manager_agent_id, default_manager.id)
 
     def test_copilot_project_falls_back_to_default_manager(self):
-        ManagerAgent.objects.filter(is_live_desk_copilot=True).update(is_live_desk_copilot=False)
         default_manager = _create_manager(name="Default", public=True, default=True)
 
         org = OrgFactory()
