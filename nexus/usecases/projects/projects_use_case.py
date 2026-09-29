@@ -84,17 +84,28 @@ class ProjectsUseCase:
     def create_brain_project_base(self, project_dto, user_email: str, project: Project) -> None:
         usecase = CreateIntelligencesUseCase(event_manager_notify=self.event_manager_notify)
         base_intelligence = usecase.create_intelligences(
-            org_uuid=project_dto.org_uuid, user_email=user_email, name=project_dto.name, is_router=True
+            org_uuid=project_dto.org_uuid,
+            user_email=user_email,
+            name=project_dto.name,
+            is_router=True,
+            check_permission=False,
         )
 
         create_integrated_intelligence(
-            intelligence_uuid=base_intelligence.uuid, project_uuid=project.uuid, user_email=user_email
+            intelligence_uuid=base_intelligence.uuid,
+            project_uuid=project.uuid,
+            user_email=user_email,
+            check_permission=False,
         )
         usecase = CreateContentBaseUseCase(
             event_manager_notify=self.event_manager_notify,
         )
         usecase.create_contentbase(
-            intelligence_uuid=base_intelligence.uuid, user_email=user_email, title=project_dto.name, is_router=True
+            intelligence_uuid=base_intelligence.uuid,
+            user_email=user_email,
+            title=project_dto.name,
+            is_router=True,
+            check_permission=False,
         )
 
         llm_dto = LLMDTO(
@@ -108,7 +119,7 @@ class ProjectsUseCase:
                 "max_length": settings.WENIGPT_MAX_LENGHT,
             },
         )
-        create_llm(llm_dto=llm_dto)
+        create_llm(llm_dto=llm_dto, check_permission=False)
 
     def create_project(self, project_dto: ProjectCreationDTO, user_email: str) -> Project:
         user = get_by_email(user_email=user_email)

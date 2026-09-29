@@ -39,13 +39,18 @@ class CreateIntelligencesUseCase:
         self.event_manager_notify = event_manager_notify
 
     def create_intelligences(
-        self, org_uuid: str, user_email: str, name: str, description: str = None, is_router: bool = False
+        self,
+        org_uuid: str,
+        user_email: str,
+        name: str,
+        description: str = None,
+        is_router: bool = False,
+        check_permission: bool = True,
     ):
         org = orgs.get_by_uuid(org_uuid)
         user = users.get_by_email(user_email)
 
-        has_permission = permissions.can_create_intelligence_in_org(user, org)
-        if not has_permission:
+        if check_permission and not permissions.can_create_intelligence_in_org(user, org):
             raise IntelligencePermissionDenied()
 
         intelligence = Intelligence.objects.create(
@@ -70,13 +75,13 @@ class CreateContentBaseUseCase:
         description: str = None,
         language: str = "pt-br",
         is_router: bool = False,
+        check_permission: bool = True,
     ) -> ContentBase:
         org_usecase = orgs.GetOrgByIntelligenceUseCase()
         org = org_usecase.get_org_by_intelligence_uuid(intelligence_uuid)
         user = users.get_by_email(user_email)
 
-        has_permission = permissions.can_create_content_bases(user, org)
-        if not has_permission:
+        if check_permission and not permissions.can_create_content_bases(user, org):
             raise IntelligencePermissionDenied()
 
         intelligence = intelligences.get_by_intelligence_uuid(intelligence_uuid)
@@ -169,6 +174,7 @@ def create_integrated_intelligence(
     intelligence_uuid: str,
     user_email: str,
     project_uuid: str,
+    check_permission: bool = True,
 ) -> IntegratedIntelligence:
     intelligence = intelligences.get_by_intelligence_uuid(intelligence_uuid)
     org = intelligence.org
@@ -176,8 +182,7 @@ def create_integrated_intelligence(
     project = project_usecase.get_by_uuid(project_uuid)
 
     user = users.get_by_email(user_email)
-    has_permission = permissions.can_create_intelligence_in_org(user, org)
-    if not has_permission:
+    if check_permission and not permissions.can_create_intelligence_in_org(user, org):
         raise IntelligencePermissionDenied()
 
     integrated_intelligence = IntegratedIntelligence.objects.create(
@@ -201,6 +206,7 @@ class CreateContentBaseLinkUseCase:
 
 def create_llm(
     llm_dto: LLMDTO,
+    check_permission: bool = True,
 ) -> LLM:
     usecase = projects.ProjectsUseCase()
     project = usecase.get_by_uuid(llm_dto.project_uuid)
@@ -208,8 +214,7 @@ def create_llm(
     org = project.org
     user = users.get_by_email(llm_dto.user_email)
 
-    has_permission = permissions.can_create_intelligence_in_org(user, org)
-    if not has_permission:
+    if check_permission and not permissions.can_create_intelligence_in_org(user, org):
         raise IntelligencePermissionDenied()
 
     intelligence = intelligences.get_integrated_intelligence_by_project(project_uuid=llm_dto.project_uuid)
