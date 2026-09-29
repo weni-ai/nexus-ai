@@ -33,6 +33,7 @@ from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
     _ToolCallWithThoughtSignature,
     _ensure_gateway_prompt_after_tool_result,
     _ensure_request_ends_with_user_turn,
+    _extract_flat_text,
     _thought_signature_from_tool_call,
     sanitize_json_schema_for_gemini,
     WhirlpoolTranslationError,
@@ -126,10 +127,6 @@ def build_generate_content_payload(
 def gemini_response_to_chat_message(response: Dict[str, Any]) -> ChatCompletionMessage:
     candidates = response.get("candidates") or []
     if not candidates:
-        from inline_agents.backends.openai.custom_providers.whirlpool.translate import (
-            _extract_flat_text,
-        )
-
         text = _extract_flat_text(response)
         if text is not None:
             return ChatCompletionMessage(role="assistant", content=text)
