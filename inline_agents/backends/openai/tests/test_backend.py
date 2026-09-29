@@ -1074,7 +1074,7 @@ class SetOpenAIClientTestCase(SimpleTestCase):
     def test_openai_without_credentials_replaces_process_client(self):
         async_openai, set_client, resolve_key = self.call({}, "openai")
 
-        async_openai.assert_called_once_with()
+        async_openai.assert_called_once_with(api_key=None)
         set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=True)
         resolve_key.assert_not_called()
 
@@ -1084,9 +1084,18 @@ class SetOpenAIClientTestCase(SimpleTestCase):
             "openai",
         )
 
-        async_openai.assert_called_once_with()
+        async_openai.assert_called_once_with(api_key=None)
         set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=True)
         resolve_key.assert_not_called()
+
+    def test_openai_base_url_without_key_lets_sdk_read_env(self):
+        async_openai, set_client, _ = self.call(
+            {"api_key": "", "api_base": "https://proxy.example/v1"},
+            "openai",
+        )
+
+        async_openai.assert_called_once_with(base_url="https://proxy.example/v1", api_key=None)
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=False)
 
     def test_openai_with_base_url_builds_client(self):
         credentials = {"api_key": "k", "api_base": "https://proxy.example/v1"}

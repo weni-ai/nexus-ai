@@ -1282,9 +1282,9 @@ class OpenAIBackend(InlineAgentsBackend):
             return
 
         if base_url:
-            client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+            client = AsyncOpenAI(base_url=base_url, api_key=api_key or None)
             set_default_openai_client(client, use_for_tracing=bool(api_key))
             return
 
-        client = AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
+        client = AsyncOpenAI(api_key=api_key or None)
         set_default_openai_client(client, use_for_tracing=True)
