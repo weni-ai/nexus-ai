@@ -698,8 +698,8 @@ class ProjectModelProviderAdmin(admin.ModelAdmin):
 
 @admin.register(ManagerAgent)
 class ManagerAgentAdmin(admin.ModelAdmin):
-    list_display = ("name", "foundation_model", "created_on")
-    list_filter = ("foundation_model",)
+    list_display = ("name", "foundation_model", "model_vendor", "default", "is_live_desk_copilot", "created_on")
+    list_filter = ("foundation_model", "model_vendor", "default", "is_live_desk_copilot")
     search_fields = ("name", "instruction")
     readonly_fields = ("created_on",)
     ordering = ("-created_on",)
@@ -711,6 +711,7 @@ class ManagerAgentAdmin(admin.ModelAdmin):
                 "fields": (
                     "name",
                     "default",
+                    "is_live_desk_copilot",
                     "public",
                     "release_date",
                     "base_prompt",

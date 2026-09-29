@@ -5,7 +5,6 @@ import sentry_sdk
 from django.conf import settings
 
 from nexus.events import event_manager, notify_async
-from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.models import ContactField
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence
 from nexus.projects.channel_ops import get_default_channel_uuid
@@ -27,7 +26,7 @@ from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 
 from .create import ProjectAuthUseCase
-from .live_desk_copilot import assign_parent_project
+from .live_desk_copilot import assign_parent_project, select_manager_for_new_project
 
 
 class ProjectsUseCase:
@@ -133,7 +132,7 @@ class ProjectsUseCase:
 
             template_type = TemplateTypeUseCase().get_by_uuid(project_dto.template_type_uuid)
 
-        manager_agent = ManagerAgent.objects.filter(default=True, public=True).order_by("-created_on").first()
+        manager_agent = select_manager_for_new_project(is_live_desk_copilot=project_dto.is_live_desk_copilot)
 
         project = Project.objects.create(
             uuid=project_dto.uuid,
