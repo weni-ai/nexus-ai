@@ -273,3 +273,4 @@ class PreGenerationCopilotVtexTestCase(SimpleTestCase):
         self.assertEqual(result["vtex_account"], "mainstore")
         self.assertEqual(result["vtex_host_store"], "https://main.example")
         self.assertEqual(result["storefront_type"], "vtex_io")
+        self.assertTrue(result["is_live_desk_copilot"])

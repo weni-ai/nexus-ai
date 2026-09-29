@@ -6,7 +6,7 @@ from django.db.models import JSONField
 from django.utils import timezone
 
 from nexus.admin_widgets import PrettyJSONWidget
-from nexus.projects.models import Project, ProjectApiToken
+from nexus.projects.models import Project, ProjectApiToken, SpecializedKnowledgeEntry
 from nexus.usecases.projects.project_api_token import ProjectApiTokenUseCase
 
 logger = logging.getLogger(__name__)
@@ -198,3 +198,11 @@ class ProjectApiTokenAdmin(admin.ModelAdmin):
             )
         else:
             super().save_model(request, obj, form, change)
+
+
+@admin.register(SpecializedKnowledgeEntry)
+class SpecializedKnowledgeEntryAdmin(admin.ModelAdmin):
+    list_display = ("project", "category", "relevance", "room_uuid", "created_on")
+    list_filter = ("category", "relevance", "origin")
+    search_fields = ("content", "source", "room_uuid", "project__uuid")
+    readonly_fields = ("uuid", "created_on", "origin")

@@ -80,6 +80,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "vtex_host_store": vtex_fields["vtex_host_store"],
                     "storefront_type": vtex_fields["storefront_type"],
                     "timezone": proj.timezone,
+                    "is_live_desk_copilot": bool(proj.is_live_desk_copilot),
                 }
 
             def _content_base_to_dict(cb):
