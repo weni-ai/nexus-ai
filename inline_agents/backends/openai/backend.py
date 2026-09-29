@@ -59,6 +59,7 @@ from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.clients.flows.http.send_message import FINAL_RESPONSE
 from router.services.cache_service import CacheService
 from router.traces_observers.rationale.channel_hint import (
     channel_hint_from_contact_urn,
@@ -596,7 +597,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
             if grpc_session and grpc_session.is_active:
                 try:
-                    grpc_session.send_completed(text)
+                    grpc_session.send_completed(text, metadata={"message_kind": FINAL_RESPONSE})
                 except Exception as e:
                     logger.error(f"gRPC completion failed: {e}", exc_info=True)
 
@@ -730,8 +731,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 stream_support=stream_support,
             )
             if err_session and err_session.is_active:
-                err_session.send_delta(message)
-                err_session.send_completed(message)
+                err_session.send_delta(message, metadata={"message_kind": FINAL_RESPONSE})
+                err_session.send_completed(message, metadata={"message_kind": FINAL_RESPONSE})
         except Exception as exc:
             logger.error("gRPC error-message session failed: %s", exc, exc_info=True)
         finally:

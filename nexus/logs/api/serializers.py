@@ -234,6 +234,7 @@ class InlineConversationSerializer(serializers.ModelSerializer):
             "text",
             "source_type",
             "created_at",
+            "message_kind",
         ]
 
     text = serializers.SerializerMethodField()
