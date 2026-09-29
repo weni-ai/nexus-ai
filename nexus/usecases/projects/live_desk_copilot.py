@@ -12,7 +12,7 @@ PARENT_UUID_KEYS = ("parent_uuid", "parent_project_uuid", "main_project_uuid")
 def select_manager_for_new_project(*, is_live_desk_copilot: bool) -> Optional[ManagerAgent]:
     """Copilot projects use the copilot manager. Everyone else uses the global default."""
     if is_live_desk_copilot:
-        copilot_manager = ManagerAgent.objects.filter(is_live_desk_copilot=True).order_by("-created_on").first()
+        copilot_manager = ManagerAgent.objects.filter(is_live_desk_copilot=True).first()
         if copilot_manager is not None:
             return copilot_manager
         logger.warning("[LiveDeskCopilot] No copilot ManagerAgent found, falling back to the default manager")

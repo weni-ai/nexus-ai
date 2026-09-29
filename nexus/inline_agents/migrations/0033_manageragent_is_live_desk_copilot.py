@@ -18,4 +18,15 @@ class Migration(migrations.Migration):
                 ),
             ),
         ),
+        migrations.AddConstraint(
+            model_name="manageragent",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("is_live_desk_copilot", True)),
+                fields=("is_live_desk_copilot",),
+                name="unique_live_desk_copilot_manager",
+                violation_error_message=(
+                    "Another manager is already marked as Live Desk copilot. Uncheck it before marking this one."
+                ),
+            ),
+        ),
     ]

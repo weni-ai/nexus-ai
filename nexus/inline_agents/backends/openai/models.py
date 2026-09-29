@@ -145,6 +145,18 @@ class ManagerAgent(models.Model):
         default=True, help_text="If True, the manager extra args will be appended to the collaborator extra args"
     )
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_live_desk_copilot"],
+                condition=models.Q(is_live_desk_copilot=True),
+                name="unique_live_desk_copilot_manager",
+                violation_error_message=(
+                    "Another manager is already marked as Live Desk copilot. Uncheck it before marking this one."
+                ),
+            ),
+        ]
+
     def __str__(self):
         return self.name
 
