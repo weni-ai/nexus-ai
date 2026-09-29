@@ -12,6 +12,9 @@ from router.entities.mailroom import extract_ig_comment_broadcast_fields
 
 logger = logging.getLogger(__name__)
 
+RATIONALE = "rationale"
+FINAL_RESPONSE = "final_response"
+
 
 def ig_comment_fields_from_kwargs(kwargs: Dict) -> Dict[str, str]:
     """Prefer explicit kwargs from dispatch; fall back to message metadata."""
@@ -41,9 +44,14 @@ class SendMessageHTTPClient(DirectMessage):
     def send_direct_message(
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ) -> None:
+        message_kind = kwargs.get("message_kind")
         if self.__use_grpc:
-            # Use same format as whatsapp_broadcasts endpoint
+            # Use same format as whatsapp_broadcasts endpoint.
+            # message_kind sits beside "msg", so whatsapp_broadcast's body.update keeps it
+            # at the top of the request and out of the agent-authored msg payload.
             msg = {"msg": {"text": text}}
+            if message_kind:
+                msg["message_kind"] = message_kind
             channel_uuid = kwargs.get("channel_uuid", "")
             logger.info(
                 f"[SendMessageHTTPClient] Using GRPC stream endpoint - "
@@ -65,6 +73,8 @@ class SendMessageHTTPClient(DirectMessage):
         url = f"{self.__host}/mr/msg/send"
 
         payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
+        if message_kind:
+            payload["message_kind"] = message_kind
         headers = {"Authorization": f"Token {self.__access_token}", "Content-Type": "application/json"}
 
         payload = json.dumps(payload).encode("utf-8")
@@ -156,6 +166,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         backend: str = "BedrockBackend",
         **kwargs,
     ) -> None:
+        message_kind = kwargs.pop("message_kind", None)
         if backend == "BedrockBackend":
             msgs = self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
         else:
@@ -164,6 +175,8 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         apply_ig_comment_fields_to_broadcast_msgs(msgs, ig_comment_fields_from_kwargs(kwargs))
 
         for msg in msgs:
+            if message_kind and isinstance(msg, dict):
+                msg["message_kind"] = message_kind
             response = FlowsRESTClient().whatsapp_broadcast(
                 urns,
                 msg,

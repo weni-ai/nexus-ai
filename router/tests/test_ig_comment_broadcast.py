@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 from django.test import SimpleTestCase, override_settings
 
 from router.clients.flows.http.send_message import (
+    FINAL_RESPONSE,
+    RATIONALE,
     InstagramCommentBroadcastHTTPClient,
     SendMessageHTTPClient,
     WhatsAppBroadcastHTTPClient,
@@ -268,3 +270,75 @@ class InstagramCommentActionClientTestCase(SimpleTestCase):
         )
 
         self.assertIs(type(client), InstagramCommentBroadcastHTTPClient)
+
+
+class MessageKindBroadcastTestCase(SimpleTestCase):
+    @patch("router.clients.flows.http.send_message.requests.post")
+    def test_mr_msg_send_adds_only_the_kind(self, mock_post):
+        mock_post.return_value.raise_for_status = MagicMock()
+        client = SendMessageHTTPClient("http://flows.example", "token")
+
+        client.send_direct_message("hello", ["ext:1"], "proj-1", "flows@example.com", full_chunks=[])
+        without_kind = json.loads(mock_post.call_args.kwargs["data"])
+
+        mock_post.reset_mock()
+        client.send_direct_message(
+            "hello",
+            ["ext:1"],
+            "proj-1",
+            "flows@example.com",
+            full_chunks=[],
+            message_kind=RATIONALE,
+        )
+        with_kind = json.loads(mock_post.call_args.kwargs["data"])
+
+        self.assertEqual({**without_kind, "message_kind": RATIONALE}, with_kind)
+
+    @patch("router.clients.flows.http.send_message.FlowsRESTClient")
+    def test_broadcast_and_stream_keep_kind_beside_msg(self, mock_rest):
+        mock_rest.return_value.whatsapp_broadcast.return_value.raise_for_status = MagicMock()
+        payload = json.dumps([{"msg": {"text": "part one"}}, {"msg": {"text": "part two"}}])
+
+        WhatsAppBroadcastHTTPClient("http://flows.example", "token").send_direct_message(
+            payload,
+            ["whatsapp:5511999999999"],
+            "proj-1",
+            "flows@example.com",
+            full_chunks=[],
+            backend="OpenAIBackend",
+            message_kind=FINAL_RESPONSE,
+        )
+        InstagramCommentBroadcastHTTPClient("http://flows.example", "token").send_direct_message(
+            "thanks",
+            ["instagram:1"],
+            "proj-1",
+            "flows@example.com",
+            full_chunks=[],
+            message_kind=FINAL_RESPONSE,
+        )
+        SendMessageHTTPClient("http://flows.example", "token", use_grpc=True).send_direct_message(
+            "hello",
+            ["ext:1"],
+            "proj-1",
+            "flows@example.com",
+            full_chunks=[],
+            channel_uuid="ch-1",
+            message_kind=FINAL_RESPONSE,
+        )
+
+        sent = [call.args[1] for call in mock_rest.return_value.whatsapp_broadcast.call_args_list]
+        self.assertEqual(
+            sent,
+            [
+                {"msg": {"text": "part one"}, "message_kind": FINAL_RESPONSE},
+                {"msg": {"text": "part two"}, "message_kind": FINAL_RESPONSE},
+                {"msg": {"text": "thanks"}, "message_kind": FINAL_RESPONSE},
+                {"msg": {"text": "hello"}, "message_kind": FINAL_RESPONSE},
+            ],
+        )
+
+    def test_dispatch_passes_final_response(self):
+        client = MagicMock()
+        message = message_factory(project_uuid="proj-1", text="hi", contact_urn="ext:1")
+        dispatch(message=message, user_email="flows@example.com", llm_response="the answer", direct_message=client)
+        self.assertEqual(client.send_direct_message.call_args.kwargs["message_kind"], FINAL_RESPONSE)

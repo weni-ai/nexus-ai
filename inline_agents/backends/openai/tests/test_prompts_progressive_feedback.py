@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 from django.test import SimpleTestCase, override_settings
 
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
@@ -8,6 +10,7 @@ from inline_agents.backends.openai.prompts_progressive_feedback import (
     is_gpt_foundation_model,
     should_inject_progressive_feedback_instruction,
 )
+from router.clients.flows.http.send_message import FINAL_RESPONSE, RATIONALE
 from router.traces_observers.rationale.channel_hint import (
     channel_hint_from_contact_urn,
     is_webchat_channel,
@@ -264,3 +267,79 @@ class TestGetSupervisorInstructionsProgressiveFeedback(SimpleTestCase):
         )
 
         self.assertTrue(result.startswith(f"{TEST_INSTRUCTION}\n\n# Manager"))
+
+
+class RationaleMessageKindTestCase(SimpleTestCase):
+    @patch("nexus.projects.websockets.consumers.send_preview_message_to_websocket")
+    @patch("router.traces_observers.rationale.observer.SendMessageHTTPClient")
+    def test_preview_websocket_rationale_is_tagged(self, mock_client, mock_ws):
+        from router.traces_observers.rationale.observer import RationaleObserver
+
+        RationaleObserver.task_send_rationale_message.run(
+            text="checking your order",
+            urns=["ext:1"],
+            project_uuid="proj-1",
+            user="flows@example.com",
+            preview_websocket=True,
+            user_email="user@example.com",
+        )
+
+        payload = mock_ws.call_args.kwargs["message_data"]
+        self.assertEqual(payload["message_kind"], RATIONALE)
+        self.assertEqual(payload["content"], "checking your order")
+        self.assertEqual(mock_client.return_value.send_direct_message.call_args.kwargs["message_kind"], RATIONALE)
+
+    def test_disabled_switch_sends_nothing(self):
+        from router.traces_observers.rationale.observer import RationaleObserver
+
+        observer = RationaleObserver(bedrock_client=MagicMock(), model_id="test-model", typing_usecase=MagicMock())
+        with patch.object(RationaleObserver, "task_send_rationale_message") as task:
+            observer.perform(inline_traces={}, session_id="s", rationale_switch=False)
+        task.delay.assert_not_called()
+
+    @patch("router.traces_observers.save_traces.InlineAgentMessage.objects.create")
+    @patch("router.traces_observers.save_traces._get_message_service")
+    def test_persists_rationale_and_leaves_user_messages_untagged(self, _service, mock_create):
+        from router.traces_observers.save_traces import save_inline_message_to_database, save_inline_trace_events
+
+        save_inline_message_to_database(
+            project_uuid="proj-1",
+            contact_urn="ext:1",
+            text="checking",
+            preview=False,
+            session_id="s",
+            source_type="agent",
+            contact_name="Ada",
+            message_kind=RATIONALE,
+        )
+        self.assertEqual(mock_create.call_args.kwargs["message_kind"], RATIONALE)
+
+        mock_create.reset_mock()
+        save_inline_message_to_database(
+            project_uuid="proj-1",
+            contact_urn="ext:1",
+            text="hi",
+            preview=False,
+            session_id="s",
+            source_type="user",
+            contact_name="Ada",
+        )
+        self.assertNotIn("message_kind", mock_create.call_args.kwargs)
+
+        with (
+            patch("router.traces_observers.save_traces.save_inline_message_to_database") as mock_save,
+            patch("router.traces_observers.save_traces.upload_traces_to_s3"),
+        ):
+            mock_save.return_value = MagicMock(uuid="abc")
+            save_inline_trace_events.run(
+                trace_events=[],
+                project_uuid="proj-1",
+                contact_urn="ext:1",
+                agent_response="the answer",
+                preview=False,
+                session_id="s",
+                source_type="agent",
+                contact_name="Ada",
+                channel_uuid="ch-1",
+            )
+        self.assertEqual(mock_save.call_args.kwargs["message_kind"], FINAL_RESPONSE)

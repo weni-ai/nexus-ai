@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from django.test import SimpleTestCase
 
 from router.clients.flows.http.send_message import (
+    FINAL_RESPONSE,
     InstagramCommentBroadcastHTTPClient,
     SendMessageHTTPClient,
     WhatsAppBroadcastHTTPClient,
@@ -159,3 +160,34 @@ class HandleGuardrailsBlockBroadcastTestCase(SimpleTestCase):
             project_use_components=False,
             force_instagram_comment_broadcast=True,
         )
+
+
+class GuardrailRefusalMessageKindTestCase(SimpleTestCase):
+    @patch("router.tasks.workflow_orchestrator.notify_async")
+    @patch("router.tasks.workflow_orchestrator.get_guardrail_block_broadcast_client")
+    def test_production_refusal_is_tagged_final_response(self, mock_get_client, _notify):
+        client = MagicMock()
+        mock_get_client.return_value = client
+        ctx = _build_context(MagicMock(spec=RedisTaskManager), preview=False, preview_websocket=False)
+
+        _handle_guardrails_block(ctx, UnsafeMessageException("I can't help with that"))
+
+        self.assertEqual(client.send_direct_message.call_args.kwargs["message_kind"], FINAL_RESPONSE)
+        self.assertEqual(client.send_direct_message.call_args.args[0], "I can't help with that")
+
+    @patch("router.tasks.invoke.send_preview_message_to_websocket")
+    @patch("router.tasks.workflow_orchestrator.notify_async")
+    @patch("router.tasks.workflow_orchestrator.get_guardrail_block_broadcast_client")
+    def test_preview_refusal_is_tagged_final_response(self, mock_get_client, _notify, mock_ws):
+        client = MagicMock()
+        client.send_direct_message.return_value = {"type": "broadcast", "message": "I can't help with that"}
+        mock_get_client.return_value = client
+        ctx = _build_context(MagicMock(spec=RedisTaskManager), preview=True, preview_websocket=True)
+
+        _handle_guardrails_block(ctx, UnsafeMessageException("I can't help with that"))
+
+        self.assertEqual(client.send_direct_message.call_args.kwargs["message_kind"], FINAL_RESPONSE)
+        payload = mock_ws.call_args.kwargs["message_data"]
+        self.assertEqual(payload["message_kind"], FINAL_RESPONSE)
+        self.assertEqual(payload["content"]["message"], "I can't help with that")
+        self.assertNotIn("message_kind", payload["content"])

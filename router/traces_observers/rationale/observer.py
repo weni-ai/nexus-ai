@@ -19,7 +19,7 @@ from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from nexus.event_domain.observer_factories import create_rationale_observer
 from nexus.usecases.inline_agents.typing import TypingUsecase
-from router.clients.flows.http.send_message import SendMessageHTTPClient
+from router.clients.flows.http.send_message import RATIONALE, SendMessageHTTPClient
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.traces_observers.rationale.context import RationaleContext, TraceData
 from router.traces_observers.rationale.handlers import (
@@ -90,7 +90,7 @@ class RationaleObserver(EventObserver):
         send_preview_message_to_websocket(
             project_uuid=str(project_uuid),
             user_email=user_email,
-            message_data={"type": "preview", "content": preview_response},
+            message_data={"type": "preview", "content": preview_response, "message_kind": RATIONALE},
         )
 
     def perform(
@@ -286,7 +286,12 @@ class RationaleObserver(EventObserver):
         )
 
         broadcast.send_direct_message(
-            text=text, urns=urns, project_uuid=project_uuid, user=user, full_chunks=full_chunks
+            text=text,
+            urns=urns,
+            project_uuid=project_uuid,
+            user=user,
+            full_chunks=full_chunks,
+            message_kind=RATIONALE,
         )
 
         if preview_websocket and user_email and not preview:
@@ -295,5 +300,5 @@ class RationaleObserver(EventObserver):
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,
-                message_data={"type": "preview", "content": text},
+                message_data={"type": "preview", "content": text, "message_kind": RATIONALE},
             )
