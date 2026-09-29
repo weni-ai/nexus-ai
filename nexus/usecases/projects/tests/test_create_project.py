@@ -12,11 +12,12 @@ from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.intelligences.models import ContentBaseText
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
+from nexus.orgs.models import OrgAuth
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase, ProjectAuthUseCase
+from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO
 from nexus.usecases.projects.retrieve import get_integrated_feature
-from nexus.usecases.users.tests.user_factory import UserFactory
 
 from ..projects_use_case import ProjectsUseCase
 from .project_factory import IntegratedFeatureFactory, ProjectFactory
@@ -80,6 +81,32 @@ class TestCreateProjectInlineContentBaseText(TestCase):
             project_dto=project_dto, user_email=user.email
         )
         self.assertTrue(project.rationale_switch)
+
+    def test_create_project_without_org_auth(self):
+        org = OrgFactory()
+        user = UserFactory()
+        self.assertFalse(OrgAuth.objects.filter(org=org, user=user).exists())
+        project_dto = ProjectCreationDTO(
+            uuid=uuid4().hex,
+            name="created_without_org_auth",
+            org_uuid=org.uuid,
+            is_template=False,
+            template_type_uuid=None,
+            brain_on=False,
+            authorizations=[],
+            inline_agent_switch=True,
+        )
+        project = ProjectsUseCase(event_manager_notify=mock_event_manager_notify).create_project(
+            project_dto=project_dto, user_email=user.email
+        )
+        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
+        content_base = get_default_content_base_by_project(str(project.uuid))
+        self.assertEqual(project.name, "created_without_org_auth")
+        self.assertEqual(project.created_by, user)
+        self.assertEqual(content_base.title, "created_without_org_auth")
+        self.assertTrue(content_base.is_router)
+        self.assertEqual(content_base.created_by, user)
 
 
 @skip("temporarily skipped: team provisioning differs per backend; stabilizing")
