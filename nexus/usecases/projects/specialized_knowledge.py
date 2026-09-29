@@ -73,11 +73,17 @@ def retrieve_specialized_knowledge(
     top_k: int = 5,
     filters: Optional[dict] = None,
 ) -> list[dict]:
-    """Return specialized KB passages. Errors propagate; callers decide the fallback."""
+    """Return specialized KB passages. Errors propagate; callers decide the fallback.
+
+    ``top_k`` must be an integer from 1 to 20. ``None`` uses the default of 5.
+    """
     if not project_uuid or not (query or "").strip():
         return []
 
-    top_k = max(1, min(int(top_k or 5), 20))
+    if top_k is None:
+        top_k = 5
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
+        raise ValueError(f"top_k must be between 1 and 20, got {top_k}")
     filters = filters or {}
     queryset = SpecializedKnowledgeEntry.objects.filter(project_id=project_uuid)
     room_uuid = filters.get("room_uuid")

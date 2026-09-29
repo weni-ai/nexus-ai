@@ -73,6 +73,12 @@ class SpecializedKnowledgeUseCaseTests(TestCase):
         self.assertTrue(any("padrão da loja" in content for content in contents))
         self.assertFalse(any("interior" in content for content in contents))
 
+    def test_rejects_top_k_outside_contract(self):
+        with self.assertRaises(ValueError):
+            retrieve_specialized_knowledge(project_uuid=str(self.project.uuid), query="nota", top_k=0)
+        with self.assertRaises(ValueError):
+            retrieve_specialized_knowledge(project_uuid=str(self.project.uuid), query="nota", top_k=100)
+
     def test_rejects_invalid_category(self):
         with self.assertRaises(ValidationError):
             create_specialized_knowledge_entry(
