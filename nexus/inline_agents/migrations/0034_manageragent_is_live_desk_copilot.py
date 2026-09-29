@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("inline_agents", "0032_manageragent_enable_explicit_prompt_cache"),
+        ("inline_agents", "0033_inlineagentmessage_message_kind"),
     ]
 
     operations = [
