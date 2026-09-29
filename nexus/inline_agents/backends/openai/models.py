@@ -70,6 +70,13 @@ class ManagerAgent(models.Model):
     default = models.BooleanField(
         default=False, help_text="If True, this is the default supervisor for all newly created projects"
     )
+    is_live_desk_copilot = models.BooleanField(
+        default=False,
+        help_text=(
+            "If True, new Live Desk copilot projects are created with this manager. "
+            "Keep default unchecked so normal projects do not use it."
+        ),
+    )
     public = models.BooleanField(
         default=True, help_text="If True, this supervisor is public and will be available to all projects"
     )
