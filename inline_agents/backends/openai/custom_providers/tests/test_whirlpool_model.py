@@ -27,6 +27,35 @@ class WhirlpoolModelTests(SimpleTestCase):
             credentials={"client_id": "cid", "client_secret": "csecret"},
         )
 
+    @override_settings(WHIRLPOOL_TRANSLATOR="litellm")
+    def test_get_response_text_litellm_translator_still_posts_via_client(self):
+        async def _run():
+            with patch(
+                "inline_agents.backends.openai.custom_providers.whirlpool.client.WhirlpoolClient.generate_content",
+                new_callable=AsyncMock,
+            ) as mock_generate:
+                mock_generate.return_value = {
+                    "candidates": [{"content": {"parts": [{"text": "Oi"}]}}],
+                }
+                with patch("litellm.completion") as mock_completion:
+                    response = await self.model.get_response(
+                        system_instructions="sys",
+                        input="hello",
+                        model_settings=ModelSettings(),
+                        tools=[],
+                        output_schema=None,
+                        handoffs=[],
+                        tracing=ModelTracing.DISABLED,
+                    )
+                    mock_completion.assert_not_called()
+                self.assertTrue(response.output)
+                payload = mock_generate.await_args.args[0]
+                self.assertIn("contents", payload)
+                self.assertIn("systemInstruction", payload)
+                self.assertNotIn("model", payload)
+
+        asyncio.run(_run())
+
     def test_get_response_text(self):
         async def _run():
             with patch(
