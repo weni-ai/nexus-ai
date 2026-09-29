@@ -1017,7 +1017,8 @@ class SetOpenAIClientTestCase(SimpleTestCase):
 
     aws_mantle must always point the Agents SDK at Mantle. A stored project or
     manager key still wins; otherwise the pod credential chain mints a token.
-    openai without credentials leaves the process-wide default client in place.
+    Every OpenAI turn replaces the process-wide client so a previous Mantle
+    base URL cannot leak into a later gpt-* request.
     """
 
     def setUp(self):
@@ -1028,24 +1029,23 @@ class SetOpenAIClientTestCase(SimpleTestCase):
         with (
             patch(f"{target}.AsyncOpenAI") as async_openai,
             patch(f"{target}.set_default_openai_client") as set_client,
-            patch(f"{target}.set_default_openai_key") as set_key,
             patch(
                 f"{target}.resolve_aws_mantle_api_key",
                 side_effect=lambda key, region=None: key or minted_key,
             ) as resolve_key,
         ):
             self.backend._set_openai_client(credentials, vendor)
-            return async_openai, set_client, set_key, resolve_key
+            return async_openai, set_client, resolve_key
 
     def test_mantle_without_credentials_uses_pod_token_and_default_base(self):
-        async_openai, set_client, _, resolve_key = self.call({}, "aws_mantle")
+        async_openai, set_client, resolve_key = self.call({}, "aws_mantle")
 
         resolve_key.assert_called_once_with("", region="us-west-2")
         async_openai.assert_called_once_with(
             base_url="https://bedrock-mantle.us-west-2.api.aws/openai/v1",
             api_key="minted-bedrock-token",
         )
-        set_client.assert_called_once()
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=False)
 
     def test_mantle_project_key_wins_over_pod_token(self):
         credentials = {
@@ -1053,17 +1053,17 @@ class SetOpenAIClientTestCase(SimpleTestCase):
             "api_base": "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
         }
 
-        async_openai, set_client, _, resolve_key = self.call(credentials, "aws_mantle")
+        async_openai, set_client, resolve_key = self.call(credentials, "aws_mantle")
 
         resolve_key.assert_called_once_with("project-key", region="us-east-1")
         async_openai.assert_called_once_with(
             base_url="https://bedrock-mantle.us-east-1.api.aws/openai/v1",
             api_key="project-key",
         )
-        set_client.assert_called_once()
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=False)
 
     def test_mantle_partial_credentials_default_base_and_keep_key(self):
-        async_openai, _, _, resolve_key = self.call({"api_key": "project-key"}, "aws_mantle")
+        async_openai, _, resolve_key = self.call({"api_key": "project-key"}, "aws_mantle")
 
         resolve_key.assert_called_once_with("project-key", region="us-west-2")
         async_openai.assert_called_once_with(
@@ -1071,42 +1071,57 @@ class SetOpenAIClientTestCase(SimpleTestCase):
             api_key="project-key",
         )
 
-    def test_openai_without_credentials_keeps_default_client(self):
-        async_openai, set_client, set_key, resolve_key = self.call({}, "openai")
+    def test_openai_without_credentials_replaces_process_client(self):
+        async_openai, set_client, resolve_key = self.call({}, "openai")
 
-        async_openai.assert_not_called()
-        set_client.assert_not_called()
-        set_key.assert_not_called()
+        async_openai.assert_called_once_with(api_key=None)
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=True)
         resolve_key.assert_not_called()
+
+    def test_openai_blank_credentials_replace_process_client(self):
+        async_openai, set_client, resolve_key = self.call(
+            {"api_key": "", "api_base": "", "api_version": ""},
+            "openai",
+        )
+
+        async_openai.assert_called_once_with(api_key=None)
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=True)
+        resolve_key.assert_not_called()
+
+    def test_openai_base_url_without_key_lets_sdk_read_env(self):
+        async_openai, set_client, _ = self.call(
+            {"api_key": "", "api_base": "https://proxy.example/v1"},
+            "openai",
+        )
+
+        async_openai.assert_called_once_with(base_url="https://proxy.example/v1", api_key=None)
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=False)
 
     def test_openai_with_base_url_builds_client(self):
         credentials = {"api_key": "k", "api_base": "https://proxy.example/v1"}
 
-        async_openai, set_client, set_key, _ = self.call(credentials, "openai")
+        async_openai, set_client, _ = self.call(credentials, "openai")
 
         async_openai.assert_called_once_with(base_url="https://proxy.example/v1", api_key="k")
-        set_client.assert_called_once()
-        set_key.assert_not_called()
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=True)
 
-    def test_openai_without_base_url_sets_only_the_key(self):
-        async_openai, set_client, set_key, _ = self.call({"api_key": "k"}, "openai")
+    def test_openai_without_base_url_replaces_process_client(self):
+        async_openai, set_client, _ = self.call({"api_key": "k"}, "openai")
 
-        async_openai.assert_not_called()
-        set_client.assert_not_called()
-        set_key.assert_called_once_with("k")
+        async_openai.assert_called_once_with(api_key="k")
+        set_client.assert_called_once_with(async_openai.return_value, use_for_tracing=True)
 
     def test_unsupported_vendor_is_ignored(self):
         credentials = {"api_key": "k", "api_base": "https://vertex.example/v1"}
 
-        async_openai, set_client, set_key, resolve_key = self.call(credentials, "vertex_ai")
+        async_openai, set_client, resolve_key = self.call(credentials, "vertex_ai")
 
         async_openai.assert_not_called()
         set_client.assert_not_called()
-        set_key.assert_not_called()
         resolve_key.assert_not_called()
 
     def test_mantle_none_stored_values_mint_token(self):
-        async_openai, _, _, resolve_key = self.call(
+        async_openai, _, resolve_key = self.call(
             {"api_key": None, "api_base": None},
             "aws_mantle",
         )

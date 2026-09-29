@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 import openai
 import pendulum
 import sentry_sdk
-from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
+from agents import Agent, ModelSettings, set_default_openai_client, trace
 from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from langfuse import get_client
@@ -1252,6 +1252,10 @@ class OpenAIBackend(InlineAgentsBackend):
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
         """Point the Agents SDK at this invocation's OpenAI-compatible vendor.
 
+        The SDK keeps one process-wide client. Celery workers serve many projects,
+        so every turn replaces that client. A previous aws_mantle turn would
+        otherwise keep sending later OpenAI models to Mantle.
+
         aws_mantle always uses Mantle. A stored project/manager key wins; otherwise
         a short-lived token is minted from the pod IAM chain. Missing IAM
         credentials raise BedrockMantleAuthError on purpose (fail-fast) so the
@@ -1273,15 +1277,14 @@ class OpenAIBackend(InlineAgentsBackend):
             except BedrockMantleAuthError:
                 logger.exception("aws_mantle has no stored Bedrock key and the pod IAM chain is empty")
                 raise
-        elif not credentials:
+            client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+            set_default_openai_client(client, use_for_tracing=False)
             return
 
         if base_url:
-            client = AsyncOpenAI(
-                base_url=base_url,
-                api_key=api_key,
-            )
-            set_default_openai_client(client)
+            client = AsyncOpenAI(base_url=base_url, api_key=api_key or None)
+            set_default_openai_client(client, use_for_tracing=bool(api_key))
             return
 
-        set_default_openai_key(api_key)
+        client = AsyncOpenAI(api_key=api_key or None)
+        set_default_openai_client(client, use_for_tracing=True)
