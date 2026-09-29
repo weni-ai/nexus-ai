@@ -759,6 +759,7 @@ def start_inline_agents(  # noqa: C901
             )
             block_broadcast = get_guardrail_block_broadcast_client(
                 preview=preview,
+                project_use_components=project_dict["use_components"],
                 force_instagram_comment_broadcast=instagram_comment_message,
             )
             if preview or preview_websocket:

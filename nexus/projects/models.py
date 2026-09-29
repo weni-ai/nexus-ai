@@ -102,6 +102,7 @@ class Project(BaseModel, SoftDeleteModel):
     vtex_account = models.CharField(max_length=255, null=True, blank=True, unique=True)
     vtex_host_store = models.CharField(max_length=512, null=True, blank=True)
     storefront_type = models.CharField(max_length=64, null=True, blank=True)
+    timezone = models.CharField(max_length=64, null=True, blank=True)
 
     def __str__(self):
         return f"{self.uuid} - Project: {self.name} - Org: {self.org.name}"

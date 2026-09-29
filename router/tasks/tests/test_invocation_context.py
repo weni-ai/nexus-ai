@@ -155,6 +155,7 @@ class TestCachedProjectDataEdgeCases(TestCase):
                 "human_support": True,
                 "default_supervisor_foundation_model": "gpt-4",
                 "human_support_prompt": "Business rules here",
+                "timezone": "America/Manaus",
             },
             content_base_dict={"uuid": "cb-uuid-123"},
             team=[{"name": "agent1"}],
@@ -187,6 +188,7 @@ class TestCachedProjectDataEdgeCases(TestCase):
             "vtex_account",
             "vtex_host_store",
             "storefront_type",
+            "timezone",
         ]
 
         for key in expected_keys:
@@ -195,6 +197,7 @@ class TestCachedProjectDataEdgeCases(TestCase):
         self.assertTrue(kwargs["use_components"])
         self.assertEqual(kwargs["conversation_turns_to_include"], 20)
         self.assertEqual(kwargs["agent_data"], {"name": "Test Agent"})
+        self.assertEqual(kwargs["timezone"], "America/Manaus")
 
     def test_get_invoke_kwargs_default_values(self):
         cached_data = CachedProjectData(
@@ -218,6 +221,7 @@ class TestCachedProjectDataEdgeCases(TestCase):
         self.assertIsNone(kwargs.get("vtex_account"))
         self.assertIsNone(kwargs.get("vtex_host_store"))
         self.assertIsNone(kwargs.get("storefront_type"))
+        self.assertIsNone(kwargs.get("timezone"))
 
     def test_get_invoke_kwargs_includes_vtex_fields(self):
         cached_data = CachedProjectData(
@@ -240,3 +244,19 @@ class TestCachedProjectDataEdgeCases(TestCase):
         self.assertEqual(kwargs["vtex_account"], "mystore")
         self.assertEqual(kwargs["vtex_host_store"], "https://www.mystore.com.br")
         self.assertEqual(kwargs["storefront_type"], "vtex_io")
+
+    def test_get_invoke_kwargs_includes_timezone(self):
+        cached_data = CachedProjectData(
+            project_dict={"timezone": "America/Manaus"},
+            content_base_dict={"uuid": "cb-uuid"},
+            team=[],
+            guardrails_config={},
+            inline_agent_config_dict=None,
+            instructions=[],
+            agent_data=None,
+            formatter_agent_configurations=None,
+        )
+
+        kwargs = cached_data.get_invoke_kwargs(team=[])
+
+        self.assertEqual(kwargs["timezone"], "America/Manaus")

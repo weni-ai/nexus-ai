@@ -7,12 +7,18 @@ from agents import Agent, ModelSettings, RunContextWrapper, function_tool
 from agents.agent import FunctionToolResult, ToolsToFinalOutputResult
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.interface import Model
-from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.custom_providers import resolve_custom_model
 from inline_agents.backends.openai.entities import Context
 from inline_agents.backends.openai.knowledge_base import retrieve_knowledge_base
+from inline_agents.backends.openai.prompt_cache import (
+    COLLABORATOR_CACHE_PROFILE,
+    MANAGER_CACHE_PROFILE,
+    CacheProfile,
+    PromptCachingOpenAIResponsesModel,
+    supports_explicit_prompt_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,19 +123,28 @@ def resolve_inline_openai_tool_use(
     return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
+def supports_reasoning_mode(model: str, model_vendor: str) -> bool:
+    """Luna on AWS Mantle rejects `reasoning.mode` with a 400."""
+    if (model_vendor or "").lower() != "aws_mantle":
+        return True
+    return "luna" not in (model or "").lower()
+
+
 def build_reasoning_settings(
     *,
     model_has_reasoning: bool = False,
     reasoning_effort: str | None = None,
     reasoning_summary: str | None = None,
     reasoning_mode: str | None = None,
+    model: str = "",
+    model_vendor: str = "",
 ) -> Reasoning | None:
-    """Build Responses API reasoning settings, omitting blank mode."""
+    """Build Responses API reasoning settings, omitting blank or unsupported mode."""
     kwargs: Dict[str, Any] = {}
     if model_has_reasoning and reasoning_effort:
         kwargs["effort"] = reasoning_effort
         kwargs["summary"] = reasoning_summary
-    if reasoning_mode:
+    if reasoning_mode and supports_reasoning_mode(model, model_vendor):
         kwargs["mode"] = reasoning_mode
     if not kwargs:
         return None
@@ -140,8 +155,13 @@ def resolve_agent_model(
     model: str,
     user_model_credentials: Dict[str, Any] | None,
     model_vendor: str = "",
+    cache_profile: CacheProfile = MANAGER_CACHE_PROFILE,
+    enable_explicit_prompt_cache: bool = False,
 ) -> Union[Model, LitellmModel, str]:
     """Return a custom Model, LitellmModel, or the model string unchanged."""
+    if supports_explicit_prompt_cache(model_vendor, enable_explicit_prompt_cache):
+        return PromptCachingOpenAIResponsesModel(model=model, cache_profile=cache_profile)
+
     credentials = user_model_credentials or {}
     custom = resolve_custom_model(model, credentials, model_vendor=model_vendor)
     if custom is not None:
@@ -164,6 +184,22 @@ def resolve_agent_model(
         kwargs["base_url"] = api_base
 
     return LitellmModel(**kwargs)
+
+
+def resolve_collaborator_model_name(
+    foundation_model: str,
+    collaborator_configurations: Dict[str, Any],
+) -> str:
+    """Resolve the collaborator model from its project default or manager override."""
+    if collaborator_configurations.get("override_collaborators_foundation_model"):
+        override = collaborator_configurations.get("collaborators_foundation_model")
+        if not override:
+            logger.warning(
+                "override_collaborators_foundation_model is set but collaborators_foundation_model "
+                "is empty; falling back to agent model"
+            )
+        return override or foundation_model
+    return foundation_model
 
 
 class AgentModel:
@@ -203,12 +239,15 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
         model_has_reasoning: bool = False,
         model_vendor: str = "",
     ):
-        if collaborator_configurations.get("override_collaborators_foundation_model"):
-            model_name = collaborator_configurations.get("collaborators_foundation_model")
-        else:
-            model_name = foundation_model
+        model_name = resolve_collaborator_model_name(foundation_model, collaborator_configurations)
 
-        model = resolve_agent_model(model_name, user_model_credentials, model_vendor=model_vendor)
+        model = resolve_agent_model(
+            model_name,
+            user_model_credentials,
+            model_vendor=model_vendor,
+            cache_profile=COLLABORATOR_CACHE_PROFILE,
+            enable_explicit_prompt_cache=collaborator_configurations.get("enable_explicit_prompt_cache", False),
+        )
         model_settings_kw = dict(model_settings)
         if isinstance(model, Model):
             model_settings_kw["include_usage"] = True
@@ -247,10 +286,17 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         parallel_tool_calls: bool = False,
         extra_args: dict | None = None,
         model_vendor: str = "",
+        enable_explicit_prompt_cache: bool = False,
     ):
         tools.extend(self.function_tools())
 
-        model = resolve_agent_model(model, user_model_credentials, model_vendor=model_vendor)
+        model_name = model
+        model = resolve_agent_model(
+            model_name,
+            user_model_credentials,
+            model_vendor=model_vendor,
+            enable_explicit_prompt_cache=enable_explicit_prompt_cache,
+        )
 
         model_settings_kwargs: Dict[str, Any] = {
             "parallel_tool_calls": parallel_tool_calls,
@@ -266,6 +312,8 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
             reasoning_effort=reasoning_effort,
             reasoning_summary=reasoning_summary,
             reasoning_mode=reasoning_mode,
+            model=model_name,
+            model_vendor=model_vendor,
         )
         if reasoning is not None:
             model_settings_kwargs["reasoning"] = reasoning

@@ -256,7 +256,7 @@ class CachedProjectDataTestCase(SimpleTestCase):
 
 class PreGenerationProjectToDictTestCase(SimpleTestCase):
     @patch("router.services.pre_generation_service.manager_pipeline_version_from_project", return_value="new")
-    def test_project_to_dict_includes_vtex_fields(self, _mock_pipeline):
+    def test_project_to_dict_includes_vtex_fields_and_timezone(self, _mock_pipeline):
         from router.services.pre_generation_service import PreGenerationService
 
         project = MagicMock()
@@ -281,9 +281,11 @@ class PreGenerationProjectToDictTestCase(SimpleTestCase):
         project.vtex_account = "mystore"
         project.vtex_host_store = "https://www.mystore.com.br"
         project.storefront_type = "vtex_io"
+        project.timezone = "America/Manaus"
 
         result = PreGenerationService()._project_to_dict(project)
 
         self.assertEqual(result["vtex_account"], "mystore")
         self.assertEqual(result["vtex_host_store"], "https://www.mystore.com.br")
         self.assertEqual(result["storefront_type"], "vtex_io")
+        self.assertEqual(result["timezone"], "America/Manaus")

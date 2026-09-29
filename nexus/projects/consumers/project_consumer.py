@@ -14,8 +14,8 @@ from nexus.usecases.projects.live_desk_copilot import extract_parent_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.projects.sync_live_desk_copilot import SyncLiveDeskCopilotUseCase
 from nexus.usecases.projects.sync_vtex import (
-    SyncProjectVtexUseCase,
-    extract_vtex_fields,
+    SyncProjectFieldsUseCase,
+    extract_project_fields,
     unwrap_eda_payload,
 )
 
@@ -43,10 +43,10 @@ def _build_project_dto(body: dict) -> ProjectCreationDTO:
     )
 
 
-def _sync_created_project_vtex(project_uuid: str | None, vtex_fields) -> None:
+def _sync_created_project_fields(project_uuid: str | None, project_fields) -> None:
     if not project_uuid:
         return
-    SyncProjectVtexUseCase().sync_project_vtex(project_uuid, vtex_fields, mode="create")
+    SyncProjectFieldsUseCase().sync_project_fields(project_uuid, project_fields, mode="create")
 
 
 def _sync_created_live_desk_copilot(project_uuid: str | None, payload: dict) -> None:
@@ -58,21 +58,21 @@ def _sync_created_live_desk_copilot(project_uuid: str | None, payload: dict) -> 
 def _handle_project_created(body: dict) -> str:
     payload = _extract_project_payload(body)
     project_uuid = payload.get("uuid")
-    vtex_fields = extract_vtex_fields(payload)
+    project_fields = extract_project_fields(payload)
     project_dto = _build_project_dto(payload)
 
     try:
         with transaction.atomic():
             ProjectsUseCase().create_project(project_dto=project_dto, user_email=payload.get("user_email"))
-            _sync_created_project_vtex(project_uuid, vtex_fields)
+            _sync_created_project_fields(project_uuid, project_fields)
         logger.info("[ProjectConsumer] Project created", extra={"uuid": project_uuid})
     except IntegrityError:
         if project_uuid and Project.objects.filter(uuid=project_uuid).exists():
             logger.info(
-                "[ProjectConsumer] Project already exists, syncing VTEX fields only",
+                "[ProjectConsumer] Project already exists, syncing Connect fields only",
                 extra={"uuid": project_uuid},
             )
-            _sync_created_project_vtex(project_uuid, vtex_fields)
+            _sync_created_project_fields(project_uuid, project_fields)
             _sync_created_live_desk_copilot(project_uuid, payload)
         else:
             raise

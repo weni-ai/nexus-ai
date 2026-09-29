@@ -422,6 +422,22 @@ class TestAWSMantleProjectCredentials(TestCase):
         self.project.save()
         self.provider = _create_provider("aws_mantle", manager_agent=self.manager)
 
+    def test_uses_manager_api_base_with_iam_auth(self):
+        self.manager.api_key = ""
+        self.manager.api_base = "https://bedrock-mantle.us-east-1.api.aws/openai/v1"
+        self.manager.save(update_fields=["api_key", "api_base"])
+
+        result = ManagerAgentRepository().get_supervisor(
+            supervisor_agent_uuid=str(self.manager.uuid),
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(result["user_model_credentials"]["api_key"], "")
+        self.assertEqual(
+            result["user_model_credentials"]["api_base"],
+            "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+        )
+
     def test_configures_luna_for_manager_and_collaborators(self):
         api_base = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
         ProjectModelProvider.objects.create(
@@ -446,6 +462,7 @@ class TestAWSMantleProjectCredentials(TestCase):
 
         self.assertEqual(result["foundation_model"], "openai.gpt-5.6-luna")
         self.assertEqual(result["model_vendor"], "aws_mantle")
+        self.assertFalse(result["enable_explicit_prompt_cache"])
         self.assertEqual(result["user_model_credentials"]["api_key"], "bedrock-api-key")
         self.assertEqual(result["user_model_credentials"]["api_base"], api_base)
         self.assertEqual(
@@ -795,9 +812,7 @@ class TestWhirlpoolHiddenFromModelProvidersApi(TestCase):
 
         self.project.manager_agent = self.whirlpool_manager
         self.project.save()
-        response = self.client.post(
-            self.managers_url, {"currentManager": str(self.openai_manager.uuid)}, format="json"
-        )
+        response = self.client.post(self.managers_url, {"currentManager": str(self.openai_manager.uuid)}, format="json")
         self.assertEqual(response.status_code, 403)
         self.project.refresh_from_db()
         self.assertEqual(self.project.manager_agent_id, self.whirlpool_manager.id)

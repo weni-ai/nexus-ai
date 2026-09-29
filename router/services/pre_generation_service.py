@@ -41,6 +41,7 @@ class PreGenerationService:
             "vtex_account": vtex_fields["vtex_account"],
             "vtex_host_store": vtex_fields["vtex_host_store"],
             "storefront_type": vtex_fields["storefront_type"],
+            "timezone": project.timezone,
         }
 
     def _content_base_to_dict(self, content_base) -> Dict:

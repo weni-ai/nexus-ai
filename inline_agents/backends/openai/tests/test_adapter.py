@@ -1,11 +1,160 @@
 from typing import Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import pendulum
 from django.test import TestCase
 from pydantic import BaseModel, ValidationError
 
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
+from inline_agents.backends.openai.prompt_cache import OBJECTIVE_MARKER
 from inline_agents.data_lake.mock_service import MockDataLakeEventService
+
+
+class TestPrepareAgentInstructions(TestCase):
+    def test_preserves_existing_order_without_explicit_cache(self):
+        result = OpenAITeamAdapter.prepare_agent_instructions(
+            "Agent playbook",
+            "Shared guidelines",
+        )
+
+        self.assertEqual(result, "Agent playbook\nShared guidelines")
+
+    def test_builds_cacheable_collaborator_layout(self):
+        result = OpenAITeamAdapter.prepare_agent_instructions(
+            "Agent playbook",
+            "Shared guidelines",
+            explicit_cache=True,
+        )
+
+        self.assertEqual(
+            result,
+            f"Shared guidelines\n{OBJECTIVE_MARKER}\nAgent playbook",
+        )
+
+    def test_does_not_build_cache_layout_without_shared_guidelines(self):
+        result = OpenAITeamAdapter.prepare_agent_instructions(
+            "Agent playbook",
+            "",
+            explicit_cache=True,
+        )
+
+        self.assertEqual(result, "Agent playbook")
+
+
+class TestBuildAgentsCollaboratorCache(TestCase):
+    def _build_agents(self, supervisor):
+        agent = {
+            "agentName": "orders",
+            "agentDisplayName": "Orders",
+            "instruction": "Track orders only.",
+            "foundationModel": "project-default-model",
+            "actionGroups": [],
+            "collaborator_configurations": {},
+        }
+        return OpenAITeamAdapter.build_agents(
+            agents=[agent],
+            supervisor=supervisor,
+            data_lake_event_adapter=MagicMock(),
+            hooks_state=MagicMock(),
+            event_manager_notify=MagicMock(),
+            preview=False,
+            preview_websocket=False,
+            rationale_switch=True,
+            language="en",
+            user_email="user@example.com",
+            session_id="session-1",
+            msg_external_id="message-1",
+            turn_off_rationale=False,
+            session_factory=MagicMock(),
+            max_tokens={},
+        )
+
+    @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
+    @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
+    def test_manager_override_enables_collaborator_cache_layout(self, collaborator_entity, _make_proxy):
+        collaborator_entity.return_value.name = "orders"
+        supervisor = {
+            "user_model_credentials": {},
+            "model_vendor": "aws_mantle",
+            "enable_explicit_prompt_cache": True,
+            "collaborator_configurations": {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "default_instructions_for_collaborators": "Shared guidelines",
+            },
+        }
+
+        self._build_agents(supervisor)
+
+        kwargs = collaborator_entity.call_args.kwargs
+        self.assertEqual(
+            kwargs["instructions"],
+            f"Shared guidelines\n{OBJECTIVE_MARKER}\nTrack orders only.",
+        )
+        self.assertTrue(kwargs["collaborator_configurations"]["enable_explicit_prompt_cache"])
+
+    @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
+    @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
+    def test_cache_flag_off_keeps_uncached_instruction_layout(self, collaborator_entity, _make_proxy):
+        collaborator_entity.return_value.name = "orders"
+        supervisor = {
+            "user_model_credentials": {},
+            "model_vendor": "aws_mantle",
+            "enable_explicit_prompt_cache": False,
+            "collaborator_configurations": {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "default_instructions_for_collaborators": "Shared guidelines",
+            },
+        }
+
+        self._build_agents(supervisor)
+
+        self.assertEqual(
+            collaborator_entity.call_args.kwargs["instructions"],
+            "Track orders only.\nShared guidelines",
+        )
+
+    @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
+    @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
+    def test_openai_vendor_with_flag_keeps_uncached_instruction_layout(self, collaborator_entity, _make_proxy):
+        collaborator_entity.return_value.name = "orders"
+        supervisor = {
+            "user_model_credentials": {},
+            "model_vendor": "openai",
+            "enable_explicit_prompt_cache": True,
+            "collaborator_configurations": {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "default_instructions_for_collaborators": "Shared guidelines",
+            },
+        }
+
+        self._build_agents(supervisor)
+
+        self.assertEqual(
+            collaborator_entity.call_args.kwargs["instructions"],
+            "Track orders only.\nShared guidelines",
+        )
+
+    @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
+    @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
+    def test_missing_shared_guidelines_keeps_uncached_instruction_layout(self, collaborator_entity, _make_proxy):
+        collaborator_entity.return_value.name = "orders"
+        supervisor = {
+            "user_model_credentials": {},
+            "model_vendor": "aws_mantle",
+            "enable_explicit_prompt_cache": True,
+            "collaborator_configurations": {
+                "override_collaborators_foundation_model": True,
+                "collaborators_foundation_model": "openai.gpt-6-luna",
+                "default_instructions_for_collaborators": "",
+            },
+        }
+
+        self._build_agents(supervisor)
+
+        self.assertEqual(collaborator_entity.call_args.kwargs["instructions"], "Track orders only.")
 
 
 class TestCreateFunctionArgsClass(TestCase):
@@ -307,9 +456,7 @@ class TestFunctionToolSchema(TestCase):
     """
 
     def build_schema(self, parameters: dict) -> dict:
-        model_class = OpenAITeamAdapter.create_function_args_class(
-            {"name": "TestModel", "parameters": parameters}
-        )
+        model_class = OpenAITeamAdapter.create_function_args_class({"name": "TestModel", "parameters": parameters})
         schema = model_class.model_json_schema()
         OpenAITeamAdapter._clean_schema(schema)
         return schema
@@ -581,3 +728,55 @@ class TestOpenAITeamAdapterGetContext(TestCase):
         self.assertIsNone(context.project["vtex_account"])
         self.assertIsNone(context.project["vtex_host_store"])
         self.assertIsNone(context.project["storefront_type"])
+
+
+class TestOpenAITeamAdapterTimezone(TestCase):
+    @patch(
+        "inline_agents.backends.openai.adapter.resolve_effective_project_timezone",
+        return_value="America/Manaus",
+    )
+    @patch("inline_agents.backends.openai.adapter.pendulum.now")
+    def test_prepare_time_uses_project_timezone(self, mock_now, mock_resolve_timezone):
+        mock_now.return_value = pendulum.datetime(2026, 9, 25, 10, 30, tz="America/Manaus")
+
+        result = OpenAITeamAdapter.prepare_time("America/Manaus")
+
+        mock_resolve_timezone.assert_called_once_with("America/Manaus")
+        mock_now.assert_called_once_with("America/Manaus")
+        self.assertIn("Friday, September 25, 2026 at 10:30:00", result)
+
+    @patch("inline_agents.backends.openai.adapter.pendulum.now")
+    def test_prepare_time_defaults_to_sao_paulo(self, mock_now):
+        mock_now.return_value = pendulum.datetime(2026, 9, 25, 11, 30, tz="America/Sao_Paulo")
+
+        result = OpenAITeamAdapter.prepare_time(None)
+
+        mock_now.assert_called_once_with("America/Sao_Paulo")
+        self.assertIn("Friday, September 25, 2026 at 11:30:00", result)
+
+    def test_human_support_instructions_receive_date_time_now(self):
+        date_time_now = "Today is Friday, September 25, 2026 at 10:30:00 -04"
+
+        result = OpenAITeamAdapter.get_supervisor_instructions(
+            instruction="{{ HUMAN_SUPPORT_INSTRUCTIONS }}",
+            date_time_now=date_time_now,
+            contact_fields="",
+            supervisor_name="Manager",
+            supervisor_role="Leader",
+            supervisor_goal="Help customers",
+            supervisor_adjective="Helpful",
+            supervisor_instructions="",
+            business_rules="",
+            project_id="project-1",
+            contact_id="tel:123",
+            contact_name="Ana",
+            channel_uuid="channel-1",
+            content_base_uuid="content-1",
+            use_components=False,
+            use_human_support=True,
+            components_instructions="",
+            components_instructions_up="",
+            human_support_instructions="Current project time: {{ DATE_TIME_NOW }}",
+        )
+
+        self.assertEqual(result, f"Current project time: {date_time_now}")

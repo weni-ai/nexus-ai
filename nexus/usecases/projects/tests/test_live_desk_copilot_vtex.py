@@ -16,7 +16,7 @@ from nexus.usecases.projects.live_desk_copilot import (
 )
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.projects.sync_live_desk_copilot import SyncLiveDeskCopilotUseCase
-from nexus.usecases.projects.sync_vtex import SyncProjectVtexUseCase, extract_vtex_fields
+from nexus.usecases.projects.sync_vtex import SyncProjectFieldsUseCase, extract_project_fields
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from router.services.pre_generation_service import PreGenerationService
 
@@ -143,15 +143,15 @@ class SyncLiveDeskCopilotUseCaseTestCase(TestCase):
         self.assertIsNone(self.project.parent_project_id)
 
 
-class SyncVtexInvalidatesCopilotCacheTestCase(TestCase):
+class SyncProjectFieldsInvalidatesCopilotCacheTestCase(TestCase):
     def test_parent_vtex_update_notifies_copilots(self):
         parent = ProjectFactory()
         copilot = ProjectFactory(is_live_desk_copilot=True, parent_project=parent)
-        usecase = SyncProjectVtexUseCase()
+        usecase = SyncProjectFieldsUseCase()
         with patch("nexus.usecases.projects.sync_vtex.notify_async") as mock_notify:
-            usecase.sync_project_vtex(
+            usecase.sync_project_fields(
                 str(parent.uuid),
-                extract_vtex_fields({"vtex_account": "mainstore", "config": {}}),
+                extract_project_fields({"vtex_account": "mainstore", "config": {}}),
                 mode="update",
             )
         notified = {call.kwargs["project"].uuid for call in mock_notify.call_args_list}

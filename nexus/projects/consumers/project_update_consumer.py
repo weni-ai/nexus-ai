@@ -9,8 +9,8 @@ from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.event_driven.parsers import JSONParser
 from nexus.usecases.projects.sync_live_desk_copilot import SyncLiveDeskCopilotUseCase
 from nexus.usecases.projects.sync_vtex import (
-    SyncProjectVtexUseCase,
-    extract_vtex_fields,
+    SyncProjectFieldsUseCase,
+    extract_project_fields,
     unwrap_eda_payload,
 )
 
@@ -21,7 +21,7 @@ UPDATED_ACTION = "updated"
 
 def _handle_project_updated(body: dict) -> tuple[str | None, bool]:
     """
-    Apply VTEX snapshot from a Connect project update event.
+    Apply synchronized fields from a Connect project update event.
 
     Returns (project_uuid, skipped) where skipped is True when the action
     is ignored or project_uuid is missing.
@@ -38,17 +38,17 @@ def _handle_project_updated(body: dict) -> tuple[str | None, bool]:
         logger.warning("[ProjectUpdateConsumer] Missing project_uuid, skipping")
         return None, True
 
-    vtex_fields = extract_vtex_fields(payload)
-    project = SyncProjectVtexUseCase().sync_project_vtex(
+    project_fields = extract_project_fields(payload)
+    project = SyncProjectFieldsUseCase().sync_project_fields(
         str(project_uuid),
-        vtex_fields,
+        project_fields,
         mode="update",
     )
     SyncLiveDeskCopilotUseCase().sync(str(project_uuid), payload, mode="update")
 
     if project is None:
         logger.warning(
-            "[ProjectUpdateConsumer] Project not found, skipping VTEX sync",
+            "[ProjectUpdateConsumer] Project not found, skipping Connect fields sync",
             extra={"project_uuid": project_uuid},
         )
 
@@ -71,7 +71,7 @@ class ProjectUpdateConsumer(EDAConsumer):
                 logger.info("[ProjectUpdateConsumer] Message skipped", extra={"uuid": project_uuid})
             else:
                 logger.info(
-                    "[ProjectUpdateConsumer] Project VTEX fields updated",
+                    "[ProjectUpdateConsumer] Project fields updated",
                     extra={"uuid": project_uuid},
                 )
         except Exception as exception:
@@ -100,7 +100,7 @@ class WeniEDAProjectUpdateConsumer(WeniEDAConsumer):
                 logger.info("[WeniEDAProjectUpdateConsumer] Message skipped", extra={"uuid": project_uuid})
             else:
                 logger.info(
-                    "[WeniEDAProjectUpdateConsumer] Project VTEX fields updated",
+                    "[WeniEDAProjectUpdateConsumer] Project fields updated",
                     extra={"uuid": project_uuid},
                 )
         except Exception as exception:

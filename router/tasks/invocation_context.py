@@ -96,4 +96,5 @@ class CachedProjectData:
             "vtex_account": self.project_dict.get("vtex_account"),
             "vtex_host_store": self.project_dict.get("vtex_host_store"),
             "storefront_type": self.project_dict.get("storefront_type"),
+            "timezone": self.project_dict.get("timezone"),
         }

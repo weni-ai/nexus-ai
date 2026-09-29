@@ -209,6 +209,9 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
     )
     broadcast = get_guardrail_block_broadcast_client(
         preview=ctx.preview,
+        project_use_components=(
+            ctx.cached_data.project_dict.get("use_components", False) if ctx.cached_data else False
+        ),
         force_instagram_comment_broadcast=instagram_comment_message,
     )
 
