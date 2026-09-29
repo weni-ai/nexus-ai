@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -137,6 +138,31 @@ class TestCreateProjectLiveDeskCopilotFlag(TestCase):
         )
 
         self.assertEqual(project.manager_agent_id, default_manager.id)
+
+
+class TestLiveDeskCopilotManagerUniqueness(TestCase):
+    def test_rejects_second_copilot_manager(self):
+        _create_manager(name="Copilot", public=False, is_live_desk_copilot=True)
+        second = ManagerAgent(
+            name="Copilot 2",
+            base_prompt="You are a manager.",
+            foundation_model="gpt-4o",
+            model_vendor="openai",
+            release_date=timezone.now(),
+            collaborators_foundation_model="gpt-4o-mini",
+            formatter_agent_foundation_model="gpt-4o-mini",
+            public=False,
+            is_live_desk_copilot=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            second.validate_constraints()
+
+    def test_allows_many_non_copilot_managers(self):
+        _create_manager(name="A")
+        _create_manager(name="B")
+
+        self.assertEqual(ManagerAgent.objects.filter(is_live_desk_copilot=False).count(), 2)
 
 
 class TestSetProjectManagerAgentLiveDeskCopilot(TestCase):
