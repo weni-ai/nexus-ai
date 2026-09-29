@@ -18,7 +18,6 @@ from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase, Proje
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO
 from nexus.usecases.projects.retrieve import get_integrated_feature
-from nexus.usecases.users.tests.user_factory import UserFactory
 
 from ..projects_use_case import ProjectsUseCase
 from .project_factory import IntegratedFeatureFactory, ProjectFactory
