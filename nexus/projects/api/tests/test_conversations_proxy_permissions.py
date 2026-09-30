@@ -60,18 +60,24 @@ def _build_requests_response(json_data, status_code=200):
 
 
 def _build_upstream_http_error(status_code, headers=None):
-    resp = mock.Mock()
+    resp = requests.Response()
     resp.status_code = status_code
-    resp.headers = headers or {}
-    resp.json.side_effect = ValueError("not json")
-    resp.text = ""
-    resp.raise_for_status.side_effect = requests.HTTPError(f"{status_code} error", response=resp)
+    resp.url = "https://conversations.test/upstream"
+    resp.encoding = "utf-8"
+    resp.headers["Content-Type"] = "text/plain"
+    for key, value in (headers or {}).items():
+        resp.headers[key] = value
+    resp._content = b""
     return resp
 
 
 def _make_http_error(status_code, headers=None):
     response = _build_upstream_http_error(status_code, headers)
-    return response.raise_for_status.side_effect
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        return exc
+    raise AssertionError("expected HTTPError for status %s" % status_code)
 
 
 class _PermissionTestBase(TestCase):
