@@ -192,6 +192,64 @@ class TestConversationsProxyRateLimit(SimpleTestCase):
         mock_sentry.assert_called_once()
 
 
+class TestConversationDetailProxyRateLimit(SimpleTestCase):
+    def setUp(self):
+        self.view = ConversationDetailProxyView()
+        self.project_uuid = str(uuid4())
+        self.conversation_uuid = str(uuid4())
+
+    def _error(self, status_code, headers=None):
+        response = _build_upstream_http_error(status_code, headers)
+        return response.raise_for_status.side_effect
+
+    def test_upstream_429_is_forwarded_without_sentry(self):
+        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
+
+        with mock.patch.object(ConversationsUsecase, "send_to_sentry") as mock_sentry:
+            response = self.view._handle_http_error(error, self.project_uuid, self.conversation_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.data, {"error": "Too many requests"})
+        self.assertEqual(response["Retry-After"], "12")
+        mock_sentry.assert_not_called()
+
+    def test_upstream_502_still_reports_to_sentry(self):
+        error = self._error(status.HTTP_502_BAD_GATEWAY)
+
+        with mock.patch.object(ConversationsUsecase, "send_to_sentry") as mock_sentry:
+            response = self.view._handle_http_error(error, self.project_uuid, self.conversation_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        mock_sentry.assert_called_once()
+
+
+class TestConversationsExportProxyRateLimit(SimpleTestCase):
+    def setUp(self):
+        self.view = ConversationsExportProxyView()
+        self.project_uuid = str(uuid4())
+
+    def _error(self, status_code, headers=None):
+        response = _build_upstream_http_error(status_code, headers)
+        return response.raise_for_status.side_effect
+
+    def test_upstream_429_forwards_retry_after(self):
+        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
+
+        response = self.view._handle_http_error(error, self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.data, {"error": "Too many requests"})
+        self.assertEqual(response["Retry-After"], "12")
+
+    def test_upstream_429_without_retry_after(self):
+        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS)
+
+        response = self.view._handle_http_error(error, self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertNotIn("Retry-After", response)
+
+
 @mock.patch("nexus.projects.api.views.requests.get")
 class TestConversationDetailProxyViewPermissions(_PermissionTestBase):
     def setUp(self):
