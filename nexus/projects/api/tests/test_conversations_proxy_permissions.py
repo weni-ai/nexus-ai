@@ -69,6 +69,11 @@ def _build_upstream_http_error(status_code, headers=None):
     return resp
 
 
+def _make_http_error(status_code, headers=None):
+    response = _build_upstream_http_error(status_code, headers)
+    return response.raise_for_status.side_effect
+
+
 class _PermissionTestBase(TestCase):
     """Shared setUp for both proxy view test classes."""
 
@@ -157,12 +162,8 @@ class TestConversationsProxyRateLimit(SimpleTestCase):
         self.view = ConversationsProxyView()
         self.project_uuid = str(uuid4())
 
-    def _error(self, status_code, headers=None):
-        response = _build_upstream_http_error(status_code, headers)
-        return response.raise_for_status.side_effect
-
     def test_upstream_429_is_forwarded_without_sentry(self):
-        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
+        error = _make_http_error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
 
         with mock.patch.object(ConversationsUsecase, "send_to_sentry") as mock_sentry:
             response = self.view._handle_http_error(error, self.project_uuid)
@@ -173,7 +174,7 @@ class TestConversationsProxyRateLimit(SimpleTestCase):
         mock_sentry.assert_not_called()
 
     def test_upstream_429_without_retry_after(self):
-        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS)
+        error = _make_http_error(status.HTTP_429_TOO_MANY_REQUESTS)
 
         with mock.patch.object(ConversationsUsecase, "send_to_sentry") as mock_sentry:
             response = self.view._handle_http_error(error, self.project_uuid)
@@ -183,7 +184,7 @@ class TestConversationsProxyRateLimit(SimpleTestCase):
         mock_sentry.assert_not_called()
 
     def test_upstream_502_still_reports_to_sentry(self):
-        error = self._error(status.HTTP_502_BAD_GATEWAY)
+        error = _make_http_error(status.HTTP_502_BAD_GATEWAY)
 
         with mock.patch.object(ConversationsUsecase, "send_to_sentry") as mock_sentry:
             response = self.view._handle_http_error(error, self.project_uuid)
@@ -198,12 +199,8 @@ class TestConversationDetailProxyRateLimit(SimpleTestCase):
         self.project_uuid = str(uuid4())
         self.conversation_uuid = str(uuid4())
 
-    def _error(self, status_code, headers=None):
-        response = _build_upstream_http_error(status_code, headers)
-        return response.raise_for_status.side_effect
-
     def test_upstream_429_is_forwarded_without_sentry(self):
-        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
+        error = _make_http_error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
 
         with mock.patch.object(ConversationsUsecase, "send_to_sentry") as mock_sentry:
             response = self.view._handle_http_error(error, self.project_uuid, self.conversation_uuid)
@@ -214,7 +211,7 @@ class TestConversationDetailProxyRateLimit(SimpleTestCase):
         mock_sentry.assert_not_called()
 
     def test_upstream_502_still_reports_to_sentry(self):
-        error = self._error(status.HTTP_502_BAD_GATEWAY)
+        error = _make_http_error(status.HTTP_502_BAD_GATEWAY)
 
         with mock.patch.object(ConversationsUsecase, "send_to_sentry") as mock_sentry:
             response = self.view._handle_http_error(error, self.project_uuid, self.conversation_uuid)
@@ -228,12 +225,8 @@ class TestConversationsExportProxyRateLimit(SimpleTestCase):
         self.view = ConversationsExportProxyView()
         self.project_uuid = str(uuid4())
 
-    def _error(self, status_code, headers=None):
-        response = _build_upstream_http_error(status_code, headers)
-        return response.raise_for_status.side_effect
-
     def test_upstream_429_forwards_retry_after(self):
-        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
+        error = _make_http_error(status.HTTP_429_TOO_MANY_REQUESTS, headers={"Retry-After": "12"})
 
         response = self.view._handle_http_error(error, self.project_uuid)
 
@@ -242,7 +235,7 @@ class TestConversationsExportProxyRateLimit(SimpleTestCase):
         self.assertEqual(response["Retry-After"], "12")
 
     def test_upstream_429_without_retry_after(self):
-        error = self._error(status.HTTP_429_TOO_MANY_REQUESTS)
+        error = _make_http_error(status.HTTP_429_TOO_MANY_REQUESTS)
 
         response = self.view._handle_http_error(error, self.project_uuid)
 
