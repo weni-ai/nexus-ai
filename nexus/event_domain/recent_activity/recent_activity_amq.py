@@ -40,15 +40,7 @@ ACTION_MODEL_TO_ENTITY = {
     "brain_on": Entity.PROJECT,
 }
 
-ENTITY_TO_MODULE = {
-    Entity.CONTENT_BASE: Module.KNOWLEDGE_BASE,
-    Entity.CONTENT_BASE_FILE: Module.KNOWLEDGE_BASE,
-    Entity.CONTENT_BASE_LINK: Module.KNOWLEDGE_BASE,
-    Entity.CONTENT_BASE_TEXT: Module.KNOWLEDGE_BASE,
-    Entity.CONTENT_BASE_INSTRUCTION: Module.INSTRUCTIONS,
-    Entity.CONTENT_BASE_AGENT: Module.MY_AGENTS,
-    Entity.AGENT: Module.MY_AGENTS,
-}
+ENTITY_TO_MODULE: dict[Entity, Module] = {}
 
 
 def _resolve_action(action: str) -> Action:

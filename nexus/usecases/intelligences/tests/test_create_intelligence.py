@@ -69,9 +69,17 @@ class TestCreateContentBaseUseCase(TestCase):
             content_base_uuid=content_base_dto.uuid,
             user_email=content_base_dto.created_by_email,
         )
-        use_case = CreateContentBaseTextUseCase()
+        notify_calls = []
+
+        def _capture(**kwargs):
+            notify_calls.append(kwargs)
+
+        use_case = CreateContentBaseTextUseCase(event_manager_notify=_capture)
         content_base_text_create = use_case.create_contentbasetext(content_base_dto, content_base_text_dto)
         self.assertEqual(content_base_text_create.text, "text")
+        self.assertEqual(len(notify_calls), 1)
+        self.assertEqual(notify_calls[0]["event"], "contentbase_text_activity")
+        self.assertEqual(notify_calls[0]["action_type"], "C")
 
 
 class TestCreateIntegratedIntelligence(TestCase):

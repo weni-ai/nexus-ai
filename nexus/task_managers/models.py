@@ -41,6 +41,15 @@ class TaskManager(models.Model):
     def __str__(self):
         return f"TaskManager - {self.uuid} - {self.status}"
 
+    def update_status(self, new_status):
+        previous_status = self.status
+        self.status = new_status
+        self.save(update_fields=["status"])
+        if new_status == self.STATUS_SUCCESS and previous_status != self.STATUS_SUCCESS:
+            from nexus.usecases.task_managers.celery_task_manager import publish_ingest_success_create
+
+            publish_ingest_success_create(self)
+
 
 class ContentBaseFileTaskManager(TaskManager):
     content_base_file = models.ForeignKey(
@@ -49,10 +58,6 @@ class ContentBaseFileTaskManager(TaskManager):
 
     def __str__(self):
         return f"ContentBaseFileTaskManager - {self.uuid}"
-
-    def update_status(self, new_status):
-        self.status = new_status
-        self.save(update_fields=["status"])
 
 
 class ContentBaseTextTaskManager(TaskManager):
@@ -65,10 +70,6 @@ class ContentBaseTextTaskManager(TaskManager):
     def __str__(self):
         return f"ContentBaseTextTaskManager - {self.file_name}"
 
-    def update_status(self, new_status):
-        self.status = new_status
-        self.save(update_fields=["status"])
-
 
 class ContentBaseLinkTaskManager(TaskManager):
     content_base_link = models.ForeignKey(
@@ -77,7 +78,3 @@ class ContentBaseLinkTaskManager(TaskManager):
 
     def __str__(self):
         return f"ContentBaseLinkTaskManager - {self.uuid}"
-
-    def update_status(self, new_status):
-        self.status = new_status
-        self.save(update_fields=["status"])
