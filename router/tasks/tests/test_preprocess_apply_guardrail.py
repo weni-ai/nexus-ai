@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
+from inline_agents.backends.openai.message_context import extract_message_context
 from router.tasks.invoke import UnsafeMessageException, _preprocess_message_input
 
 
@@ -94,7 +95,27 @@ class PreprocessApplyGuardrailTestCase(SimpleTestCase):
 
         processed, _, _ = _preprocess_message_input(message, "OpenAIBackend", guardrails_config=None)
 
-        self.assertIn("30065221", processed["text"])
-        self.assertIn("ig_comment", processed["text"])
+        user_text, context = extract_message_context(processed["text"])
+        self.assertEqual(user_text, "")
+        self.assertNotIn("overwrite message", processed["text"])
+        self.assertIn("30065221", context)
+        self.assertIn("ig_comment", context)
         mock_apply.assert_called_once()
         self.assertIn("30065221", mock_apply.call_args.args[0])
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ProjectGuardrailsConfigUseCase.apply_input_guardrail")
+    def test_structured_overwrite_reaches_agent_as_get_context(self, mock_apply):
+        mock_apply.return_value = None
+        message = {
+            "text": "Sim",
+            "attachments": [],
+            "metadata": {
+                "overwrite_message": {"button": {"payload": "Sim", "text": "Sim"}},
+            },
+        }
+
+        processed, _, _ = _preprocess_message_input(message, "OpenAIBackend", guardrails_config=None)
+
+        user_text, context = extract_message_context(processed["text"])
+        self.assertEqual(user_text, "Sim")
+        self.assertEqual(context, '{"button": {"payload": "Sim", "text": "Sim"}}')
