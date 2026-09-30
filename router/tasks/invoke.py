@@ -227,14 +227,16 @@ def handle_product_items(text: str, product_items: list) -> str:
 def handle_overwrite_message(text: str, overwrite_message: dict | list | str) -> str:
     """
     Handles overwrite_message from metadata.
-    If it's a dict/object, formats it with a label (like product_items).
-    If it's a string, uses it as-is.
+
+    Structured payloads stay out of the user message. They are appended after
+    `; Context:` so the existing get_context injection can deliver them to the
+    agent. A string is still treated as message content.
     """
     if isinstance(overwrite_message, (dict, list)):
-        formatted = f"overwrite message: {str(overwrite_message)}"
-    else:
-        formatted = str(overwrite_message)
+        payload = json.dumps(overwrite_message, ensure_ascii=False)
+        return f"{text}; Context: {payload}" if text else f"; Context: {payload}"
 
+    formatted = str(overwrite_message)
     return f"{text} {formatted}" if text else formatted
 
 
