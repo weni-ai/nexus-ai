@@ -1,8 +1,19 @@
-from unittest.mock import patch
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from router.tasks.invoke import UnsafeMessageException, _preprocess_message_input
+from inline_agents.backends.openai.message_context import (
+    DEFAULT_CONTEXT_TOOL_NAME,
+    extract_message_context,
+    inject_context_as_tool_result,
+)
+from router.tasks.invoke import (
+    UnsafeMessageException,
+    _extract_and_apply_message_context,
+    _preprocess_message_input,
+)
 
 
 class PreprocessApplyGuardrailTestCase(SimpleTestCase):
@@ -94,7 +105,64 @@ class PreprocessApplyGuardrailTestCase(SimpleTestCase):
 
         processed, _, _ = _preprocess_message_input(message, "OpenAIBackend", guardrails_config=None)
 
-        self.assertIn("30065221", processed["text"])
-        self.assertIn("ig_comment", processed["text"])
+        user_text, context = extract_message_context(processed["text"])
+        self.assertEqual(user_text, "")
+        self.assertNotIn("overwrite message", processed["text"])
+        self.assertIn("30065221", context)
+        self.assertIn("ig_comment", context)
         mock_apply.assert_called_once()
         self.assertIn("30065221", mock_apply.call_args.args[0])
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ProjectGuardrailsConfigUseCase.apply_input_guardrail")
+    def test_structured_overwrite_reaches_agent_as_get_context(self, mock_apply):
+        mock_apply.return_value = None
+        message = {
+            "text": "Sim",
+            "attachments": [],
+            "metadata": {
+                "overwrite_message": {"button": {"payload": "Sim", "text": "Sim"}},
+            },
+        }
+
+        processed, _, _ = _preprocess_message_input(message, "OpenAIBackend", guardrails_config=None)
+
+        user_text, context = extract_message_context(processed["text"])
+        self.assertEqual(user_text, "Sim")
+        self.assertEqual(context, '{"button": {"payload": "Sim", "text": "Sim"}}')
+
+    @patch("nexus.usecases.guardrails.project_guardrails_config.ProjectGuardrailsConfigUseCase.apply_input_guardrail")
+    def test_instagram_comment_metadata_is_get_context_not_user_message(self, mock_apply):
+        """The trace must keep the comment text, and the dict must arrive as get_context."""
+        mock_apply.return_value = None
+        message = {
+            "text": "❤️",
+            "attachments": [],
+            "metadata": {
+                "overwrite_message": {
+                    "ig_comment": {
+                        "id": "18125199286854738",
+                        "media": {"id": "18035070596307290", "media_product_type": "FEED"},
+                    },
+                    "ig_response_type": "dm_comment",
+                }
+            },
+        }
+
+        processed, _, _ = _preprocess_message_input(message, "OpenAIBackend", guardrails_config=None)
+        message_obj = SimpleNamespace(text=processed["text"])
+        injected = _extract_and_apply_message_context(message_obj)
+
+        self.assertEqual(message_obj.text, "❤️")
+        self.assertNotIn("overwrite message", message_obj.text)
+        self.assertNotIn("ig_comment", message_obj.text)
+        self.assertIn("18125199286854738", injected)
+        self.assertIn("dm_comment", injected)
+
+        session = MagicMock()
+        session.add_items = AsyncMock()
+        asyncio.run(inject_context_as_tool_result(session, injected))
+
+        function_call, function_output = session.add_items.await_args.args[0]
+        self.assertEqual(function_call["name"], DEFAULT_CONTEXT_TOOL_NAME)
+        self.assertEqual(function_output["output"], injected)
+        self.assertNotIn("❤️", function_output["output"])
