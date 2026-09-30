@@ -636,7 +636,7 @@ class ConversationDetailProxyView(APIView):
             return None
 
     def _handle_http_error(self, e, project_uuid, conversation_uuid):
-        status_code = e.response.status_code if e.response else 500
+        status_code = e.response.status_code if e.response is not None else 500
 
         if status_code == status.HTTP_429_TOO_MANY_REQUESTS:
             logger.warning(
