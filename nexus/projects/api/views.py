@@ -205,6 +205,16 @@ class AgentBuilderProjectDetailsView(APIView):
         return Response(details)
 
 
+def _too_many_requests_response(upstream_response):
+    retry_after = upstream_response.headers.get("Retry-After")
+    headers = {"Retry-After": retry_after} if retry_after else {}
+    return Response(
+        {"error": "Too many requests"},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+        headers=headers,
+    )
+
+
 class ConversationsProxyView(WeniIOAuthViewMixin, APIView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -353,6 +363,10 @@ class ConversationsProxyView(WeniIOAuthViewMixin, APIView):
                 status=status.HTTP_200_OK,
             )
 
+        if status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            logger.warning("Conversations list rate limited for project %s", project_uuid)
+            return _too_many_requests_response(e.response)
+
         try:
             error_message, error_details = self.usecase.extract_error_message(e.response)
         except Exception:
@@ -432,6 +446,10 @@ class ConversationsExportProxyView(APIView):
         return response
 
     def _handle_http_error(self, e, project_uuid):
+        if e.response is not None and e.response.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            logger.warning("Conversations export rate limited for project %s", project_uuid)
+            return _too_many_requests_response(e.response)
+
         if e.response is None:
             status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
             body = {"error": "Internal server error"}
@@ -618,7 +636,16 @@ class ConversationDetailProxyView(APIView):
             return None
 
     def _handle_http_error(self, e, project_uuid, conversation_uuid):
-        status_code = e.response.status_code if e.response else 500
+        status_code = e.response.status_code if e.response is not None else 500
+
+        if status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            logger.warning(
+                "Conversation detail rate limited for project %s, conversation %s",
+                project_uuid,
+                conversation_uuid,
+            )
+            return _too_many_requests_response(e.response)
+
         error_message, error_details = self.usecase.extract_error_message(e.response)
 
         if status_code != 404:
