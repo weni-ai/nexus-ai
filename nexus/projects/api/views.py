@@ -353,6 +353,16 @@ class ConversationsProxyView(WeniIOAuthViewMixin, APIView):
                 status=status.HTTP_200_OK,
             )
 
+        if status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            retry_after = e.response.headers.get("Retry-After") if e.response is not None else None
+            logger.warning("Conversations list rate limited for project %s", project_uuid)
+            headers = {"Retry-After": retry_after} if retry_after else {}
+            return Response(
+                {"error": "Too many requests"},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers=headers,
+            )
+
         try:
             error_message, error_details = self.usecase.extract_error_message(e.response)
         except Exception:
