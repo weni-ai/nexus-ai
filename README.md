@@ -42,6 +42,22 @@ Create an .env file in the project root and add the above environment variables
 For authentication, we use Keycloak, you need to run it locally:
   - [Documentation](https://www.keycloak.org/documentation.html)
 
+### Django Admin SSO
+
+The Django Admin uses a dedicated confidential Keycloak client through
+`weni_django_keycloak_admin`. Configure Authorization Code Flow, exact callback
+`https://<host>/admin/oidc/callback/`, post-logout URI `https://<host>/`, and a
+client role named by `ADMIN_OIDC_AUTHORIZED_ROLE`. The role mapper must include
+`resource_access.<ADMIN_OIDC_CLIENT_ID>.roles` in the ID token.
+
+Required variables are `ADMIN_OIDC_ISSUER`,
+`ADMIN_OIDC_AUTHORIZATION_ENDPOINT`, `ADMIN_OIDC_TOKEN_ENDPOINT`,
+`ADMIN_OIDC_USER_ENDPOINT`, `ADMIN_OIDC_JWKS_ENDPOINT`,
+`ADMIN_OIDC_END_SESSION_ENDPOINT`, `ADMIN_OIDC_CLIENT_ID`, and
+`ADMIN_OIDC_CLIENT_SECRET`. Local password login is intentionally unavailable.
+Active Admin sessions silently revalidate authorization every
+`ADMIN_OIDC_AUTHORIZATION_TTL_SECONDS` (maximum 300 seconds).
+
 Execute `docker-compose build` to build application
 
 Execute `docker-compose up` to up the server

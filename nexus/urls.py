@@ -16,6 +16,7 @@ from nexus.logs.api.routers import urlpatterns as logs_routes
 from nexus.projects.api.routers import urlpatterns as projects_routes
 from nexus.users.api.urls import urlpatterns as users_routes
 from nexus.zeroshot.api.routers import urlpatterns as zeroshot_routes
+from weni_django_keycloak_admin.views import AdminOIDCLogoutView, admin_login_redirect
 
 url_api = []
 
@@ -33,6 +34,9 @@ urlpatterns = [
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("swagger/", SpectacularSwaggerView.as_view(url_name="schema")),
     path("docs/", SpectacularRedocView.as_view(url_name="schema")),
+    path("admin/login/", admin_login_redirect, name="admin_login"),
+    path("admin/logout/", AdminOIDCLogoutView.as_view(), name="admin_logout"),
+    path("admin/oidc/", include("weni_django_keycloak_admin.urls")),
     path("admin/", admin.site.urls),
     path("api-auth/", include("rest_framework.urls")),
     path("api/", include(url_api)),

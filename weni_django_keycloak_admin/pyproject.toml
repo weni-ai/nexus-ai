@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weni-django-keycloak-admin"
+version = "0.1.0"
+description = "Reusable Keycloak SSO and authorization policy for Django Admin."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "Django>=4.2,<6",
+  "mozilla-django-oidc>=4,<6",
+  "PyJWT[crypto]>=2.8,<3",
+  "prometheus-client>=0.20,<1",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<9",
+  "pytest-django>=4.6,<5",
+]
+
+[tool.setuptools]
+packages = ["weni_django_keycloak_admin"]
+package-dir = {weni_django_keycloak_admin = "."}
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py"]

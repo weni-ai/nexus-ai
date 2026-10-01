@@ -69,6 +69,7 @@ protobuf = ">=6.31,<7.0"
 weni-feature-flags = ">=2.1.0,<3.0.0"
 weni-eda = "0.3.0"
 weni-commons = {version = "1.6.1", allow-prereleases = true}
+weni-django-keycloak-admin = {path = "weni_django_keycloak_admin", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.16.1"
