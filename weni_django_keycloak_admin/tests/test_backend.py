@@ -93,6 +93,12 @@ class AdminOIDCBackendTest(TestCase):
     def jwk(self):
         return json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(self.private_key.public_key()))
 
+    def test_verify_token_passes_bytes_to_jwk_lookup(self):
+        with patch.object(self.backend, "retrieve_matching_jwk", return_value=self.jwk()) as lookup:
+            self.backend.verify_token(self.token(), nonce="expected-nonce")
+
+        self.assertIsInstance(lookup.call_args.args[0], bytes)
+
     def test_verify_token_validates_issuer_audience_and_nonce(self):
         with patch.object(self.backend, "retrieve_matching_jwk", return_value=self.jwk()):
             payload = self.backend.verify_token(self.token(), nonce="expected-nonce")

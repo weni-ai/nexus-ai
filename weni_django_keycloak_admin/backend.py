@@ -3,6 +3,7 @@ import time
 
 import jwt
 from django.core.exceptions import SuspiciousOperation
+from django.utils.encoding import force_bytes
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 from .config import get_config, get_oidc_setting
@@ -19,7 +20,7 @@ class AdminOIDCBackend(OIDCAuthenticationBackend):
         return get_oidc_setting(attr, *args)
 
     def verify_token(self, token, **kwargs):
-        key_data = self.retrieve_matching_jwk(token)
+        key_data = self.retrieve_matching_jwk(force_bytes(token))
         key = jwt.PyJWK.from_dict(key_data).key
         config = get_config()
         try:
