@@ -24,16 +24,16 @@ Sync Impact Report:
   ⚠ .specify/templates/spec-template.md — has no "Inheritance from Product Spec" block (Principle IV) nor a "Peak load" field (Principle XII)
   ⚠ .specify/templates/plan-template.md — "Constitution Check" gates should list Principles I–XV
 - Follow-up TODOs:
-  TODO(BRANCH_PROTECTION): confirm that `main` on github.com/weni-ai/nexus-ai enforces PR + 1 approval + green CI and blocks direct pushes.
   TODO(PRODUCT_SPEC_REPO): name the product-spec repository that engineering specs inherit from.
-  TODO(SPEC_001_INHERITANCE): specs/001-project-guardrails-config references "FDD V2" without a pinned version or inheritance section; retrofit or record an explicit grandfathering decision.
-  TODO(CI_TOOLING): .github/workflows/ci.yml runs `flake8 nexus/` and `manage.py test`, while the project lints with ruff and declares pytest-django; align CI with the declared tooling.
-  TODO(FORMATTER): pre-commit formats with `ruff format` (line 120) while `task format` uses blue (line 79); pick one.
-  TODO(DEPENDENCY_SCANNING): no vulnerability scanning of dependencies is configured (no dependabot / audit step in CI).
-  TODO(EXCLUDED_TESTS): pytest addopts ignore the Bedrock backend tests; those flows currently have no enforced coverage.
-  TODO(SENTRY_USER_ID): confirm the user identifier attached to Sentry is opaque (not an e-mail address).
-  TODO(CHANGELOG_FORMAT): CHANGELOG.md uses `## *Add*` / `*Fix*` / `*Update*`; migrate new entries to Keep a Changelog categories.
-  TODO(README_CONTRIBUTING): README "Contributing" shows a non-conventional commit example; align with Principle III.
+  TODO(CI_LINT): decided — replace CI's `flake8 nexus/` with `ruff check .` so CI matches pre-commit; to be done in a separate PR.
+  TODO(FORMATTER): pre-commit formats with `ruff format` (line 120, double quotes) while `task format` / `task lint` use blue (line 79, single quotes); decision deferred.
+  TODO(DEPENDENCY_SCANNING): no vulnerability scanning of dependencies is configured (deferred).
+  TODO(SENTRY_PII): existing code tags Sentry events with `contact_urn` and attaches end-user message text; no user identifier is set. New code follows Principle XIII; existing calls to be fixed separately.
+- Resolved at ratification:
+  Branch protection on `main` confirmed in place.
+  Specs that predate 1.0.0 are exempt from the inheritance section (Principle IV).
+  Commit and changelog formats apply from 1.0.0 onward; history is not rewritten (Principles III, VII).
+  Django `TestCase` via `manage.py test` is the standard test stack; pytest is the exception.
 
 Provenance:
 - Source: weni-ai/vtex-cx-engineering-constitutions (main)
@@ -83,7 +83,9 @@ and keeping an unrelated regression.
 Commits MUST follow Conventional Commits in the form `<type>: <description>`.
 Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`. The
 description MUST be imperative, specific, and no longer than 50 characters.
-Commits MUST be atomic: one logical change per commit.
+Commits MUST be atomic: one logical change per commit. This applies to commits
+made from version 1.0.0 of this constitution onward; existing history is not
+rewritten.
 
 **Rationale:** conventional commits enable automated changelog generation and
 semantic versioning. Atomic commits simplify bisecting, reverting, and reviewing.
@@ -121,6 +123,11 @@ mid-flight. A mandatory product spec prevents engineering work without an agreed
 problem; an optional architecture doc avoids blocking delivery on ceremony when
 the design is trivial. A single inheritance format keeps the link
 machine-checkable and uniform across repositories.
+
+**Exception:** specs created before version 1.0.0 of this constitution (for
+example `specs/001-project-guardrails-config`) are exempt from the inheritance
+section, because the product-spec pipeline did not yet exist when they were
+written. Every spec created from 1.0.0 onward MUST comply.
 
 ### V. No Silent Divergence
 
@@ -161,8 +168,9 @@ can break a downstream service silently.
 Any public library published from this repository MUST maintain a changelog in
 Keep a Changelog format. `nexus-ai` itself is a deployable service and keeps
 `CHANGELOG.md` as its release record: every user-facing change MUST appear there
-under a SemVer version, and new entries SHOULD use the Keep a Changelog
-categories (Added, Changed, Deprecated, Removed, Fixed, Security). Version bumps
+under a SemVer version. Entries added from version 1.0.0 of this constitution
+onward MUST use the Keep a Changelog categories (Added, Changed, Deprecated,
+Removed, Fixed, Security); earlier entries are left as written. Version bumps
 MUST follow SemVer.
 
 **Rationale:** a well-maintained changelog communicates impact to consumers and
@@ -274,7 +282,10 @@ filtering an investigation needs while keeping reports free of personal data.
 
 Every flow MUST have at least one test covering the complete use case, from input
 to resulting effect — typically through the DRF API or the `usecases/` entry
-point, with only true external dependencies mocked. Tests that assert a single
+point, with only true external dependencies mocked. Tests MUST be written with
+Django's test framework (`django.test.TestCase` and friends, run by
+`manage.py test`); pytest-only tests are an exception that MUST be justified in
+the plan. Tests that assert a single
 method in isolation are allowed and SHOULD be used to explore edge cases and
 input variations that are expensive to reach through the whole flow, but they
 MUST NOT be the only coverage a flow has. Every flow MUST cover its success path
@@ -328,7 +339,8 @@ code cannot carry without a second description that silently goes stale.
   **Complexity Tracking** table.
 - Before review: `pre-commit` hooks (ruff format, ruff check, file hygiene,
   Poetry check) MUST pass; the push-stage coverage hook MUST stay at or above 75%.
-- CI (`.github/workflows/ci.yml`) MUST be green before merge (Principle I).
+- CI (`.github/workflows/ci.yml`, running `manage.py test` with coverage) MUST
+  be green before merge (Principle I).
 - New or changed flows MUST ship with flow tests covering success and failure
   paths (Principle XIV).
 - PRs that change a public contract MUST call it out and include the version or
