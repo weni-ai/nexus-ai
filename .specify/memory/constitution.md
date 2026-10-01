@@ -20,9 +20,9 @@ Sync Impact Report:
   XV. Explicit Over Clever
 - Added sections: Technology Stack and Project Constraints; Development Workflow and Quality Gates; Governance
 - Removed sections: none
-- Templates requiring updates (not modified by this generation):
-  ⚠ .specify/templates/spec-template.md — has no "Inheritance from Product Spec" block (Principle IV) nor a "Peak load" field (Principle XII)
-  ⚠ .specify/templates/plan-template.md — "Constitution Check" gates should list Principles I–XV
+- Templates (project overrides; core templates under .specify/templates/ left untouched):
+  ✅ .specify/templates/overrides/spec-template.md — adds "Inheritance from Product Spec" (Principle IV) and "Peak Load" (Principle XII)
+  ✅ .specify/templates/overrides/plan-template.md — Constitution Check gates for Principles I–XV; Testing example uses Django TestCase (Principle XIV)
 - Follow-up TODOs:
   TODO(PRODUCT_SPEC_REPO): name the product-spec repository that engineering specs inherit from.
   TODO(CI_LINT): decided — replace CI's `flake8 nexus/` with `ruff check .` so CI matches pre-commit; to be done in a separate PR.
