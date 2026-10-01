@@ -24,7 +24,7 @@
 
 **Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
+**Testing**: [e.g., Django TestCase via `manage.py test` (pytest only with justification) or NEEDS CLARIFICATION]
 
 **Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
 
@@ -40,7 +40,29 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+<!--
+  Gates map 1:1 to the principles in .specify/memory/constitution.md.
+  Mark each gate PASS, FAIL, or N/A with a one-line justification. Every FAIL
+  MUST be justified in Complexity Tracking or the plan MUST NOT proceed.
+-->
+
+| # | Principle | Gate | Status |
+|---|-----------|------|--------|
+| I | Version Control and Review | Work happens on a branch from latest `main` and lands through a reviewed PR with green CI | [PASS/FAIL/N/A] |
+| II | Contained Changes | Scope is limited to this feature; no unrelated refactors; cross-repo impact (e.g. `nexus-conversations`) is named | [PASS/FAIL/N/A] |
+| III | Commit Messages | Commits will be atomic `<type>: <description>` (≤50 chars) | [PASS/FAIL/N/A] |
+| IV | Specification Traceability | spec.md opens with the inheritance section and a pinned product-spec version | [PASS/FAIL/N/A] |
+| V | No Silent Divergence | Any contradiction with the product spec is an approved amendment listed under Divergences | [PASS/FAIL/N/A] |
+| VI | Versioned Contracts | Changed HTTP APIs, events, or gRPC contracts are backward compatible or carry a version/deprecation plan | [PASS/FAIL/N/A] |
+| VII | Changelog Maintenance | User-facing changes get a `CHANGELOG.md` entry with Keep a Changelog categories | [PASS/FAIL/N/A] |
+| VIII | Security and Secrets | No secrets in code, fixtures, or specs; new config comes from env; least-privilege access | [PASS/FAIL/N/A] |
+| IX | Never Trust the Client | Every external input (API, webhook, router message, LLM/tool output) is validated server-side; authorization enforced per request | [PASS/FAIL/N/A] |
+| X | Fail Gracefully and Predictably | Every external call has an explicit timeout and a defined error response | [PASS/FAIL/N/A] |
+| XI | Bounded Retry Over REST | Inter-service propagation retries only transient failures, with max attempts, backoff, idempotency, and a recoverable exhausted path | [PASS/FAIL/N/A] |
+| XII | Scalability and Peak Load | No cross-request state in process memory or local disk; peak load declared in spec.md | [PASS/FAIL/N/A] |
+| XIII | Observability and Diagnosable Errors | Structured logs; Sentry events carry opaque project/account/user/correlation IDs; no PII (no raw contact URNs or message text) | [PASS/FAIL/N/A] |
+| XIV | Tests Exercise Flows | Each flow has an end-to-end Django test covering success and failure paths | [PASS/FAIL/N/A] |
+| XV | Explicit Over Clever | Meaningful literals are named constants/settings; no hidden side effects; comments explain why | [PASS/FAIL/N/A] |
 
 ## Project Structure
 

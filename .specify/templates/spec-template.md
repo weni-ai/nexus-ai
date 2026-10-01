@@ -8,6 +8,22 @@
 
 **Input**: User description: "$ARGUMENTS"
 
+## Inheritance from Product Spec
+
+<!--
+  MANDATORY (Constitution Principle IV). Keep this exact format and keep it as the
+  first section. The product spec MUST exist and be tagged before this spec is created.
+  "Pinned version" MUST be an immutable commit or tag, never a mutable URL or ID.
+  "Divergences" links to an approved amendment in the product repository (Principle V).
+-->
+
+- Product Spec: [title] — [URL]
+- Pinned version: [commit/tag]
+- Architecture doc: [none | URL + commit/tag]
+- Inherited binding decisions: [short list]
+- Scope of this spec: [slice implemented by this repo]
+- Divergences: [none | link to amendment]
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
@@ -102,6 +118,17 @@
 
 - **[Entity 1]**: [What it represents, key attributes without implementation]
 - **[Entity 2]**: [What it represents, relationships to other entities]
+
+### Peak Load *(mandatory)*
+
+<!--
+  MANDATORY (Constitution Principle XII). State the PEAK the feature must sustain,
+  never the average (e.g., a seasonal sales peak). Use [NEEDS CLARIFICATION] if unknown.
+-->
+
+- **Peak throughput**: [e.g., "N messages/s routed through this flow at peak"]
+- **Peak concurrency**: [e.g., "N concurrent conversations per project"]
+- **Peak source**: [where the number comes from, e.g., "last Black Friday metrics"]
 
 ## Success Criteria *(mandatory)*
 
