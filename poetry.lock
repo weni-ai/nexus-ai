@@ -8770,7 +8770,7 @@ optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = []
-develop = true
+develop = false
 
 [package.dependencies]
 Django = ">=4.2,<6"
@@ -9450,4 +9450,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "7e5a0e64a17a467445912b068f9a386b85a86325d50ebdaf3e879a8f8ec0a85c"
+content-hash = "d05f3beeadf276689d0b0e88da0ab7cbfaa6b9ab6f6db535be56b22259cc1a05"

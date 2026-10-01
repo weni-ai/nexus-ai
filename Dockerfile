@@ -74,6 +74,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   apt-get update \
   && apt-get install --no-install-recommends --no-install-suggests -y ${BUILD_DEPS}
 
+COPY weni_django_keycloak_admin /app/weni_django_keycloak_admin
 COPY --from=build-poetry /app/requirements.txt /tmp/dep/
 RUN --mount=type=cache,mode=0755,target=/pip_cache,id=pip pip install --cache-dir /pip_cache --prefix=/install -r /tmp/dep/requirements.txt
 
