@@ -43,7 +43,7 @@ Add project-level guardrails configuration to Nexus: fixed 11-**category** catal
 ### Documentation
 
 ```text
-specs/001-project-guardrails-config/
+specs/002-project-guardrails-config/
 ├── spec.md, plan.md, research.md, data-model.md
 ├── quickstart.md, tasks.md
 ├── contracts/guardrails-config-api.yaml
