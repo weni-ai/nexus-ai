@@ -6561,6 +6561,9 @@ files = [
     {file = "pyjwt-2.11.0.tar.gz", hash = "sha256:35f95c1f0fbe5d5ba6e43f00271c275f7a1a4db1dab27bf708073b75318ea623"},
 ]
 
+[package.dependencies]
+cryptography = {version = ">=3.4.0", optional = true, markers = "extra == \"crypto\""}
+
 [package.extras]
 crypto = ["cryptography (>=3.4.0)"]
 dev = ["coverage[toml] (==7.10.7)", "cryptography (>=3.4.0)", "pre-commit", "pytest (>=8.4.2,<9.0.0)", "sphinx", "sphinx-rtd-theme", "zope.interface"]
@@ -8760,6 +8763,29 @@ moto = ">=4.1,<5.0"
 pytest = ">=8.4.0,<9.0.0"
 
 [[package]]
+name = "weni-django-keycloak-admin"
+version = "0.1.0"
+description = "Reusable Keycloak SSO and authorization policy for Django Admin."
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+Django = ">=4.2,<6"
+mozilla-django-oidc = ">=4,<6"
+prometheus-client = ">=0.20,<1"
+PyJWT = {version = ">=2.8,<3", extras = ["crypto"]}
+
+[package.extras]
+test = ["pytest (>=8,<9)", "pytest-django (>=4.6,<5)"]
+
+[package.source]
+type = "directory"
+url = "weni_django_keycloak_admin"
+
+[[package]]
 name = "weni-eda"
 version = "0.3.0"
 description = "Python library to simplify Event-Driven Architecture (EDA) with Django and RabbitMQ"
@@ -9424,4 +9450,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "c92fd17bc20fa69f9d35172a945e81da54bfaee6ed6fea583615b2b6d22b5d3a"
+content-hash = "7e5a0e64a17a467445912b068f9a386b85a86325d50ebdaf3e879a8f8ec0a85c"
