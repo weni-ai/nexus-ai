@@ -97,4 +97,5 @@ class CachedProjectData:
             "vtex_host_store": self.project_dict.get("vtex_host_store"),
             "storefront_type": self.project_dict.get("storefront_type"),
             "timezone": self.project_dict.get("timezone"),
+            "is_live_desk_copilot": bool(self.project_dict.get("is_live_desk_copilot", False)),
         }

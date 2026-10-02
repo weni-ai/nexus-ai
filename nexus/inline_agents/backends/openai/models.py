@@ -70,6 +70,13 @@ class ManagerAgent(models.Model):
     default = models.BooleanField(
         default=False, help_text="If True, this is the default supervisor for all newly created projects"
     )
+    is_live_desk_copilot = models.BooleanField(
+        default=False,
+        help_text=(
+            "If True, new Live Desk copilot projects are created with this manager. "
+            "Keep default unchecked so normal projects do not use it."
+        ),
+    )
     public = models.BooleanField(
         default=True, help_text="If True, this supervisor is public and will be available to all projects"
     )
@@ -137,6 +144,18 @@ class ManagerAgent(models.Model):
     append_manager_extra_args = models.BooleanField(
         default=True, help_text="If True, the manager extra args will be appended to the collaborator extra args"
     )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_live_desk_copilot"],
+                condition=models.Q(is_live_desk_copilot=True),
+                name="unique_live_desk_copilot_manager",
+                violation_error_message=(
+                    "Another manager is already marked as Live Desk copilot. Uncheck it before marking this one."
+                ),
+            ),
+        ]
 
     def __str__(self):
         return self.name
