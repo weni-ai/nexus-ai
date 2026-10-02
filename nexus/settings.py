@@ -42,6 +42,10 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
 AUTH_USER_MODEL = "users.User"
 
+AUTHENTICATION_BACKENDS = [
+    "nexus.authentication.admin_oidc.backend.NexusAdminOIDCBackend",
+]
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -49,6 +53,7 @@ INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
     "mozilla_django_oidc",
+    "weni_django_keycloak_admin",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
@@ -93,6 +98,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "weni_django_keycloak_admin.middleware.AdminAuthorizationRefreshMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "nexus.logs.middleware.PrometheusAuthenticationMiddleware",
@@ -338,6 +344,33 @@ OIDC_DRF_AUTH_BACKEND = env.str(
 )
 OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
 OIDC_RP_EMAIL = env.str("OIDC_RP_EMAIL", default="")
+
+# Dedicated interactive client for the Django Admin. These settings are
+# intentionally separate from API/WebSocket and client_credentials OIDC.
+KEYCLOAK_ADMIN_OIDC = {
+    "ENABLED": env.bool("ADMIN_OIDC_ENABLED", default=not TESTING),
+    "ISSUER": env.str("ADMIN_OIDC_ISSUER", default=""),
+    "AUTHORIZATION_ENDPOINT": env.str("ADMIN_OIDC_AUTHORIZATION_ENDPOINT", default=""),
+    "TOKEN_ENDPOINT": env.str("ADMIN_OIDC_TOKEN_ENDPOINT", default=""),
+    "USER_ENDPOINT": env.str("ADMIN_OIDC_USER_ENDPOINT", default=""),
+    "JWKS_ENDPOINT": env.str("ADMIN_OIDC_JWKS_ENDPOINT", default=""),
+    "END_SESSION_ENDPOINT": env.str("ADMIN_OIDC_END_SESSION_ENDPOINT", default=""),
+    "CLIENT_ID": env.str("ADMIN_OIDC_CLIENT_ID", default=""),
+    "CLIENT_SECRET": env.str("ADMIN_OIDC_CLIENT_SECRET", default=""),
+    "AUTHORIZED_ROLE": env.str("ADMIN_OIDC_AUTHORIZED_ROLE", default="nexus-ai-admin"),
+    "SCOPES": env.str("ADMIN_OIDC_SCOPES", default="openid profile email"),
+    "SIGN_ALGORITHM": "RS256",
+    "TIMEOUT_SECONDS": env.int("ADMIN_OIDC_TIMEOUT_SECONDS", default=5),
+    "AUTHORIZATION_TTL_SECONDS": env.int("ADMIN_OIDC_AUTHORIZATION_TTL_SECONDS", default=300),
+    "VERIFY_SSL": env.bool("ADMIN_OIDC_VERIFY_SSL", default=True),
+    "USE_NONCE": True,
+    "USE_PKCE": True,
+    "REQUIRE_EMAIL_VERIFIED": True,
+    "LOGIN_REDIRECT_URL": "/admin/",
+    "LOGIN_FAILURE_URL": "/",
+    "LOGOUT_REDIRECT_URL": "/",
+    "ADMIN_PATH": "/admin/",
+}
 
 
 REST_FRAMEWORK = {
@@ -942,3 +975,6 @@ OPENAI_AGENTS_MAX_TURNS = env.int("OPENAI_AGENTS_MAX_TURNS", 10)
 
 SEND_LAMBDA_RESOLUTION_EVENTS = env.bool("SEND_LAMBDA_RESOLUTION_EVENTS", True)
 SEND_LAMBDA_TOPICS_EVENTS = env.bool("SEND_LAMBDA_TOPICS_EVENTS", True)
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
