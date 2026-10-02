@@ -16,6 +16,7 @@ from agents.models.interface import Model, ModelTracing
 from agents.tool import Tool
 from agents.tracing import generation_span
 from agents.usage import Usage
+from django.conf import settings
 from openai import omit
 from openai.types.chat import ChatCompletionMessage
 from openai.types.responses.response_prompt_param import ResponsePromptParam
@@ -196,10 +197,28 @@ class WhirlpoolModel(Model):
             self.model,
             requested,
         )
+        generation_config = payload.get("generationConfig")
+        thinking_config = generation_config.get("thinkingConfig") if isinstance(generation_config, dict) else None
+        logger.info(
+            "WhirlpoolModel request translator=%s gemini_model_hint=%s model_in_payload=%s "
+            "max_output_tokens=%s generation_config_keys=%s thinking_config=%s tools=%s",
+            getattr(settings, "WHIRLPOOL_TRANSLATOR", "native"),
+            getattr(settings, "WHIRLPOOL_GEMINI_MODEL", None),
+            "model" in payload,
+            generation_config.get("maxOutputTokens") if isinstance(generation_config, dict) else None,
+            sorted(generation_config) if isinstance(generation_config, dict) else None,
+            sorted(thinking_config) if isinstance(thinking_config, dict) else None,
+            requested,
+        )
 
         try:
             response = await self._client.generate_content(payload)
         except WhirlpoolAPIError as exc:
+            logger.info(
+                "WhirlpoolModel error status=%s response=%s",
+                exc.status_code,
+                _gemini_response_summary(exc.body),
+            )
             guard_message = guard_block_message(exc.status_code, exc.body)
             if guard_message is not None:
                 logger.warning(
@@ -234,8 +253,45 @@ class WhirlpoolModel(Model):
             )
             raise
 
+        logger.info("WhirlpoolModel response %s", _gemini_response_summary(response))
         usage = _usage_from_gemini(response)
         return message, usage
+
+
+def _gemini_response_summary(response: Any) -> Dict[str, Any]:
+    """Shape of a Gemini body without text, arguments, or thought signatures."""
+    if not isinstance(response, dict):
+        return {"body_type": type(response).__name__}
+
+    candidates = response.get("candidates")
+    candidate = candidates[-1] if isinstance(candidates, list) and candidates else {}
+    if not isinstance(candidate, dict):
+        candidate = {}
+    content = candidate.get("content")
+    parts = content.get("parts") if isinstance(content, dict) else None
+    part_keys = []
+    if isinstance(parts, list):
+        for part in parts:
+            if isinstance(part, dict):
+                part_keys.append("+".join(sorted(key for key in part if key != "thoughtSignature")))
+            else:
+                part_keys.append(type(part).__name__)
+
+    meta = response.get("usageMetadata")
+    if not isinstance(meta, dict):
+        meta = {}
+    fault = response.get("fault") if isinstance(response.get("fault"), dict) else {}
+    detail = fault.get("detail") if isinstance(fault.get("detail"), dict) else {}
+    return {
+        "modelVersion": response.get("modelVersion"),
+        "finishReason": candidate.get("finishReason"),
+        "parts_present": isinstance(parts, list),
+        "part_keys": part_keys,
+        "thoughtsTokenCount": meta.get("thoughtsTokenCount"),
+        "candidatesTokenCount": meta.get("candidatesTokenCount"),
+        "promptTokenCount": meta.get("promptTokenCount"),
+        "errorcode": detail.get("errorcode"),
+    }
 
 
 def _usage_from_gemini(response: Dict[str, Any]) -> Usage:

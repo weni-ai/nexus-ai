@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from typing import Any, Dict, Tuple
+from urllib.parse import urlparse
 
 import httpx
 import sentry_sdk
@@ -173,10 +174,13 @@ class WhirlpoolClient:
 
         body = _safe_json(response)
         shape = _payload_turn_shape(payload)
+        parsed_url = urlparse(self.generate_content_url)
         logger.info(
-            "Whirlpool generateContent status=%s has_system_instruction=%s "
+            "Whirlpool generateContent status=%s host=%s path=%s has_system_instruction=%s "
             "has_safety_guardrails=%s trailing_role=%s turn_count=%s roles=%s",
             response.status_code,
+            parsed_url.netloc,
+            parsed_url.path,
             shape.get("has_system_instruction"),
             shape.get("has_safety_guardrails"),
             shape.get("trailing_role"),
