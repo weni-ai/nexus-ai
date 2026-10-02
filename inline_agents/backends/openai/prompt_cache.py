@@ -27,7 +27,7 @@ MANAGER_PROMPT_CACHE_KEY = "cache_manager_2_8_luna_v1"
 COLLABORATOR_PROMPT_CACHE_KEY = "cache_collaborator_2_8_luna_v1"
 # Backwards-compatible alias for callers and tests that still use the original name.
 PROMPT_CACHE_KEY_PREFIX = MANAGER_PROMPT_CACHE_KEY
-PROMPT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
+PROMPT_CACHE_OPTIONS = {"mode": "implicit", "ttl": "30m"}
 PROMPT_CACHE_BREAKPOINT = {"mode": "explicit"}
 
 
