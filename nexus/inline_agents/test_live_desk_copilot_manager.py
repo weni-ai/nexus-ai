@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -68,6 +69,100 @@ class TestCreateProjectLiveDeskCopilotFlag(TestCase):
         )
 
         self.assertFalse(project.is_live_desk_copilot)
+
+    def test_copilot_project_is_created_with_copilot_manager(self):
+        default_manager = _create_manager(name="Default", public=True, default=True)
+        copilot_manager = _create_manager(
+            name="Copilot",
+            public=False,
+            default=False,
+            is_live_desk_copilot=True,
+            foundation_model="configured-in-django",
+            model_vendor="configured-in-django",
+        )
+
+        org = OrgFactory()
+        project = ProjectsUseCase(event_manager_notify=mock_event_manager_notify).create_project(
+            project_dto=ProjectCreationDTO(
+                uuid=uuid4().hex,
+                name="live_desk_copilot",
+                org_uuid=org.uuid,
+                is_template=False,
+                template_type_uuid=None,
+                brain_on=False,
+                authorizations=[],
+                is_live_desk_copilot=True,
+            ),
+            user_email=org.created_by.email,
+        )
+
+        self.assertEqual(project.manager_agent_id, copilot_manager.id)
+        self.assertNotEqual(project.manager_agent_id, default_manager.id)
+
+    def test_normal_project_keeps_default_manager(self):
+        default_manager = _create_manager(name="Default", public=True, default=True)
+        _create_manager(name="Copilot", public=False, default=False, is_live_desk_copilot=True)
+
+        org = OrgFactory()
+        project = ProjectsUseCase(event_manager_notify=mock_event_manager_notify).create_project(
+            project_dto=ProjectCreationDTO(
+                uuid=uuid4().hex,
+                name="normal_project",
+                org_uuid=org.uuid,
+                is_template=False,
+                template_type_uuid=None,
+                brain_on=False,
+                authorizations=[],
+            ),
+            user_email=org.created_by.email,
+        )
+
+        self.assertEqual(project.manager_agent_id, default_manager.id)
+
+    def test_copilot_project_falls_back_to_default_manager(self):
+        default_manager = _create_manager(name="Default", public=True, default=True)
+
+        org = OrgFactory()
+        project = ProjectsUseCase(event_manager_notify=mock_event_manager_notify).create_project(
+            project_dto=ProjectCreationDTO(
+                uuid=uuid4().hex,
+                name="live_desk_copilot",
+                org_uuid=org.uuid,
+                is_template=False,
+                template_type_uuid=None,
+                brain_on=False,
+                authorizations=[],
+                is_live_desk_copilot=True,
+            ),
+            user_email=org.created_by.email,
+        )
+
+        self.assertEqual(project.manager_agent_id, default_manager.id)
+
+
+class TestLiveDeskCopilotManagerUniqueness(TestCase):
+    def test_rejects_second_copilot_manager(self):
+        _create_manager(name="Copilot", public=False, is_live_desk_copilot=True)
+        second = ManagerAgent(
+            name="Copilot 2",
+            base_prompt="You are a manager.",
+            foundation_model="gpt-4o",
+            model_vendor="openai",
+            release_date=timezone.now(),
+            collaborators_foundation_model="gpt-4o-mini",
+            formatter_agent_foundation_model="gpt-4o-mini",
+            public=False,
+            is_live_desk_copilot=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            second.validate_constraints()
+
+    def test_allows_many_non_copilot_managers(self):
+        _create_manager(name="A")
+        _create_manager(name="B")
+
+        self.assertEqual(ManagerAgent.objects.filter(is_live_desk_copilot=False).count(), 2)
 
 
 class TestSetProjectManagerAgentLiveDeskCopilot(TestCase):

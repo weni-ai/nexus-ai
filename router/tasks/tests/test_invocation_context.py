@@ -189,6 +189,7 @@ class TestCachedProjectDataEdgeCases(TestCase):
             "vtex_host_store",
             "storefront_type",
             "timezone",
+            "is_live_desk_copilot",
         ]
 
         for key in expected_keys:
