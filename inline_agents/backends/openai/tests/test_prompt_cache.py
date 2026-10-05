@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agents import ModelSettings
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.prompt_cache import (
@@ -370,11 +370,25 @@ class SupportsExplicitPromptCacheTests(SimpleTestCase):
         self.assertTrue(supports_explicit_prompt_cache("AWS_MANTLE", True))
         self.assertTrue(supports_explicit_prompt_cache("aws_mantle", True))
 
-    def test_rejects_flag_off_or_non_mantle_vendor(self):
+    def test_accepts_openai_vendor_when_flag_is_on(self):
+        self.assertTrue(supports_explicit_prompt_cache("openai", True))
+        self.assertTrue(supports_explicit_prompt_cache("OpenAI", True))
+
+    def test_rejects_flag_off_or_unsupported_vendor(self):
         self.assertFalse(supports_explicit_prompt_cache("aws_mantle", False))
         self.assertFalse(supports_explicit_prompt_cache("aws_mantle"))
-        self.assertFalse(supports_explicit_prompt_cache("openai", True))
+        self.assertFalse(supports_explicit_prompt_cache("openai", False))
+        self.assertFalse(supports_explicit_prompt_cache("vertex_ai", True))
         self.assertFalse(supports_explicit_prompt_cache(None, True))
+
+    @override_settings(EXPLICIT_PROMPT_CACHE_VENDORS=["aws_mantle", "openai", "vertex_ai"])
+    def test_env_list_can_add_a_vendor(self):
+        self.assertTrue(supports_explicit_prompt_cache("vertex_ai", True))
+
+    @override_settings(EXPLICIT_PROMPT_CACHE_VENDORS=["aws_mantle"])
+    def test_env_list_can_drop_openai(self):
+        self.assertFalse(supports_explicit_prompt_cache("openai", True))
+        self.assertTrue(supports_explicit_prompt_cache("aws_mantle", True))
 
 
 class PromptCacheAdapterWiringTests(SimpleTestCase):
