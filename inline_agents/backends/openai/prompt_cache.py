@@ -43,7 +43,7 @@ def supports_explicit_prompt_cache(model_vendor: str, enabled: bool = False) -> 
 
     vendors = {
         str(vendor).strip().lower()
-        for vendor in getattr(settings, "EXPLICIT_PROMPT_CACHE_VENDORS", ("aws_mantle", "openai"))
+        for vendor in getattr(settings, "EXPLICIT_PROMPT_CACHE_VENDORS", ["aws_mantle", "openai"])
         if str(vendor).strip()
     }
     return (model_vendor or "").lower() in vendors
