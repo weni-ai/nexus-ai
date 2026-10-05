@@ -854,6 +854,12 @@ GROWTHBOOK_HOST_BASE_URL = env.str("GROWTHBOOK_HOST_BASE_URL", default=_growthbo
 GROWTHBOOK_WEBHOOK_SECRET = env.str("GROWTHBOOK_WEBHOOK_SECRET", default="")
 GROWTHBOOK_REQUESTS_TIMEOUT = env.int("GROWTHBOOK_REQUESTS_TIMEOUT", default=60)
 MANAGER_2_8_FEATURE_FLAG = env.str("MANAGER_2_8_FEATURE_FLAG", default="enable_manager_2_8")
+# Comma-separated model_vendor values that receive the 2.8 prompt cache layout
+# when ManagerAgent.enable_explicit_prompt_cache is on.
+EXPLICIT_PROMPT_CACHE_VENDORS = env.list(
+    "EXPLICIT_PROMPT_CACHE_VENDORS",
+    default=["aws_mantle", "openai"],
+)
 
 # ManagerAgent UUIDs that must run the legacy ("2.6") inline-agent formatter pipeline.
 # Source of truth for the legacy/new code path; admins cannot change this from Django admin.
