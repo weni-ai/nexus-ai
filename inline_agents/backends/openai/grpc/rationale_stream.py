@@ -1,7 +1,10 @@
 """Hold assistant text until a tool call shows it is rationale, or the response ends."""
 
+import logging
 from dataclasses import dataclass
 from typing import Literal, Protocol
+
+logger = logging.getLogger(__name__)
 
 PieceKind = Literal["rationale", "delta"]
 
@@ -65,8 +68,8 @@ class RationaleStreamClassifier:
                 self._pending.append(StreamPiece(kind="delta", text=part))
 
     def drain(self) -> list[StreamPiece]:
-        pieces = self._pending
-        self._pending = []
+        pieces = list(self._pending)
+        self._pending.clear()
         return pieces
 
 
@@ -100,6 +103,12 @@ def emit_stream_pieces(session: _StreamSink | None, pieces: list[StreamPiece]) -
         if piece.kind == "rationale":
             if session.send_rationale(piece.text, piece.rationale_index or "1"):
                 sent.append(piece)
+            else:
+                logger.warning(
+                    "[emit_stream_pieces] rationale was not queued index=%s",
+                    piece.rationale_index,
+                )
             continue
-        session.send_delta(piece.text)
+        if not session.send_delta(piece.text):
+            logger.warning("[emit_stream_pieces] final-response delta was not queued")
     return sent

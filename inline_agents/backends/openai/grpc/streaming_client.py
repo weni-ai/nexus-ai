@@ -18,9 +18,14 @@ from inline_agents.backends.openai.grpc.generated import (
     message_stream_service_pb2,
     message_stream_service_pb2_grpc,
 )
-from router.clients.flows.http.send_message import FINAL_RESPONSE, RATIONALE
 
 logger = logging.getLogger(__name__)
+
+
+def _with_final_response(metadata: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    from router.clients.flows.http.send_message import FINAL_RESPONSE
+
+    return {"message_kind": FINAL_RESPONSE, **(metadata or {})}
 
 
 def is_grpc_enabled(project_uuid: str, use_components: bool, stream_support: bool) -> bool:
@@ -243,10 +248,7 @@ class StreamingSession:
             return False
 
         self._delta_counter += 1
-        merged = {"message_kind": FINAL_RESPONSE}
-        if metadata:
-            merged.update(metadata)
-        delta_msg = self._create_message("delta", content, metadata=merged)
+        delta_msg = self._create_message("delta", content, metadata=_with_final_response(metadata))
         self._message_queue.put(delta_msg)
         logger.debug(f"[gRPC Session] Queued delta #{self._delta_counter}")
         return True
@@ -266,10 +268,7 @@ class StreamingSession:
             return False
 
         logger.info(f"[gRPC Session] Sending completed message ({len(content)} chars)")
-        merged = {"message_kind": FINAL_RESPONSE}
-        if metadata:
-            merged.update(metadata)
-        completed_msg = self._create_message("completed", content, metadata=merged)
+        completed_msg = self._create_message("completed", content, metadata=_with_final_response(metadata))
         self._message_queue.put(completed_msg)
 
         # Signal the generator to stop
@@ -291,6 +290,8 @@ class StreamingSession:
         text = (content or "").strip()
         if not text:
             return False
+
+        from router.clients.flows.http.send_message import RATIONALE
 
         rationale_msg = self._create_message(
             "rationale",

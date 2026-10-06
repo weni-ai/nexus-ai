@@ -109,15 +109,14 @@ class RationaleStreamClassifierTestCase(SimpleTestCase):
         classifier.finish()
 
         pieces = classifier.drain()
-        self.assertEqual(pieces[0].rationale_index, "1")
-        self.assertEqual(pieces[1].rationale_index, "2")
-        self.assertEqual(pieces[2].kind, "delta")
-        self.assertTrue(all(piece.kind != "delta" or piece.text == "Resposta." for piece in pieces))
-        self.assertLess(
-            next(i for i, piece in enumerate(pieces) if piece.kind == "delta"),
-            len(pieces),
+        self.assertEqual(
+            [(piece.kind, piece.text, piece.rationale_index) for piece in pieces],
+            [
+                ("rationale", "Primeiro.", "1"),
+                ("rationale", "Segundo.", "2"),
+                ("delta", "Resposta.", None),
+            ],
         )
-        self.assertTrue(all(piece.kind == "rationale" for piece in pieces[:2]))
 
         restarted = RationaleStreamClassifier(enabled=True)
         restarted.on_text("De novo.")
