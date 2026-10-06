@@ -2,14 +2,20 @@ import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer
 from nexus.projects.consumers.project_update_consumer import ProjectUpdateConsumer
 from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.live_desk_copilot import (
+    LIVE_DESK_COPILOT_AGENT_GOAL,
+    LIVE_DESK_COPILOT_AGENT_NAME,
+    LIVE_DESK_COPILOT_AGENT_PERSONALITY,
+    LIVE_DESK_COPILOT_AGENT_ROLE,
     assign_parent_project,
     extract_parent_uuid,
     vtex_runtime_fields,
@@ -100,6 +106,31 @@ class CreateProjectParentTestCase(TestCase):
         )
         self.assertTrue(project.is_live_desk_copilot)
         self.assertEqual(project.parent_project_id, parent.uuid)
+        agent = get_default_content_base_by_project(str(project.uuid)).agent
+        self.assertEqual(agent.name, LIVE_DESK_COPILOT_AGENT_NAME)
+        self.assertEqual(agent.role, LIVE_DESK_COPILOT_AGENT_ROLE)
+        self.assertEqual(agent.goal, LIVE_DESK_COPILOT_AGENT_GOAL)
+        self.assertEqual(agent.personality, LIVE_DESK_COPILOT_AGENT_PERSONALITY)
+
+    def test_normal_project_agent_stays_unset(self):
+        org = OrgFactory()
+        project_dto = ProjectCreationDTO(
+            uuid=uuid4().hex,
+            name="store",
+            org_uuid=org.uuid,
+            is_template=False,
+            template_type_uuid=None,
+            brain_on=False,
+            authorizations=[],
+        )
+        project = ProjectsUseCase(event_manager_notify=mock_event_manager_notify).create_project(
+            project_dto=project_dto, user_email=org.created_by.email
+        )
+        agent = get_default_content_base_by_project(str(project.uuid)).agent
+        self.assertIsNone(agent.name)
+        self.assertIsNone(agent.role)
+        self.assertEqual(agent.goal, "")
+        self.assertEqual(agent.personality, settings.DEFAULT_AGENT_PERSONALITY)
 
 
 class SyncLiveDeskCopilotUseCaseTestCase(TestCase):
