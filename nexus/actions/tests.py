@@ -5,10 +5,14 @@ from typing import Dict, List
 from unittest import skip
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from inline_agents.backends.openai.legacy_formatter_pipeline import (
+    LEGACY_PIPELINE_VERSION,
+    NEW_PIPELINE_SENTINEL,
+)
 from nexus.actions.api.views import (
     FlowsViewset,
     MessagePreviewView,
@@ -28,6 +32,12 @@ from nexus.logs.models import Message as ContactMessage
 from nexus.logs.models import MessageLog
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.projects.simulation_model_cache import (
+    SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+    SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+    simulation_manager_model_redis_key,
+    simulation_manager_pipeline_version_redis_key,
+)
 from nexus.usecases.actions.list import ListFlowsUseCase
 from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 from nexus.usecases.intelligences.get_by_uuid import (
@@ -498,3 +508,90 @@ class SimulationActionsApiTestCase(TestCase):
         self.assertEqual(response.data["manager_foundation_model"], "custom/whirlpool/generateContent")
         self.assertEqual(response.data["source"], "project_default")
         mock_redis.assert_not_called()
+
+    def _create_manager(self, **overrides):
+        fields = {
+            "name": "Manager",
+            "base_prompt": "You are a manager.",
+            "foundation_model": "gpt-4.1",
+            "model_vendor": "openai",
+            "public": True,
+            "default": False,
+            "release_date": timezone.now(),
+            "collaborators_foundation_model": "gpt-4.1",
+            "formatter_agent_foundation_model": "gpt-4.1",
+        }
+        fields.update(overrides)
+        return ManagerAgent.objects.create(**fields)
+
+    def _post_manager_model(self, manager_foundation_model, contact_urn="preview@weni.ai"):
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-model/",
+            data={
+                "manager_foundation_model": manager_foundation_model,
+                "contact_urn": contact_urn,
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        return SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
+
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_model_post_stores_model_name(self, mock_redis):
+        response = self._post_manager_model("gpt-4.1", contact_urn="ext:preview@weni.ai")
+        self.assertEqual(response.status_code, 200)
+        key = simulation_manager_model_redis_key(str(self.project.uuid), "ext:preview@weni.ai")
+        mock_redis.return_value.setex.assert_called_once_with(key, SIMULATION_MANAGER_MODEL_TTL_SECONDS, "gpt-4.1")
+
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_model_post_uuid_stores_manager_and_new_pipeline(self, mock_redis):
+        manager = self._create_manager(foundation_model="openai.gpt-6-luna", model_vendor="aws_mantle", name="2.8")
+        response = self._post_manager_model(str(manager.uuid))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["manager_agent_uuid"], str(manager.uuid))
+        urn = "ext:preview@weni.ai"
+        project_uuid = str(self.project.uuid)
+        mock_redis.return_value.setex.assert_any_call(
+            simulation_manager_model_redis_key(project_uuid, urn),
+            SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+            str(manager.uuid),
+        )
+        mock_redis.return_value.setex.assert_any_call(
+            simulation_manager_pipeline_version_redis_key(project_uuid, urn),
+            SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+            NEW_PIPELINE_SENTINEL,
+        )
+
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_model_post_legacy_uuid_stores_legacy_pipeline(self, mock_redis):
+        manager = self._create_manager(name="2.7")
+        with override_settings(LEGACY_MANAGER_AGENT_UUIDS=[str(manager.uuid)]):
+            response = self._post_manager_model(str(manager.uuid), contact_urn="ext:preview@weni.ai")
+        self.assertEqual(response.status_code, 200)
+        mock_redis.return_value.setex.assert_any_call(
+            simulation_manager_pipeline_version_redis_key(str(self.project.uuid), "ext:preview@weni.ai"),
+            SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+            LEGACY_PIPELINE_VERSION,
+        )
+
+    def test_simulation_manager_model_post_unknown_uuid_returns_404(self):
+        response = self._post_manager_model("00acf398-183e-41f9-baac-0b04a3fef22c")
+        self.assertEqual(response.status_code, 404)
+
+    def test_simulation_manager_model_post_hidden_target_returns_403(self):
+        whirlpool = self._create_manager(
+            name="Whirlpool Manager",
+            foundation_model="custom/whirlpool/generateContent",
+            model_vendor="whirlpool",
+            public=False,
+            collaborators_foundation_model="custom/whirlpool/generateContent",
+            formatter_agent_foundation_model="custom/whirlpool/generateContent",
+        )
+        response = self._post_manager_model(str(whirlpool.uuid), contact_urn="ext:preview@weni.ai")
+        self.assertEqual(response.status_code, 403)
+
+    @patch("nexus.actions.api.views.can_select_manager_via_api", return_value=False)
+    def test_simulation_manager_model_post_unselectable_manager_returns_404(self, _can_select):
+        manager = self._create_manager(public=False, name="Private 2.8")
+        response = self._post_manager_model(str(manager.uuid), contact_urn="ext:preview@weni.ai")
+        self.assertEqual(response.status_code, 404)

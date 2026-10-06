@@ -43,8 +43,10 @@ from router.tasks.invoke import (
     _invoke_is_final_debug,
     _preprocess_message_input,
     apply_simulation_foundation_model_override,
+    apply_simulation_supervisor_agent_override,
     dispatch_preview,
     effective_simulation_channel,
+    resolve_simulation_pipeline_replacement,
     should_skip_conversation_sqs,
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
@@ -315,6 +317,22 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         ctx.message.get("contact_urn") or "",
         foundation_model,
     )
+    supervisor_agent_uuid = apply_simulation_supervisor_agent_override(
+        ctx.simulation_channel,
+        ctx.project_uuid or "",
+        ctx.message.get("contact_urn") or "",
+        ctx.supervisor_agent_uuid,
+    )
+    base_pipeline = None
+    project_dict = getattr(ctx.cached_data, "project_dict", None)
+    if isinstance(project_dict, dict):
+        base_pipeline = project_dict.get("manager_pipeline_version")
+    replace_pipeline, pipeline_version = resolve_simulation_pipeline_replacement(
+        ctx.simulation_channel,
+        ctx.project_uuid or "",
+        ctx.message.get("contact_urn") or "",
+        base_pipeline,
+    )
 
     # Create message object
     message_obj = _create_message_object(processed_message)
@@ -365,8 +383,10 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         turn_off_rationale=turn_off_rationale,
         channel_type=ctx.message.get("channel_type", ""),
         stream_support=effective_stream_support,
-        supervisor_agent_uuid=ctx.supervisor_agent_uuid,
+        supervisor_agent_uuid=supervisor_agent_uuid,
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
+        replace_manager_pipeline_version=replace_pipeline,
+        manager_pipeline_version=pipeline_version,
         preview_websocket=ctx.preview_websocket,
         skip_conversation_sqs=skip_conv_sqs,
         injected_context=injected_context,
