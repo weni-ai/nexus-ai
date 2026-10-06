@@ -1,13 +1,26 @@
 """Hold assistant text until a tool call shows it is rationale, or the response ends."""
 
 from dataclasses import dataclass
+from typing import Literal, Protocol
+
+PieceKind = Literal["rationale", "delta"]
 
 
 @dataclass(frozen=True)
 class StreamPiece:
-    kind: str
+    kind: PieceKind
     text: str
     rationale_index: str | None = None
+
+
+@dataclass(frozen=True)
+class RationaleSaveContext:
+    project_uuid: str
+    contact_urn: str
+    preview: bool
+    session_id: str
+    contact_name: str
+    channel_uuid: str | None
 
 
 class RationaleStreamClassifier:
@@ -55,3 +68,38 @@ class RationaleStreamClassifier:
         pieces = self._pending
         self._pending = []
         return pieces
+
+
+class _StreamSink(Protocol):
+    @property
+    def is_active(self) -> bool: ...
+
+    def send_rationale(self, content: str, rationale_index: str) -> bool: ...
+
+    def send_delta(self, content: str, metadata: dict | None = None) -> bool: ...
+
+
+def feed_stream_event(classifier: RationaleStreamClassifier, event) -> None:
+    """Translate one SDK stream event into classifier input."""
+    from openai.types.responses import ResponseTextDeltaEvent
+
+    if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+        classifier.on_text(event.data.delta or "")
+        return
+    item = getattr(event, "item", None)
+    if event.type == "run_item_stream_event" and item is not None and getattr(item, "type", None) == "tool_call_item":
+        classifier.on_tool_call()
+
+
+def emit_stream_pieces(session: _StreamSink | None, pieces: list[StreamPiece]) -> list[StreamPiece]:
+    """Send pieces on the live stream. Returns the rationale pieces that were queued."""
+    if session is None or not session.is_active:
+        return []
+    sent: list[StreamPiece] = []
+    for piece in pieces:
+        if piece.kind == "rationale":
+            if session.send_rationale(piece.text, piece.rationale_index or "1"):
+                sent.append(piece)
+            continue
+        session.send_delta(piece.text)
+    return sent

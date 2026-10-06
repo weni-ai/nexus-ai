@@ -2,7 +2,11 @@ from unittest.mock import MagicMock
 
 from django.test import SimpleTestCase
 
-from inline_agents.backends.openai.grpc.rationale_stream import RationaleStreamClassifier
+from inline_agents.backends.openai.grpc.rationale_stream import (
+    RationaleStreamClassifier,
+    StreamPiece,
+    emit_stream_pieces,
+)
 from inline_agents.backends.openai.grpc.streaming_client import StreamingSession
 from router.clients.flows.http.send_message import FINAL_RESPONSE, RATIONALE
 
@@ -119,3 +123,32 @@ class RationaleStreamClassifierTestCase(SimpleTestCase):
         restarted.on_text("De novo.")
         restarted.on_tool_call()
         self.assertEqual(restarted.drain()[0].rationale_index, "1")
+
+
+class EmitStreamPiecesTestCase(SimpleTestCase):
+    def test_sends_rationale_and_delta_without_touching_storage(self):
+        session = _session()
+
+        sent = emit_stream_pieces(
+            session,
+            [
+                StreamPiece(kind="rationale", text="Vou consultar.", rationale_index="1"),
+                StreamPiece(kind="delta", text="Não foi "),
+            ],
+        )
+
+        self.assertEqual([piece.kind for piece in sent], ["rationale"])
+        rationale = session._message_queue.get_nowait()
+        delta = session._message_queue.get_nowait()
+        self.assertEqual(rationale.type, "rationale")
+        self.assertEqual(delta.type, "delta")
+        self.assertTrue(session.is_active)
+
+    def test_inactive_session_drops_pieces(self):
+        session = _session()
+        session._stream_active = False
+
+        sent = emit_stream_pieces(session, [StreamPiece(kind="rationale", text="Vou consultar.", rationale_index="1")])
+
+        self.assertEqual(sent, [])
+        self.assertTrue(session._message_queue.empty())
