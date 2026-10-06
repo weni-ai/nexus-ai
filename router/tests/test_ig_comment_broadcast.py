@@ -274,7 +274,7 @@ class InstagramCommentActionClientTestCase(SimpleTestCase):
 
 class MessageKindBroadcastTestCase(SimpleTestCase):
     @patch("router.clients.flows.http.send_message.requests.post")
-    def test_mr_msg_send_adds_only_the_kind(self, mock_post):
+    def test_mr_msg_send_ignores_message_kind(self, mock_post):
         mock_post.return_value.raise_for_status = MagicMock()
         client = SendMessageHTTPClient("http://flows.example", "token")
 
@@ -292,10 +292,11 @@ class MessageKindBroadcastTestCase(SimpleTestCase):
         )
         with_kind = json.loads(mock_post.call_args.kwargs["data"])
 
-        self.assertEqual({**without_kind, "message_kind": RATIONALE}, with_kind)
+        self.assertEqual(without_kind, with_kind)
+        self.assertNotIn("message_kind", with_kind)
 
     @patch("router.clients.flows.http.send_message.FlowsRESTClient")
-    def test_broadcast_and_stream_keep_kind_beside_msg(self, mock_rest):
+    def test_broadcast_and_stream_omit_message_kind(self, mock_rest):
         mock_rest.return_value.whatsapp_broadcast.return_value.raise_for_status = MagicMock()
         payload = json.dumps([{"msg": {"text": "part one"}}, {"msg": {"text": "part two"}}])
 
@@ -330,15 +331,15 @@ class MessageKindBroadcastTestCase(SimpleTestCase):
         self.assertEqual(
             sent,
             [
-                {"msg": {"text": "part one"}, "message_kind": FINAL_RESPONSE},
-                {"msg": {"text": "part two"}, "message_kind": FINAL_RESPONSE},
-                {"msg": {"text": "thanks"}, "message_kind": FINAL_RESPONSE},
-                {"msg": {"text": "hello"}, "message_kind": FINAL_RESPONSE},
+                {"msg": {"text": "part one"}},
+                {"msg": {"text": "part two"}},
+                {"msg": {"text": "thanks"}},
+                {"msg": {"text": "hello"}},
             ],
         )
 
-    def test_dispatch_passes_final_response(self):
+    def test_dispatch_does_not_pass_message_kind(self):
         client = MagicMock()
         message = message_factory(project_uuid="proj-1", text="hi", contact_urn="ext:1")
         dispatch(message=message, user_email="flows@example.com", llm_response="the answer", direct_message=client)
-        self.assertEqual(client.send_direct_message.call_args.kwargs["message_kind"], FINAL_RESPONSE)
+        self.assertNotIn("message_kind", client.send_direct_message.call_args.kwargs)

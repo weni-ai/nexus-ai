@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from router.clients.flows.http.send_message import FINAL_RESPONSE
 from router.tasks.invoke import dispatch_preview
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.workflow_orchestrator import (
@@ -359,7 +358,7 @@ class HandleWorkflowErrorTestCase(SimpleTestCase):
 class MessageKindPreviewTestCase(SimpleTestCase):
     @patch("router.tasks.workflow_orchestrator.send_preview_message_to_websocket")
     @patch("router.tasks.workflow_orchestrator.notify_async")
-    def test_skip_dispatch_preview_is_final_response(self, _notify, mock_ws):
+    def test_skip_dispatch_preview_has_no_message_kind(self, _notify, mock_ws):
         ctx = WorkflowContext(
             workflow_id="wf-1",
             project_uuid="proj-1",
@@ -382,18 +381,16 @@ class MessageKindPreviewTestCase(SimpleTestCase):
         _run_post_generation(ctx, response="already sent", skip_dispatch=True)
 
         payload = mock_ws.call_args.kwargs["message_data"]
-        self.assertEqual(payload["message_kind"], FINAL_RESPONSE)
+        self.assertNotIn("message_kind", payload)
         self.assertEqual(payload["content"]["message"], "already sent")
-        self.assertNotIn("message_kind", payload["content"])
 
     @patch("router.tasks.invoke.send_preview_message_to_websocket")
     @patch("router.tasks.invoke.dispatch", return_value={"type": "broadcast", "message": "done", "fonts": []})
-    def test_dispatch_preview_tags_the_envelope(self, _dispatch, mock_ws):
+    def test_dispatch_preview_has_no_message_kind(self, _dispatch, mock_ws):
         message = MagicMock()
         message.project_uuid = "proj-1"
 
         dispatch_preview("done", message, MagicMock(), "user@example.com", "OpenAIBackend", "flows@example.com")
 
         payload = mock_ws.call_args.kwargs["message_data"]
-        self.assertEqual(payload["message_kind"], FINAL_RESPONSE)
-        self.assertNotIn("message_kind", payload["content"])
+        self.assertNotIn("message_kind", payload)

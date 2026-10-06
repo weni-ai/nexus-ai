@@ -1,6 +1,5 @@
 from typing import Dict, List
 
-from router.clients.flows.http.send_message import FINAL_RESPONSE
 from router.direct_message import DirectMessage
 from router.entities import (
     FlowDTO,
@@ -32,7 +31,6 @@ def dispatch(
             full_chunks=full_chunks,
             backend=backend,
             channel_uuid=getattr(message, "channel_uuid", ""),
-            message_kind=FINAL_RESPONSE,
             **ig_comment_fields,
         )
 
