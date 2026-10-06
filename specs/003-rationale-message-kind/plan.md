@@ -1,89 +1,60 @@
-# Implementation Plan: Rationale vs Final Response Message Kind
+# Implementation Plan: Rationale on the Live Answer Stream
 
-**Branch**: `003-rationale-message-kind` | **Date**: 2026-09-28 | **Spec**: [spec.md](spec.md)
+**Branch**: `003-rationale-message-kind` | **Date**: 2026-10-06 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `/specs/003-rationale-message-kind/spec.md`
 
 ## Summary
 
-Tag every outgoing agent message with the stage that produced it, so the shopping assistant front can
-render rationale in its dedicated presentation instead of as a normal chat bubble.
+Deliver each progress sentence as one complete message on the OpenAI live stream that already carries the answer. Do not post it to a second endpoint. Answer deltas and the closing message contain only the final answer, and both declare that.
 
-Nexus already knows the stage at emission time — rationale and the final response leave through
-different code paths. The work is stamping an additive field at four call sites and letting it survive
-the transports, not detecting anything:
+The sentence is assistant text the manager writes before a tool call. Today every text delta is forwarded immediately, so the socket shows that sentence and then replaces it when `completed` arrives with `final_output`. The work is to hold that text until the response is classified, emit it as `type: rationale` when a tool call follows, and release it as final-response deltas only when the response ends without a tool call.
 
-| Stage | Call site | File |
-|---|---|---|
-| `rationale` | `RationaleObserver.task_send_rationale_message` | `router/traces_observers/rationale/observer.py` |
-| `final_response` | `dispatch` | `router/dispatcher.py` |
-| `final_response` | `dispatch_preview` | `router/tasks/invoke.py` |
-| `final_response` | `_run_post_generation` skip-dispatch branch | `router/tasks/workflow_orchestrator.py` |
-| `final_response` | `grpc_session.send_completed` | `inline_agents/backends/openai/backend.py` |
-
-Guardrail refusals need no extra work: `_handle_guardrails_block` reuses `dispatch` / `dispatch_preview`.
-
-The preview websocket is fully inside Nexus and ships first. The production webchat path needs Flows or
-mailroom to forward the field, which is a cross-team dependency — Nexus sends it best-effort and
-degrades silently.
-
-A fifth emission point exists on the gRPC streaming path. `is_grpc_enabled` returns false when
-components are on, so streaming is the **non-components** path, and rationale eligibility is
-independent of it (rationale switch + GPT manager + webchat/preview channel). A streaming-enabled
-webchat project therefore emits rationale over the message endpoint **and** the final response over the
-gRPC stream — the shopping assistant's own likely profile. `StreamMessage.metadata` already exists in
-the proto, so covering it costs one method change and no regeneration.
+`message_stream_service.proto` does not change. `type` is already a free string and `metadata` is already `map<string, string>`.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11, Django
 
-**Primary Dependencies**: Django Channels (preview websocket), Celery (rationale send task), `requests`
-(Flows HTTP), `grpcio` (opt-in streaming path), OpenAI Agents SDK (hooks that surface reasoning summaries)
+**Primary Dependencies**: `grpcio`, OpenAI Agents SDK streaming (`ResponseTextDeltaEvent`, `tool_call_item`)
 
-**Storage**: PostgreSQL. One additive nullable column on
-`nexus.inline_agents.models.InlineAgentMessage` (FR-012).
+**Storage**: PostgreSQL. Two additive nullable columns on `nexus.inline_agents.models.InlineAgentMessage`.
 
-**Testing**: Django test runner under coverage — `poetry run coverage run --source='.' manage.py test`,
-`coverage report --fail-under=75` (floor enforced by the `check-coverage` pre-commit hook)
+**Testing**: Django test runner under coverage — `poetry run coverage run --source='.' manage.py test`, `coverage report --fail-under=75`
 
 **Target Platform**: Linux server (Nexus AI backend)
 
-**Project Type**: Web service — backend only. No frontend work in this repo.
+**Project Type**: Web service — backend only. The shopping assistant socket consumes the contract; it is not implemented in this repo.
 
-**Performance Goals**: No measurable change. The field is a constant string added to payloads that are
-already being built; no extra round trip, no extra query (spec SC-005).
+**Performance Goals**: No second connection and no extra model round trip (spec SC-003). Final-answer deltas are released when the last response is classified, which is when that response finishes, not token-by-token while it is still possible for a tool call to follow.
 
 **Constraints**:
-- Strictly additive. Existing payload keys, ordering, and delivery behaviour must not change (FR-004).
-- Silent degradation where a transport drops the field (FR-008).
-- Channels that never emit rationale still receive the field, so the contract is uniform; nothing else
-  about their payloads may change (SC-003).
 
-**Scale/Scope**: 5 call sites, 4 transports, 1 migration. Every outgoing agent message.
+- One stream per turn (spec FR-006).
+- Progress text never appears in a delta or in `completed` (spec FR-003, SC-001).
+- Preview and components turns do not open this stream and are unchanged (spec FR-013).
+- Unknown `type` must not be required for the answer to complete (spec FR-009).
+
+**Scale/Scope**: The OpenAI gRPC session, the stream loop that already sees text deltas and tool calls, and the inline-message row used for history.
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-`.specify/memory/constitution.md` is **still the unfilled template** — every principle is a
-`[PRINCIPLE_N_NAME]` placeholder. There are no ratified project principles to gate against, so this
-check is **vacuous, not passing**.
+`.specify/memory/constitution.md` is still the unfilled template. There are no ratified principles to gate against. This check is vacuous.
 
 | Gate | Result |
 |---|---|
 | Constitution principles | Not evaluable — constitution not ratified |
-| Complexity justification | Not applicable — no violations to justify |
+| Complexity justification | Not applicable |
 
-**Recommended follow-up (out of scope here)**: run `/speckit-constitution`, or the
-`setup-engineering` skill that generates the constitution from the shared VTEX CX base, so future
-features in this repo have a real gate. Not a blocker for this feature.
+Applied from repo conventions and the spec:
 
-Applied in place of a constitution, from repo conventions observed in `research.md`:
+- The wire change is additive on the existing stream.
+- The migration is additive and does not rewrite old rows.
+- Coverage floor of 75% stays in force.
 
-- Backward compatibility on wire contracts is treated as mandatory (FR-004, FR-005, FR-008).
-- Test coverage floor of 75% is enforced by pre-commit and must not regress.
-- Migrations must be additive and lock-free (see `data-model.md` §3).
+**Post-design re-check**: Research resolved classification, the wire shape, and persistence. No constitution violation to justify. The hold-until-classified choice is recorded under Complexity Tracking because it delays first final token until the last response finishes.
 
 ## Project Structure
 
@@ -91,82 +62,58 @@ Applied in place of a constitution, from repo conventions observed in `research.
 
 ```text
 specs/003-rationale-message-kind/
-├── plan.md                              # This file
-├── spec.md                              # Feature specification
-├── research.md                          # Phase 0 — 6 findings, 3 questions carried to /speckit-clarify
-├── data-model.md                        # Phase 1 — MessageKind, payload shapes per transport, optional column
-├── quickstart.md                        # Phase 1 — how to validate
+├── plan.md
+├── spec.md
+├── research.md
+├── data-model.md
+├── quickstart.md
 ├── contracts/
-│   └── outgoing-message-kind.md         # Phase 1 — the wire contract to hand to the front-end team
+│   └── outgoing-message-kind.md
 ├── checklists/
-│   └── requirements.md                  # Spec quality checklist
-└── tasks.md                             # Phase 2 output (/speckit-tasks — not created here)
+│   └── requirements.md
+└── tasks.md
 ```
 
 ### Source Code (repository root)
 
 ```text
-router/
-├── dispatcher.py                        # MODIFIED — tag final_response on the production dispatch
-├── entities/
-│   └── message_kind.py                  # NEW — MessageKind constants + payload helper
-├── tasks/
-│   ├── invoke.py                        # MODIFIED — dispatch_preview tags final_response
-│   ├── workflow_orchestrator.py         # MODIFIED — skip_dispatch preview branch tags final_response
-│   └── tests/
-│       ├── test_guardrail_block_broadcast.py   # EXTENDED — guardrail refusal is final_response
-│       └── test_message_kind_dispatch.py       # NEW — dispatch/preview/skip_dispatch tagging
-├── clients/flows/http/
-│   └── send_message.py                  # MODIFIED — carry the field onto /mr/msg/send and broadcast bodies
-└── traces_observers/
-    ├── rationale/
-    │   └── observer.py                  # MODIFIED — task_send_rationale_message tags rationale
-    ├── save_traces.py                   # MODIFIED — optional message_kind kwarg
-    └── tests/
-        └── test_rationale_message_kind.py      # NEW — rationale tagging, preview + production
+inline_agents/backends/openai/
+├── backend.py                         # MODIFIED — classify held text; do not forward progress as deltas
+├── grpc/
+│   ├── streaming_client.py            # MODIFIED — send_rationale; per-message metadata merge
+│   ├── rationale_stream.py            # NEW — hold, classify, index
+│   └── message_stream_service.proto   # UNCHANGED
+└── tests/
+    └── test_rationale_stream.py       # NEW
+
+router/traces_observers/
+└── save_traces.py                     # MODIFIED — optional message_kind and rationale_index
 
 nexus/
-├── projects/websockets/
-│   └── consumers.py                     # UNCHANGED — message_data is already free-form; callers add the key
-└── inline_agents/
-    ├── models.py                        # MODIFIED — nullable message_kind column
-    └── migrations/00XX_inlineagentmessage_message_kind.py   # NEW
-
-inline_agents/backends/openai/
-├── backend.py                           # MODIFIED — pass the kind to send_completed
-└── grpc/
-    └── streaming_client.py              # MODIFIED — per-message metadata override
-                                         # message_stream_service.proto UNCHANGED: metadata already exists
+├── inline_agents/
+│   ├── models.py                      # MODIFIED — nullable columns
+│   └── migrations/00XX_inlineagentmessage_message_kind.py
+└── logs/api/
+    └── serializers.py                 # MODIFIED — expose kind and index, omit when null
 ```
 
-**Structure Decision**: Existing Django app layout, unchanged. The one new module,
-`router/entities/message_kind.py`, sits beside `router/entities/mailroom.py`, which already holds the
-shared outgoing-message helpers (`extract_ig_comment_broadcast_fields`, `stream_support_for_message`).
-Keeping the constants and the payload helper in one place is what stops the four call sites from
-drifting apart — the single failure mode this feature must avoid.
+**Structure Decision**: The classifier lives next to the gRPC client because that is the only transport this reformulation changes. `RationaleObserver` and `/mr/msg/send` stay as they are for Bedrock. The OpenAI stream must not start calling them.
 
 ## Phasing
 
-All open questions were resolved in `/speckit-clarify` (spec `## Clarifications`, session 2026-09-28).
-Phases are ordered so the front-end is unblocked as early as possible, not to hedge against undecided
-questions.
-
 | Phase | Content | Depends on |
 |---|---|---|
-| A | `MessageKind` module + tagging at the preview call sites + tests | — |
-| B | Carry the field onto `/mr/msg/send` and broadcast bodies | A |
-| C | gRPC `metadata` per-message override for streaming projects | A |
-| D | Persist on `InlineAgentMessage` + expose in history | A |
+| A | `send_rationale`, metadata merge, kind on delta and completed | — |
+| B | Hold and classify in the stream loop; no rationale when disabled or empty | A |
+| C | Index increments inside the turn and restarts on the next stream | B |
+| D | Persist kind and index; history omits nulls | B |
 
-Phase A alone satisfies spec SC-004 — the front-end team can validate the full contract on preview
-without any other team.
+Phase B is the shopper-visible fix. Phase D is the reload story and does not change the socket payload.
 
 ## Complexity Tracking
 
-No constitution violations to justify (the constitution is not ratified). One design choice worth
-recording:
+No constitution violations. One design choice:
 
 | Choice | Why | Simpler alternative rejected because |
 |---|---|---|
-| Field at the envelope level, not inside `content` / `msg` | `content` is polymorphic (string, broadcast object, component list) and `msg` is agent-authored and may be a list | Nesting it would collide with component payloads and force the front to look in three places |
-| Tag at the 4 emitting call sites, not inside the HTTP clients | The clients are shared between the rationale path and the final path and cannot tell the stages apart | Tagging in the clients would need a stage argument threaded in anyway — same change, worse location |
+| Hold assistant text until a tool call or the end of that response | The same response can start with the progress sentence and only later reveal the tool call. Releasing tokens early puts the sentence into answer deltas | Streaming every delta immediately is the current bug. A dedicated progress tool would stream the answer live, but it needs a new tool and a prompt change the spec does not require |
