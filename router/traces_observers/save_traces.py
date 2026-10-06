@@ -161,6 +161,7 @@ def save_inline_message_to_database(
     channel_uuid: str = None,
     message_uuid: str = None,
     message_kind: str = None,
+    rationale_index: int = None,
 ) -> InlineAgentMessage:
     message_service = _get_message_service()
     message_service.handle_message_cache(
@@ -188,6 +189,8 @@ def save_inline_message_to_database(
         create_kwargs["uuid"] = message_uuid
     if message_kind is not None:
         create_kwargs["message_kind"] = message_kind
+    if rationale_index is not None:
+        create_kwargs["rationale_index"] = rationale_index
 
     return InlineAgentMessage.objects.create(**create_kwargs)
 

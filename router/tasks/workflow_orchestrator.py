@@ -28,7 +28,6 @@ from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-from router.clients.flows.http.send_message import FINAL_RESPONSE
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.entities.mailroom import is_instagram_comment_message, stream_support_for_message
@@ -420,7 +419,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
             send_preview_message_to_websocket(
                 project_uuid=message_obj.project_uuid,
                 user_email=ctx.user_email,
-                message_data={"type": "preview", "content": ws_content, "message_kind": FINAL_RESPONSE},
+                message_data={"type": "preview", "content": ws_content},
             )
         return True
     if ctx.preview or ctx.preview_websocket:

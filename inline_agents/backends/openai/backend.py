@@ -590,6 +590,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     use_components_cached,
                     message_uuid=message_conversation_log_uuid,
                     grpc_session=grpc_session,
+                    contact_name=contact_name,
                     formatter_agent_configurations=formatter_agent_configurations,
                     manager_pipeline_version=manager_pipeline_version,
                     injected_context=injected_context,
@@ -752,6 +753,55 @@ class OpenAIBackend(InlineAgentsBackend):
                     err_client.close()
                 except Exception as e:
                     logger.debug("gRPC error-client close failed: %s", e)
+
+    async def _classify_stream_event(self, event, classifier, grpc_session, persist_context: dict) -> None:
+        from openai.types.responses import ResponseTextDeltaEvent
+
+        if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+            classifier.on_text(event.data.delta or "")
+            await self._emit_classified(classifier, grpc_session, persist_context)
+            return
+        item = getattr(event, "item", None)
+        if event.type == "run_item_stream_event" and item is not None and item.type == "tool_call_item":
+            classifier.on_tool_call()
+            await self._emit_classified(classifier, grpc_session, persist_context)
+
+    async def _emit_classified(self, classifier, grpc_session, persist_context: dict) -> None:
+        from asgiref.sync import sync_to_async
+
+        if not grpc_session or not grpc_session.is_active:
+            classifier.drain()
+            return
+        for piece in classifier.drain():
+            if piece.kind == "rationale":
+                sent = grpc_session.send_rationale(piece.text, piece.rationale_index or "1")
+                if sent:
+                    await sync_to_async(self._persist_stream_rationale, thread_sensitive=True)(
+                        persist_context, piece.text, piece.rationale_index
+                    )
+                continue
+            grpc_session.send_delta(piece.text)
+
+    @staticmethod
+    def _persist_stream_rationale(persist_context: dict, text: str, rationale_index: str | None) -> None:
+        from router.clients.flows.http.send_message import RATIONALE
+        from router.traces_observers.save_traces import save_inline_message_to_database
+
+        try:
+            save_inline_message_to_database(
+                project_uuid=persist_context["project_uuid"],
+                contact_urn=persist_context["contact_urn"],
+                text=text,
+                preview=persist_context["preview"],
+                session_id=persist_context["session_id"],
+                source_type="agent",
+                contact_name=persist_context["contact_name"],
+                channel_uuid=persist_context["channel_uuid"],
+                message_kind=RATIONALE,
+                rationale_index=int(rationale_index) if rationale_index else None,
+            )
+        except Exception:
+            logger.exception("[OpenAIBackend] Failed to persist rationale message")
 
     def _process_delta_event(
         self,
@@ -922,6 +972,7 @@ class OpenAIBackend(InlineAgentsBackend):
         use_components,
         message_uuid: Optional[str] = None,
         grpc_session: Optional[StreamingSession] = None,
+        contact_name: str = "",
         formatter_agent_configurations: Optional[Dict[str, Any]] = None,
         manager_pipeline_version: Optional[str] = None,
         injected_context: Optional[str] = None,
@@ -955,21 +1006,40 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
 
                 delta_counter = 0
+                classifier = None
+                if grpc_session is not None:
+                    from inline_agents.backends.openai.grpc.rationale_stream import RationaleStreamClassifier
+
+                    classifier = RationaleStreamClassifier(enabled=bool(rationale_switch))
+                persist_context = {
+                    "project_uuid": str(project_uuid),
+                    "contact_urn": contact_urn,
+                    "preview": preview,
+                    "session_id": session_id,
+                    "contact_name": contact_name or "",
+                    "channel_uuid": channel_uuid,
+                }
                 try:
                     # Only stream events if the result has stream_events method
                     stream_events = getattr(result, "stream_events", None)
                     if stream_events and callable(stream_events):
                         async for event in stream_events():
-                            delta_counter = self._process_delta_event(
-                                event=event,
-                                grpc_session=grpc_session,
-                                delta_counter=delta_counter,
-                            )
+                            if classifier is not None:
+                                await self._classify_stream_event(event, classifier, grpc_session, persist_context)
+                            else:
+                                delta_counter = self._process_delta_event(
+                                    event=event,
+                                    grpc_session=grpc_session,
+                                    delta_counter=delta_counter,
+                                )
                             if hasattr(event, "item") and event.type == "run_item_stream_event":
                                 if event.item.type == "tool_call_item":
                                     hooks_state.tool_calls.update(
                                         {event.item.raw_item.name: event.item.raw_item.arguments}
                                     )
+                    if classifier is not None:
+                        classifier.finish()
+                        await self._emit_classified(classifier, grpc_session, persist_context)
                 except openai.APIError as api_error:
                     self._sentry_capture_exception(
                         api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True

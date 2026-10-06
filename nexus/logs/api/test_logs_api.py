@@ -872,7 +872,7 @@ class InlineConversationsViewsetTestCase(TestCase):
 
 
 class InlineConversationMessageKindTestCase(SimpleTestCase):
-    def test_history_payload_includes_kind_and_keeps_null(self):
+    def test_history_payload_includes_kind_and_omits_null(self):
         tagged = InlineAgentMessage(
             uuid=uuid4(),
             text="checking",
@@ -881,6 +881,7 @@ class InlineConversationMessageKindTestCase(SimpleTestCase):
             session_id="s",
             contact_urn="ext:1",
             message_kind="rationale",
+            rationale_index=1,
         )
         legacy = InlineAgentMessage(
             uuid=uuid4(),
@@ -890,7 +891,12 @@ class InlineConversationMessageKindTestCase(SimpleTestCase):
             session_id="s",
             contact_urn="ext:1",
             message_kind=None,
+            rationale_index=None,
         )
 
-        self.assertEqual(InlineConversationSerializer(tagged).data["message_kind"], "rationale")
-        self.assertIsNone(InlineConversationSerializer(legacy).data["message_kind"])
+        tagged_data = InlineConversationSerializer(tagged).data
+        self.assertEqual(tagged_data["message_kind"], "rationale")
+        self.assertEqual(tagged_data["rationale_index"], 1)
+        legacy_data = InlineConversationSerializer(legacy).data
+        self.assertNotIn("message_kind", legacy_data)
+        self.assertNotIn("rationale_index", legacy_data)
