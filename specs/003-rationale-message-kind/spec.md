@@ -1,4 +1,4 @@
-# Feature Specification: Rationale vs Final Response Message Kind
+# Feature Specification: Rationale on the Live Answer Stream
 
 **Feature Branch**: `003-rationale-message-kind`
 
@@ -6,135 +6,134 @@
 
 **Status**: Draft
 
-**Input**: [NEXUS-6076](https://vtex-dev.atlassian.net/browse/NEXUS-6076) — Slack thread [#weni-corner-experience-nexus](https://vtex.slack.com/archives/C0ADFJF6WP8/p1789999017171009) (Cristian, 2026-09-21): the shopping assistant front cannot tell a rationale message apart from the final answer; they are building a dedicated rationale presentation and need Nexus to signal, per outgoing message, which stage it belongs to. Mardone confirmed Nexus already knows the stage and proposed "a flag for final response and one for rationale".
+**Input**: User description: "Reformulate the rationale contract. Do not post each progress update to a second message endpoint. Deliver each progress update as one complete message on the same live stream that already carries the final answer. Streamed pieces and the closing message contain only the final answer. Each progress update carries its order so the shopping assistant can show it as its own loading state."
 
-**Scope**: Nexus backend only — tagging outgoing agent messages with the stage that produced them, on the channels where progressive feedback (rationale) is enabled. Front-end rendering of the rationale is owned by the shopping assistant team. Any passthrough required in Flows/mailroom is a dependency tracked here, not implemented here.
+**Scope**: Nexus backend only, on turns where progressive feedback (rationale) is enabled and the live answer stream is open. The shopping assistant owns how the progress text is drawn. A second connection per turn for the progress text is out of scope.
 
-**Terminology**: **Rationale** (also *progressive feedback*, *racional*) is the intermediate "thinking out loud" text Nexus emits while the agent is still working. **Final response** is the answer produced at the end of the turn. **Message kind** is the new signal that says which of the two an outgoing message is.
+**Terminology**: **Rationale** (also *progressive feedback*, *racional*) is the short feedback the manager produces while the turn is still working. It is a normal short message, not the model's private reasoning. **Final response** is the answer produced at the end of the turn. **Message kind** says which of the two a delivered message is.
 
 ## Clarifications
 
 ### Session 2026-09-28
 
-- Q: Field shape — single enum or the two booleans proposed in the Slack thread? → A: **Single closed enum** `message_kind: "rationale" | "final_response"`. Two independent booleans admit two meaningless states (both true, both false) that the consumer would have to defend against; the enum is exhaustive and extensible.
-- Q: Which delivery surfaces are in scope for this release? → A: **Preview socket plus the production path, best-effort.** Nexus puts the field on the wire everywhere it controls; reaching the production shopping assistant still depends on Flows/mailroom forwarding it, and delivery degrades silently until then.
-- Q: Are gRPC streaming projects in scope? → A: **Yes.** Initially excluded, then included after `/speckit-analyze` found the exclusion contradicted FR-001. gRPC streaming is the path taken when components are **off** (`is_grpc_enabled` returns false when `use_components` is true), and rationale eligibility is independent of it — it depends only on the rationale switch, a GPT manager model, and a webchat/preview channel. So a streaming-enabled webchat project has **both**: rationale over the message endpoint and the final response over the gRPC stream. Excluding it would leave the final response untagged for exactly the shopping assistant's own profile. Cost is low: `StreamMessage.metadata` already exists in the proto.
-- Q: Must the kind survive a page reload? → A: **Yes, persist it.** Additive nullable column on the stored agent message; rows written before this feature stay null and the consumer falls back to today's rendering.
-- Q: Turn interrupted before the final response — does Nexus emit an explicit end-of-turn signal? → A: **No extra signal.** The consumer closes the rationale block on the first `final_response` or on its own timeout. Nexus already sends a default error message on failure, which is itself a `final_response`.
-- Q: "Zero regressions" on channels without rationale — does it mean byte-identical payloads? → A: **Identical except for the additive field.** The field is emitted uniformly, including on channels that never produce rationale, so the contract stays uniform. Everything else about those payloads — keys, values, ordering, delivery behavior — is unchanged.
+- Q: Field shape — single enum or two booleans? → A: **Single closed enum** `message_kind: "rationale" | "final_response"`.
+- Q: Must the kind survive a page reload? → A: **Yes, persist it.** Messages stored before this feature stay without a kind and the consumer falls back to today's rendering.
+- Q: Turn interrupted before the final response — extra end-of-turn signal? → A: **No.** The consumer closes the rationale presentation on the first final response or on its own timeout. A failure message that reaches the user is itself a final response.
+- Q: "Zero regressions" on channels without rationale — byte-identical payloads? → A: **Identical except for the additive kind on the final answer.** Channels that never show rationale still receive a final response marked as such. Existing keys, values, and delivery behavior stay the same.
+
+### Session 2026-10-06
+
+- Q: Deliver rationale on a second message endpoint while the answer streams? → A: **No.** One live stream per turn. A second connection risks duplicate text and reordered delivery.
+- Q: How does a progress update arrive? → A: **One complete message per update**, on that same stream, before the answer pieces. It does not close the stream. It carries `message_kind: rationale` and a 1-based order, `rationale_index`, as text (`"1"`, `"2"`, …).
+- Q: What do the answer pieces and the closing message contain? → A: **Only the final answer.** The progress text must not appear inside them. Both declare `message_kind: final_response`. The closing message ends the stream and carries the full final answer.
+- Q: Can components and rationale be on together? → A: **No.** Those modes are mutually exclusive. A turn that is not on the live answer stream does not need a parallel rationale channel.
+- Q: May the consumer treat the first streamed text as rationale by guessing? → A: **No.** The progress update and the answer are different messages. The consumer switches on kind and order, not on wording or arrival timing.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Front distinguishes rationale from final answer (Priority: P1)
+### User Story 1 - Progress updates stay separate from the answer (Priority: P1)
 
-As the shopping assistant front-end, when I receive agent messages over the socket during a turn, I need each message to declare whether it is rationale or the final response, so I can render the rationale in its dedicated presentation and the final answer as a normal chat message.
+As a shopper on the shopping assistant, while my request is still being handled I see each short progress update on its own, with a loading treatment, and then I see the real answer stream in. The progress sentence does not reappear as the start of the answer.
 
-**Why this priority**: This is the whole request. Without it the front has no way to separate the two, which is what blocks the new rationale UI.
+**Why this priority**: This is the broken experience. Today the progress sentence and the answer share the same streamed text, so the assistant cannot tell them apart and the audit keeps only the answer.
 
-**Independent Test**: Run a turn on a channel that emits rationale, capture the outgoing messages, and assert that every message carries a kind and that the kinds match the actual sequence (rationale messages first, final response last). Delivers the full value on its own.
+**Independent Test**: Send a request that makes the manager report progress and then call another agent. Capture the live stream. Assert one complete progress message, then only answer pieces, then one closing message whose text is the answer and not the progress sentence.
 
 **Acceptance Scenarios**:
 
-1. **Given** a project with rationale enabled on a rationale-capable channel, **When** the agent emits an intermediate rationale message, **Then** the outgoing message declares the kind `rationale`.
-2. **Given** the same turn, **When** the agent emits the answer at the end of the turn, **Then** the outgoing message declares the kind `final_response`.
-3. **Given** a turn that emits three rationale messages before the answer, **When** the front receives them, **Then** the first three declare `rationale` and only the last declares `final_response`.
-4. **Given** a project with rationale disabled, **When** the agent answers, **Then** the single outgoing message declares `final_response` and no message declares `rationale`.
-5. **Given** a consumer that ignores the new signal, **When** it receives either kind, **Then** the message text and existing payload fields are unchanged and the consumer keeps working.
+1. **Given** rationale is enabled and the live answer stream is open, **When** the manager produces a short progress update and then keeps working, **Then** the shopper receives that update once, in full, marked as rationale, and the stream stays open.
+2. **Given** that same turn, **When** the answer is produced, **Then** the streamed pieces and the closing message contain only the answer and are marked as the final response.
+3. **Given** the progress update was "Vou consultar o status do pedido informado." and the answer was "Não foi possível localizar o pedido.", **When** the turn finishes, **Then** the progress sentence is not a prefix of the streamed answer or of the closing message.
+4. **Given** rationale is disabled, **When** the agent answers, **Then** the stream has no rationale message and the answer is marked as the final response.
 
 ---
 
-### User Story 2 - Kind survives across the whole rationale-capable surface (Priority: P2)
+### User Story 2 - Several progress updates stay ordered (Priority: P2)
 
-As the shopping assistant team, I need the kind to be present on every outgoing agent message on the surfaces where rationale exists, not only on a subset, so the front does not have to guess when the signal is missing.
+As the shopping assistant, when a turn reports progress more than once, I can tell the first update from the second and from the last, so each one can be shown in order next to its loading state.
 
-**Why this priority**: A partially tagged stream is worse than none: the front would need a fallback heuristic anyway. But it only matters once P1 works on at least one surface.
+**Why this priority**: A turn can call more than one agent. Without an order, the front cannot tell which update is which.
 
-**Independent Test**: Exercise each rationale-capable surface (Agent Builder preview and production webchat) and assert no outgoing agent message arrives without a kind.
+**Independent Test**: Run a turn that produces two progress updates before the answer. Assert two complete rationale messages, with orders 1 and 2, both before any answer piece, on the same turn.
 
 **Acceptance Scenarios**:
 
-1. **Given** the Agent Builder preview, **When** a turn produces rationale and a final answer, **Then** both kinds reach the preview socket.
-2. **Given** production webchat, **When** a turn produces rationale and a final answer, **Then** both kinds reach the front, provided the downstream message transport forwards the field.
-3. **Given** a channel where rationale is not emitted (for example WhatsApp), **When** the agent answers, **Then** behavior is unchanged apart from the final answer declaring `final_response`.
-4. **Given** the downstream transport does not yet forward the field, **When** a turn runs in production, **Then** messages are still delivered normally with their existing content and no error is raised.
+1. **Given** a turn that produces two progress updates, **When** the stream is read, **Then** the first message has order 1 and the second has order 2.
+2. **Given** those two updates, **When** the answer starts streaming, **Then** no further rationale message arrives, and neither update's text is inside the answer.
+3. **Given** a later turn from the same shopper, **When** it produces a progress update, **Then** that update starts again at order 1.
 
 ---
 
-### User Story 3 - Reloading the conversation keeps the distinction (Priority: P3)
+### User Story 3 - Reloading keeps the distinction (Priority: P3)
 
-As a shopping assistant user who refreshes the page mid-conversation, I want the rationale blocks to keep their dedicated presentation instead of turning into ordinary chat bubbles.
+As a shopper who refreshes the page, I still see past progress updates as progress updates and the answer as the answer.
 
-**Why this priority**: Rationale messages are persisted as ordinary agent messages today, so a live-only signal is lost on reload. This is a real inconsistency, but the new presentation delivers most of its value live, so it can follow P1.
+**Why this priority**: The live presentation delivers most of the value. History should not collapse progress updates into ordinary bubbles after a reload.
 
-**Independent Test**: Run a turn with rationale, reload the conversation history, and assert the previously-rationale messages are still identifiable as rationale.
+**Independent Test**: Finish a turn that had a progress update and an answer, reload the conversation, and assert each stored message still reports the kind it was sent with.
 
 **Acceptance Scenarios**:
 
-1. **Given** a finished turn with rationale and a final answer, **When** the conversation history is read back, **Then** each stored agent message still reports the kind it was sent with.
-2. **Given** history recorded before this feature, **When** it is read back, **Then** messages without a kind are returned as-is and the front falls back to today's rendering.
+1. **Given** a finished turn with a progress update and an answer, **When** the history is read back, **Then** the update is still rationale and the answer is still the final response.
+2. **Given** history written before this feature, **When** it is read back, **Then** messages without a kind are returned as they were stored.
 
 ---
 
 ### Edge Cases
 
-- **Turn interrupted before the answer**: rationale messages were already sent, the final response never is. No end-of-turn signal is emitted (FR-013); the front closes the rationale block on its own timeout. Note that an agent failure already produces a default error message, which is itself a `final_response`.
-- **Answer split into several messages**: when the final answer is delivered as more than one message (components, multiple chat bubbles), every one of them declares `final_response`, not just the last.
-- **Guardrail block / canned refusal**: the turn ends with a blocking message instead of an agent answer. It is a terminal message to the user and declares `final_response`.
-- **Rationale enabled but the model emits no reasoning summary**: the turn produces only a final response; no empty rationale message is emitted.
-- **Consumer on an older version**: an unknown extra field must never break parsing or delivery for existing consumers (WhatsApp, Instagram, flows).
-- **Kind on a channel that never shows rationale**: the field is still populated for the final response so the contract is uniform, but no rationale message is ever produced there.
+- **Turn interrupted after a progress update**: the update was already delivered and the stream never closes with a final response. No extra end signal is sent. The front closes the loading state on its own timeout. A failure message that is actually delivered is a final response.
+- **Several progress updates**: each is its own complete message, in order, and none of them is repeated inside the answer.
+- **Rationale enabled but the manager produces no progress text**: the turn delivers only the final response. No empty rationale message is sent.
+- **Guardrail block or canned refusal**: the message that reaches the shopper is a final response.
+- **Older consumer**: an unrecognized message type or an extra field must not break delivery of the answer. Until the consumer understands rationale messages, those messages may be ignored; the answer stream still completes.
+- **Channel that never shows rationale**: no rationale message is produced. The final response still declares its kind.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Every outgoing agent message produced by a turn MUST declare which stage produced it: rationale or final response.
-- **FR-002**: Messages emitted by the progressive-feedback/rationale path MUST declare the `rationale` kind.
-- **FR-003**: Messages emitted by the end-of-turn dispatch path MUST declare the `final_response` kind, including when the answer is split into multiple messages and including terminal blocking messages.
-- **FR-004**: The signal MUST be an additive field on the existing outgoing payload. Existing fields, message text, and ordering MUST NOT change.
-- **FR-005**: Consumers that do not read the new field MUST keep working unchanged, on every channel.
-- **FR-006**: The signal MUST be emitted on the Agent Builder preview socket.
-- **FR-007**: The signal MUST be emitted on every production send path Nexus controls, including the streaming path used by projects with gRPC streaming enabled, so it can reach the shopping assistant once the downstream transport forwards it.
-- **FR-008**: Where the downstream transport does not forward the field, message delivery MUST degrade silently: same delivery, same content, no error.
-- **FR-009**: The system MUST NOT infer the kind from message content or text heuristics; the kind comes from the stage that emitted the message.
-- **FR-010**: The signal MUST be a single field named `message_kind`, carrying a closed set of string values: `rationale` and `final_response`. Consumers MUST tolerate the field being absent (legacy messages) and MUST fall back to normal rendering on an unrecognized value.
-- **FR-011**: Reaching the production shopping assistant additionally requires Flows/mailroom to forward the field. Nexus MUST NOT block on that: it emits the field regardless, and production degrades per FR-008 until the passthrough exists.
-- **FR-012**: The kind MUST be persisted alongside the stored agent message so conversation history keeps the distinction after a reload. Persistence MUST be additive and nullable: messages stored before this feature keep no kind and are returned as-is.
-- **FR-013**: Nexus MUST NOT emit an explicit end-of-turn signal. A turn that is interrupted after rationale simply produces no `final_response`, and consumers close the rationale block on the first `final_response` or on their own timeout.
+- **FR-001**: On a turn whose answer is delivered on the live stream, every shopper-visible agent message MUST declare its stage as `rationale` or `final_response`.
+- **FR-002**: Each progress update MUST be delivered once, in full, as its own message on that same stream. The message type is `rationale`. It MUST carry `message_kind: rationale` and `rationale_index` as a 1-based decimal string. It MUST NOT close the stream.
+- **FR-003**: Progress text MUST NOT be delivered as answer pieces. Answer pieces use the existing piece type, carry only final-answer text, and declare `message_kind: final_response`.
+- **FR-004**: The turn MUST end with one closing message on that stream. It carries the full final answer, declares `message_kind: final_response`, and closes the stream.
+- **FR-005**: The opening of the stream stays as it is today: an empty setup message, with the same session metadata on every following message.
+- **FR-006**: A turn MUST NOT open a second connection to deliver progress updates.
+- **FR-007**: Order numbers MUST increase by one within a turn and MUST restart at 1 on the next turn.
+- **FR-008**: The system MUST NOT ask the consumer to infer rationale from message wording, from "the first text before a pause", or from any other heuristic.
+- **FR-009**: Consumers that do not understand `rationale` MUST still receive the answer pieces and the closing message unchanged in text and delivery.
+- **FR-010**: Where rationale is disabled, or the manager emits no progress text, the stream MUST contain no rationale message.
+- **FR-011**: The kind MUST be stored with the agent message so a reload keeps the distinction. Storage is additive: older messages keep no kind and are returned as stored.
+- **FR-012**: Nexus MUST NOT emit an extra end-of-turn signal beyond the closing final-response message.
+- **FR-013**: Turns that are not on the live answer stream are unchanged by this reformulation. Components and rationale are mutually exclusive, so those turns do not gain a rationale channel.
 
 ### Key Entities
 
-- **Outgoing agent message**: the unit delivered to the end user during a turn. Gains one additive attribute, `message_kind`, describing the stage that produced it. Everything else about it is unchanged.
-- **Message kind**: the stage classification, carried as `message_kind`. Two values in this release: `rationale` and `final_response`. Closed and explicit so the front can switch on it.
-- **Stored agent message**: the persisted record of an outgoing message. Gains a nullable copy of the kind so history reads keep the distinction; null means "written before this feature".
-- **Turn**: one user input and the agent work it triggers. Produces zero or more rationale messages followed by one final response (possibly split into several messages).
+- **Live turn stream**: the single sequence already used to deliver an answer. It opens, may carry zero or more complete progress updates, then answer pieces, then one closing message.
+- **Progress update**: one short feedback sentence, delivered whole, with kind `rationale` and an order.
+- **Final response**: the answer. Its pieces and its closing message share the kind `final_response`. The closing message holds the full answer text.
+- **Stored agent message**: the persisted copy. Gains an optional kind. Absent means the message predates this feature.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: In 100% of turns on rationale-capable surfaces, every outgoing agent message carries a kind, and the kind matches the stage that produced it.
-- **SC-002**: The shopping assistant front can render the dedicated rationale presentation without reading message text or applying any ordering heuristic.
-- **SC-003**: Zero regressions on channels that do not use rationale: WhatsApp, Instagram and flow-driven deliveries keep identical payloads **except for the one additive field**, and identical delivery behavior. Every pre-existing key keeps its name, value, and position.
-- **SC-004**: The front-end team can validate the contract end to end on the preview surface within the sprint, without waiting on any other team.
-- **SC-005**: No measurable change in message delivery latency for a turn, since no additional round trip is introduced.
+- **SC-001**: In 100% of streamed turns with rationale enabled, every progress sentence appears exactly once as a complete rationale message, and 0% of those sentences appear inside the answer pieces or the closing message.
+- **SC-002**: The shopping assistant can render each progress update with its loading treatment using only the message type, the kind, and the order, without reading the sentence or guessing from timing.
+- **SC-003**: A turn still uses one connection. Progress updates do not add a second send, and answer delivery time is not increased by an extra round trip.
+- **SC-004**: Channels that do not show rationale keep today's delivery, aside from the final answer declaring its kind.
+- **SC-005**: After a reload, 100% of progress updates and answers stored by this feature are still distinguishable by kind.
 
 ## Assumptions
 
-- Rationale is only emitted today on webchat and preview surfaces; other channels are unaffected because they never receive rationale.
-- Nexus already knows, at emission time, whether a message is rationale or the final response. No new detection logic or model call is needed.
-- The shopping assistant front reads the same socket stream that already delivers agent messages; this feature adds a field to those messages rather than creating a new channel or event type.
-- The front-end presentation of the rationale (collapsing, styling, animation) is owned by the shopping assistant team and out of scope here.
-- Rationale text itself is unchanged: this feature does not alter how rationale is generated, rewritten, or throttled.
-- A turn emits at most one final response, possibly split across several messages.
+- The shopping assistant already consumes the live answer stream. This feature adds a message type and fields on that stream. It does not add a channel.
+- Components and rationale cannot be enabled together. Turns outside the live stream are out of this reformulation.
+- The progress text is the short feedback the manager writes for the shopper. It is not private model reasoning, and it is not generated by a separate summarizer in this release.
+- How the manager is instructed to produce that sentence can change without changing this delivery contract.
+- The shopping assistant team (Paulo Bernardo) implements the new message type on the socket from this contract. If a detail of the payload changes, Nexus tells that team before they rely on it.
+- Presentation (loading indicator, styling, replacing the loading state when the answer arrives) is owned by the shopping assistant and is out of scope here.
+- A turn has one closing final response. Several progress updates may precede it.
 
 ## Dependencies
 
-- **Contract sign-off with the shopping assistant front-end team** (Cristian / Paulo Bernardo): the field name and value set are decided (FR-010) and must be confirmed with them before implementation, so both sides ship against the same contract.
-- **Flows/mailroom passthrough**: the production send path drops unknown fields today. Reaching the production shopping assistant requires the downstream transport to forward `message_kind`.
-  - **Nexus owner**: whoever opens the request (tasks T002).
-  - **Consumer owner**: shopping assistant front, Cristian / Paulo Bernardo, in [#weni-corner-experience-nexus](https://vtex.slack.com/archives/C0ADFJF6WP8/p1789999017171009).
-  - **Transport owner**: not named in that thread. T002 records the person who owns `/mr/msg/send` and the webchat socket when the request is opened.
-  - **Timeline**: none committed. Preview validation (SC-004) does not wait.
-  - **Fallback**: FR-008. If the field is dropped, production delivery is unchanged and the front keeps today's rendering. No second code path, no feature flag.
-  - Blocks FR-007 end to end. Does not block the preview surface, and does not block Nexus from putting the field on the wire.
+- **Shopping assistant socket**: must accept the `rationale` message type before, or in the same release as, Nexus starts sending it. If Nexus ships first, those updates are dropped and the answer still completes.
+- **Contract already agreed** in the 2026-10-06 exchange: one stream; complete rationale messages with kind and order; answer pieces and the closing message are final response only.

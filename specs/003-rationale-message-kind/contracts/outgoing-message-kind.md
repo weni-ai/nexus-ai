@@ -1,144 +1,91 @@
-# Contract: `message_kind` on outgoing agent messages
+# Contract: Live Answer Stream Message Kind
 
-**Feature**: `003-rationale-message-kind` | **Status**: Decided (spec FR-010, `/speckit-clarify` 2026-09-28) — pending confirmation with the front-end team
-**Consumers**: shopping assistant front-end (Cristian / Paulo Bernardo), Agent Builder preview
-**Producer**: Nexus AI
+**Consumer**: shopping assistant socket (Paulo Bernardo)
+**Producer**: Nexus OpenAI live stream
+**Date**: 2026-10-06
+**Status**: Agreed in the 2026-10-06 exchange. If a field changes, Nexus tells the socket owner before they depend on it.
 
----
+This contract replaces the earlier one, which posted rationale to `/mr/msg/send` and streamed the answer separately. That second connection is not part of this feature.
 
-## 1. The field
+## Sequence
 
+One bidirectional stream per turn. Every message shares `msg_id`, `channel_uuid`, `contact_urn`, `project_uuid`, and session metadata (`session_id`, `language`).
+
+```text
+setup
+rationale          (zero or more, each complete, stream stays open)
+delta              (answer tokens only)
+completed          (full answer, stream closes)
 ```
-name:     message_kind
-type:     string (closed enum)
-values:   "rationale" | "final_response"
-required: producer MUST set it on every outgoing agent message in scope
-          consumer MUST tolerate its absence (legacy messages, out-of-scope transports)
-```
 
-### Semantics
+## setup
 
-| Value | The consumer should render it as |
-|---|---|
-| `rationale` | Intermediate "thinking" content, in the dedicated rationale presentation. More messages are coming. |
-| `final_response` | The answer. Normal chat bubble. The turn is over, unless more `final_response` parts follow immediately. |
-| *absent* | Unknown stage. Fall back to current behaviour (render as a normal chat message). |
+Unchanged. `type` is `setup`, `content` is empty. No `message_kind`.
 
-### Rules
+## rationale
 
-1. **Additive only.** No existing field changes name, type, position, or meaning.
-2. **Never inferred.** The value comes from the code path that emitted the message, never from the text.
-3. **A split answer is still final.** When the answer arrives as several messages, every one is tagged
-   `final_response`. The consumer MUST NOT assume exactly one.
-4. **Guardrail refusals are `final_response`.** They are terminal messages to the user.
-5. **No `final_response` is not an error.** An interrupted turn can end after rationale messages, and
-   Nexus emits **no end-of-turn signal** in that case (spec FR-013). The consumer MUST close the
-   rationale block on the first `final_response` or on its own timeout. Note that an agent failure
-   already produces a default error message, which is itself a `final_response`.
-6. **Unknown values.** If a future release adds a kind, consumers MUST fall back to normal rendering
-   rather than dropping the message.
+Sent once per progress sentence, before any answer delta.
 
-### Ordering guarantee
-
-Within a turn, all `rationale` messages precede all `final_response` messages. Nexus does not
-interleave them.
-
----
-
-## 2. Wire examples
-
-### 2.1 Preview websocket — in scope, testable end to end inside Nexus
-
-Field sits at the envelope level, sibling of `content`. `content` is polymorphic and is not a safe
-place to attach it.
-
-```jsonc
-// rationale
+```json
 {
-  "type": "preview",
-  "content": "Estou verificando o status do seu pedido...",
-  "message_kind": "rationale"
+  "type": "rationale",
+  "msg_id": "<same id as the rest of the turn>",
+  "content": "Vou consultar o status do pedido informado.",
+  "metadata": {
+    "session_id": "<session>",
+    "language": "pt-BR",
+    "message_kind": "rationale",
+    "rationale_index": "1"
+  }
 }
+```
 
-// final response
+- Does not close the stream.
+- `rationale_index` is a string. The first update of the turn is `"1"`, the next is `"2"`. The next turn starts at `"1"` again.
+- `content` is the full sentence, not a token fragment.
+- The socket may ignore `type: rationale` until it is implemented. Answer delivery still completes.
+
+## delta
+
+Only final-answer tokens. The progress sentence is not a prefix and is not repeated here.
+
+```json
 {
-  "type": "preview",
-  "content": {"type": "broadcast", "message": "Seu pedido 123 saiu para entrega.", "fonts": []},
-  "message_kind": "final_response"
+  "type": "delta",
+  "msg_id": "<same id>",
+  "content": "Não foi ",
+  "metadata": {
+    "session_id": "<session>",
+    "language": "pt-BR",
+    "message_kind": "final_response"
+  }
 }
 ```
 
-Note the socket frame itself is `{"type": "preview", "message": <the object above>}` — the consumer
-reads `message.message_kind`.
+## completed
 
-### 2.2 `POST /mr/msg/send` — best-effort, needs mailroom passthrough
+Unchanged except for the kind. Closes the stream. `content` is the full final answer.
 
-```jsonc
+```json
 {
-  "user": "...",
-  "project_uuid": "...",
-  "urns": ["ext:webchat-contact-id"],
-  "text": "Estou verificando o status do seu pedido...",
-  "message_kind": "rationale"
+  "type": "completed",
+  "msg_id": "<same id>",
+  "content": "Não foi possível localizar o pedido.",
+  "metadata": {
+    "session_id": "<session>",
+    "language": "pt-BR",
+    "message_kind": "final_response"
+  }
 }
 ```
 
-### 2.3 Broadcast / stream body — best-effort
+## When rationale is absent
 
-Top level of the body, never inside `msg` (which is agent-authored and may be a list).
+Rationale disabled, no progress sentence, guardrail or canned refusal, or a turn that never opens this stream: no `rationale` message. Deltas and `completed` still declare `message_kind: final_response` when this stream is used.
 
-```jsonc
-{
-  "urns": ["ext:..."],
-  "project_uuid": "...",
-  "channel_uuid": "...",
-  "msg": {"text": "Seu pedido 123 saiu para entrega."},
-  "message_kind": "final_response"
-}
-```
+## What this contract does not cover
 
-### 2.4 gRPC `StreamMessage` — in scope, for streaming-enabled projects
-
-Uses the existing `map<string, string> metadata` field. No `.proto` change, no stub regeneration.
-Relevant because streaming is the **non-components** path and rationale runs independently of it, so a
-streaming-enabled webchat project delivers its final response here while its rationale goes over the
-message endpoint.
-
-```
-StreamMessage {
-  type: "completed"
-  content: "Seu pedido 123 saiu para entrega."
-  metadata: { "message_kind": "final_response" }
-}
-```
-
----
-
-## 3. Compatibility
-
-| Consumer | Behaviour after this change |
-|---|---|
-| Shopping assistant front (updated) | Switches on `message_kind`, renders the dedicated rationale UI |
-| Shopping assistant front (not yet updated) | Ignores the unknown key, renders exactly as today |
-| WhatsApp / Instagram / flows | Unaffected — they never receive rationale, and the extra key is ignored downstream |
-| Agent Builder preview (not yet updated) | Ignores the unknown key, renders exactly as today |
-
-**Degradation requirement (spec FR-008)**: if a downstream transport rejects or strips the field,
-message delivery MUST be unchanged — same content, same ordering, no error surfaced to the user.
-
----
-
-## 4. Decisions taken
-
-| # | Question | Decision | Spec ref |
-|---|---|---|---|
-| 1 | Enum, or the two booleans from the Slack thread? | **Enum `message_kind`.** Two independent booleans admit `both true` and `both false`, two states with no meaning that the consumer would have to defend against | FR-010 |
-| 2 | Production webchat in scope, or preview only? | **Both.** Nexus emits the field on every path it controls; production reaches the front once mailroom forwards it, and degrades silently until then | FR-007, FR-011 |
-| 3 | Must the kind survive a page reload? | **Yes.** Persisted as a nullable column; pre-existing rows stay null | FR-012 |
-| 4 | Explicit end-of-turn signal on an interrupted turn? | **No.** Consumer closes on `final_response` or its own timeout | FR-013 |
-| 5 | Are gRPC streaming projects in scope? | **Yes.** Streaming is the non-components path and coexists with rationale; excluding it would leave the final response untagged for the shopping assistant's own profile | FR-007 |
-
-## 5. Remaining action
-
-Confirm this contract with the shopping assistant front-end team (Cristian / Paulo Bernardo) before
-implementation starts, so both sides ship against the same document.
+- Preview.
+- Components turns (they do not open this stream, and they cannot have rationale on at the same time).
+- A second HTTP post of the same sentence.
+- How the socket draws the loading state.

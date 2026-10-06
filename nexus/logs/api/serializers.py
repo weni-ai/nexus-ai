@@ -235,9 +235,18 @@ class InlineConversationSerializer(serializers.ModelSerializer):
             "source_type",
             "created_at",
             "message_kind",
+            "rationale_index",
         ]
 
     text = serializers.SerializerMethodField()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if data.get("message_kind") is None:
+            data.pop("message_kind", None)
+        if data.get("rationale_index") is None:
+            data.pop("rationale_index", None)
+        return data
 
     def get_text(self, obj: InlineAgentMessage) -> str:
         uuid = obj.uuid

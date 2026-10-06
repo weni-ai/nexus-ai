@@ -272,7 +272,7 @@ class TestGetSupervisorInstructionsProgressiveFeedback(SimpleTestCase):
 class RationaleMessageKindTestCase(SimpleTestCase):
     @patch("nexus.projects.websockets.consumers.send_preview_message_to_websocket")
     @patch("router.traces_observers.rationale.observer.SendMessageHTTPClient")
-    def test_preview_websocket_rationale_is_tagged(self, mock_client, mock_ws):
+    def test_preview_and_rest_do_not_carry_message_kind(self, mock_client, mock_ws):
         from router.traces_observers.rationale.observer import RationaleObserver
 
         RationaleObserver.task_send_rationale_message.run(
@@ -285,9 +285,9 @@ class RationaleMessageKindTestCase(SimpleTestCase):
         )
 
         payload = mock_ws.call_args.kwargs["message_data"]
-        self.assertEqual(payload["message_kind"], RATIONALE)
+        self.assertNotIn("message_kind", payload)
         self.assertEqual(payload["content"], "checking your order")
-        self.assertEqual(mock_client.return_value.send_direct_message.call_args.kwargs["message_kind"], RATIONALE)
+        self.assertNotIn("message_kind", mock_client.return_value.send_direct_message.call_args.kwargs)
 
     def test_disabled_switch_sends_nothing(self):
         from router.traces_observers.rationale.observer import RationaleObserver

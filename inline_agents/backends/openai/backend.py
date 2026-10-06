@@ -590,6 +590,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     use_components_cached,
                     message_uuid=message_conversation_log_uuid,
                     grpc_session=grpc_session,
+                    contact_name=contact_name,
                     formatter_agent_configurations=formatter_agent_configurations,
                     manager_pipeline_version=manager_pipeline_version,
                     injected_context=injected_context,
@@ -702,17 +703,6 @@ class OpenAIBackend(InlineAgentsBackend):
             logger.error(f"gRPC setup failed: {e}", exc_info=True)
             return None, None, None
 
-    def _send_grpc_delta(
-        self,
-        delta_content: str,
-        grpc_session: StreamingSession,
-    ):
-        """Send a delta message via the persistent gRPC stream."""
-        try:
-            grpc_session.send_delta(delta_content)
-        except Exception as e:
-            logger.error(f"gRPC delta send failed: {e}", exc_info=True)
-
     def _send_grpc_error_message(
         self,
         message: str,
@@ -753,24 +743,36 @@ class OpenAIBackend(InlineAgentsBackend):
                 except Exception as e:
                     logger.debug("gRPC error-client close failed: %s", e)
 
-    def _process_delta_event(
-        self,
-        event,
-        grpc_session: Optional[StreamingSession],
-        delta_counter: int,
-    ) -> int:
-        """Process a delta event and stream it via the persistent gRPC session."""
-        from openai.types.responses import ResponseTextDeltaEvent
+    @staticmethod
+    def _persist_rationales(save_context, pieces) -> None:
+        from router.clients.flows.http.send_message import RATIONALE
+        from router.traces_observers.save_traces import save_inline_message_to_database
 
-        if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-            delta_content = event.data.delta
-            if delta_content and grpc_session and grpc_session.is_active:
-                delta_counter += 1
-                self._send_grpc_delta(
-                    delta_content=delta_content,
-                    grpc_session=grpc_session,
+        for piece in pieces:
+            try:
+                save_inline_message_to_database(
+                    project_uuid=save_context.project_uuid,
+                    contact_urn=save_context.contact_urn,
+                    text=piece.text,
+                    preview=save_context.preview,
+                    session_id=save_context.session_id,
+                    source_type="agent",
+                    contact_name=save_context.contact_name,
+                    channel_uuid=save_context.channel_uuid,
+                    message_kind=RATIONALE,
+                    rationale_index=int(piece.rationale_index) if piece.rationale_index else None,
                 )
-        return delta_counter
+            except Exception:
+                logger.exception("[OpenAIBackend] Failed to persist rationale message")
+
+    async def _store_sent_rationales(self, save_context, sent_rationales) -> None:
+        if not sent_rationales:
+            return
+        from asgiref.sync import sync_to_async
+
+        pending = list(sent_rationales)
+        sent_rationales.clear()
+        await sync_to_async(self._persist_rationales, thread_sensitive=True)(save_context, pending)
 
     async def _run_formatter_agent_async(
         self,
@@ -922,6 +924,7 @@ class OpenAIBackend(InlineAgentsBackend):
         use_components,
         message_uuid: Optional[str] = None,
         grpc_session: Optional[StreamingSession] = None,
+        contact_name: str = "",
         formatter_agent_configurations: Optional[Dict[str, Any]] = None,
         manager_pipeline_version: Optional[str] = None,
         injected_context: Optional[str] = None,
@@ -954,22 +957,41 @@ class OpenAIBackend(InlineAgentsBackend):
                     **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
                 )
 
-                delta_counter = 0
+                from inline_agents.backends.openai.grpc.rationale_stream import (
+                    RationaleSaveContext,
+                    RationaleStreamClassifier,
+                    emit_stream_pieces,
+                    feed_stream_event,
+                )
+
+                classifier = (
+                    RationaleStreamClassifier(enabled=bool(rationale_switch)) if grpc_session is not None else None
+                )
+                save_context = RationaleSaveContext(
+                    project_uuid=str(project_uuid),
+                    contact_urn=contact_urn,
+                    preview=preview,
+                    session_id=session_id,
+                    contact_name=contact_name or "",
+                    channel_uuid=channel_uuid,
+                )
+                sent_rationales = []
                 try:
                     # Only stream events if the result has stream_events method
                     stream_events = getattr(result, "stream_events", None)
                     if stream_events and callable(stream_events):
                         async for event in stream_events():
-                            delta_counter = self._process_delta_event(
-                                event=event,
-                                grpc_session=grpc_session,
-                                delta_counter=delta_counter,
-                            )
+                            if classifier is not None:
+                                feed_stream_event(classifier, event)
+                                sent_rationales.extend(emit_stream_pieces(grpc_session, classifier.drain()))
                             if hasattr(event, "item") and event.type == "run_item_stream_event":
                                 if event.item.type == "tool_call_item":
                                     hooks_state.tool_calls.update(
                                         {event.item.raw_item.name: event.item.raw_item.arguments}
                                     )
+                    if classifier is not None:
+                        classifier.finish()
+                        sent_rationales.extend(emit_stream_pieces(grpc_session, classifier.drain()))
                 except openai.APIError as api_error:
                     self._sentry_capture_exception(
                         api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
@@ -1062,6 +1084,8 @@ class OpenAIBackend(InlineAgentsBackend):
                         _is_final_out_debug("E skip_components_merge=True (skip_outgoing_dispatch)")
 
                     return final_response
+                finally:
+                    await self._store_sent_rationales(save_context, sent_rationales)
 
                 final_response = self._get_final_response(result)
 

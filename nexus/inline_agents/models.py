@@ -241,6 +241,7 @@ class InlineAgentMessage(models.Model):
         blank=True,
         choices=(("rationale", "Rationale"), ("final_response", "Final response")),
     )
+    rationale_index = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         indexes = [

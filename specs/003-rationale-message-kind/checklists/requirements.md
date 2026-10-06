@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Rationale vs Final Response Message Kind
+# Specification Quality Checklist: Rationale on the Live Answer Stream
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-09-28
+**Created**: 2026-10-06
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,16 +31,6 @@
 
 ## Notes
 
-- **All items passing after `/speckit-clarify` (session 2026-09-28).** The three original
-  [NEEDS CLARIFICATION] markers — FR-010 (field shape), FR-011 (delivery surfaces), FR-012 (persistence) —
-  were resolved, and a fourth decision was added as FR-013 (no explicit end-of-turn signal).
-- FR-010 now names a concrete field (`message_kind`) and value set. This is a wire contract with an external
-  consumer, so the name *is* the requirement, not an implementation detail.
-- `/speckit-analyze` (2026-09-28) found seven issues, none CRITICAL. Two changed decisions and were
-  applied to the spec: gRPC streaming was wrongly excluded (it contradicted FR-001 — see the FR-007
-  clarification), and SC-003's "identical payloads" was reworded to "identical except the additive
-  field". The rest was drift cleanup across `plan.md`, `research.md`, `data-model.md`, `contracts/`,
-  `quickstart.md` and `tasks.md`, all reconciled.
-- R7 is resolved inside this repository: history is `GET /api/<project_uuid>/conversations/` via
-  `InlineConversationSerializer`. A customer reload that reads mailroom history instead is the same
-  passthrough dependency as the live socket, tracked under Dependencies, not a missing serializer.
+- Validated 2026-10-06 against the reformulated contract: one live stream, complete progress updates, answer pieces and closing message are final response only.
+- Message type and field names (`rationale`, `message_kind`, `rationale_index`) stay in the spec because they are the external contract the shopping assistant already agreed to consume. No code paths, frameworks, or libraries are specified.
+- `plan.md`, `research.md`, `data-model.md`, `quickstart.md`, `contracts/outgoing-message-kind.md`, and `tasks.md` were regenerated on 2026-10-06 for this contract.
