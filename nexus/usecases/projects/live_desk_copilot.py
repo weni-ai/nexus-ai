@@ -8,6 +8,21 @@ logger = logging.getLogger(__name__)
 
 PARENT_UUID_KEYS = ("parent_uuid", "parent_project_uuid", "main_project_uuid")
 
+LIVE_DESK_COPILOT_AGENT_NAME = "Desk Copilot"
+LIVE_DESK_COPILOT_AGENT_ROLE = "Human Rep Copilot"
+LIVE_DESK_COPILOT_AGENT_GOAL = "Make the human representative faster and more accurate in every customer conversation."
+LIVE_DESK_COPILOT_AGENT_PERSONALITY = "friendly"
+
+
+def live_desk_copilot_agent_profile() -> dict[str, str]:
+    """Name, role, goal, and tone written on a copilot project's own agent at creation."""
+    return {
+        "name": LIVE_DESK_COPILOT_AGENT_NAME,
+        "role": LIVE_DESK_COPILOT_AGENT_ROLE,
+        "goal": LIVE_DESK_COPILOT_AGENT_GOAL,
+        "personality": LIVE_DESK_COPILOT_AGENT_PERSONALITY,
+    }
+
 
 def select_manager_for_new_project(*, is_live_desk_copilot: bool) -> Optional[ManagerAgent]:
     """Copilot projects use the copilot manager. Everyone else uses the global default."""
