@@ -11,7 +11,7 @@ PARENT_UUID_KEYS = ("parent_uuid", "parent_project_uuid", "main_project_uuid")
 LIVE_DESK_COPILOT_AGENT_NAME = "Desk Copilot"
 LIVE_DESK_COPILOT_AGENT_ROLE = "Human Rep Copilot"
 LIVE_DESK_COPILOT_AGENT_GOAL = "Make the human representative faster and more accurate in every customer conversation."
-LIVE_DESK_COPILOT_AGENT_PERSONALITY = "colaborativo"
+LIVE_DESK_COPILOT_AGENT_PERSONALITY = "friendly"
 
 
 def live_desk_copilot_agent_profile() -> dict[str, str]:

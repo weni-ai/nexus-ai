@@ -1,7 +1,9 @@
+import importlib
 import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+from django.apps import apps
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 
@@ -10,6 +12,10 @@ from nexus.projects.consumers.project_consumer import WeniEDAProjectConsumer
 from nexus.projects.consumers.project_update_consumer import ProjectUpdateConsumer
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+from nexus.usecases.intelligences.tests.intelligence_factory import (
+    ContentBaseFactory,
+    IntegratedIntelligenceFactory,
+)
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.live_desk_copilot import (
     LIVE_DESK_COPILOT_AGENT_GOAL,
@@ -131,6 +137,60 @@ class CreateProjectParentTestCase(TestCase):
         self.assertIsNone(agent.role)
         self.assertEqual(agent.goal, "")
         self.assertEqual(agent.personality, settings.DEFAULT_AGENT_PERSONALITY)
+
+
+class BackfillCopilotAgentProfileTestCase(TestCase):
+    def _router_agent(self, project, *, name, role=None, goal="", personality="Amigável"):
+        integrated = IntegratedIntelligenceFactory(
+            project=project,
+            created_by=project.created_by,
+            intelligence__org=project.org,
+            intelligence__created_by=project.created_by,
+            intelligence__is_router=True,
+        )
+        content_base = ContentBaseFactory(
+            intelligence=integrated.intelligence,
+            created_by=project.created_by,
+            is_router=True,
+        )
+        agent = content_base.agent
+        agent.name = name
+        agent.role = role
+        agent.goal = goal
+        agent.personality = personality
+        agent.save()
+        return agent
+
+    def test_backfill_fills_only_blank_copilot_agents(self):
+        blank = self._router_agent(ProjectFactory(is_live_desk_copilot=True), name=None, role=None)
+        named = self._router_agent(
+            ProjectFactory(is_live_desk_copilot=True),
+            name="Already set",
+            role="Seller",
+            goal="Sell",
+            personality="direta",
+        )
+        normal = self._router_agent(ProjectFactory(is_live_desk_copilot=False), name=None, role=None)
+
+        backfill = importlib.import_module("nexus.projects.migrations.0043_backfill_live_desk_copilot_agent_profile")
+        backfill.forwards_blank_copilot_agents(apps, None)
+
+        blank.refresh_from_db()
+        named.refresh_from_db()
+        normal.refresh_from_db()
+
+        self.assertEqual(blank.name, LIVE_DESK_COPILOT_AGENT_NAME)
+        self.assertEqual(blank.role, LIVE_DESK_COPILOT_AGENT_ROLE)
+        self.assertEqual(blank.goal, LIVE_DESK_COPILOT_AGENT_GOAL)
+        self.assertEqual(blank.personality, LIVE_DESK_COPILOT_AGENT_PERSONALITY)
+        self.assertEqual(named.name, "Already set")
+        self.assertEqual(named.role, "Seller")
+        self.assertEqual(named.goal, "Sell")
+        self.assertEqual(named.personality, "direta")
+        self.assertIsNone(normal.name)
+        self.assertIsNone(normal.role)
+        self.assertEqual(normal.goal, "")
+        self.assertEqual(normal.personality, "Amigável")
 
 
 class SyncLiveDeskCopilotUseCaseTestCase(TestCase):
