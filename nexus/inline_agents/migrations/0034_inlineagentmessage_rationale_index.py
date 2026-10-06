@@ -3,8 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("inline_agents", "0033_inlineagentmessage_message_kind"),
-        ("inline_agents", "0033_manageragent_is_live_desk_copilot"),
+        ("inline_agents", "0034_manageragent_is_live_desk_copilot"),
     ]
 
     operations = [
