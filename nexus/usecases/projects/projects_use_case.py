@@ -26,7 +26,11 @@ from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 
 from .create import ProjectAuthUseCase
-from .live_desk_copilot import assign_parent_project, select_manager_for_new_project
+from .live_desk_copilot import (
+    assign_parent_project,
+    live_desk_copilot_agent_profile,
+    select_manager_for_new_project,
+)
 
 
 class ProjectsUseCase:
@@ -105,6 +109,7 @@ class ProjectsUseCase:
             title=project_dto.name,
             is_router=True,
             check_permission=False,
+            agent_profile=live_desk_copilot_agent_profile() if project.is_live_desk_copilot else None,
         )
 
         llm_dto = LLMDTO(
