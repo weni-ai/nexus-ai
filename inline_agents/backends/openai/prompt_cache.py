@@ -1,4 +1,4 @@
-"""Explicit prompt caching for AWS Mantle managers with the Admin flag enabled."""
+"""Explicit prompt caching for OpenAI-compatible managers with the Admin flag enabled."""
 
 import logging
 from collections.abc import AsyncIterator
@@ -27,12 +27,26 @@ MANAGER_PROMPT_CACHE_KEY = "cache_manager_2_8_luna_v1"
 COLLABORATOR_PROMPT_CACHE_KEY = "cache_collaborator_2_8_luna_v1"
 # Backwards-compatible alias for callers and tests that still use the original name.
 PROMPT_CACHE_KEY_PREFIX = MANAGER_PROMPT_CACHE_KEY
-PROMPT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
+PROMPT_CACHE_OPTIONS = {"mode": "implicit", "ttl": "30m"}
 PROMPT_CACHE_BREAKPOINT = {"mode": "explicit"}
 
 
 def supports_explicit_prompt_cache(model_vendor: str, enabled: bool = False) -> bool:
-    return bool(enabled) and (model_vendor or "").lower() == "aws_mantle"
+    """Cache layout applies when the Admin flag is on and the vendor is allowed.
+
+    Allowed vendors come from EXPLICIT_PROMPT_CACHE_VENDORS. The default is
+    aws_mantle and openai.
+    """
+    if not enabled:
+        return False
+    from django.conf import settings
+
+    vendors = {
+        str(vendor).strip().lower()
+        for vendor in getattr(settings, "EXPLICIT_PROMPT_CACHE_VENDORS", ["aws_mantle", "openai"])
+        if str(vendor).strip()
+    }
+    return (model_vendor or "").lower() in vendors
 
 
 _warned_models: set[tuple[str, CacheProfile]] = set()

@@ -261,6 +261,8 @@ class OpenAITeamAdapter(TeamAdapter):
         vtex_host_store: Optional[str] = None,
         storefront_type: Optional[str] = None,
         project_timezone: Optional[str] = None,
+        is_live_desk_copilot: bool = False,
+        room_uuid: Optional[str] = None,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time(project_timezone)
@@ -379,6 +381,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 vtex_account=vtex_account,
                 vtex_host_store=vtex_host_store,
                 storefront_type=storefront_type,
+                is_live_desk_copilot=is_live_desk_copilot,
+                room_uuid=room_uuid,
             ),
             "user_model_credentials": user_model_credentials,
             "model_vendor": supervisor.get("model_vendor", ""),
@@ -427,6 +431,8 @@ class OpenAITeamAdapter(TeamAdapter):
         vtex_host_store: Optional[str] = None,
         storefront_type: Optional[str] = None,
         project_timezone: Optional[str] = None,
+        is_live_desk_copilot: bool = False,
+        room_uuid: Optional[str] = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
@@ -573,6 +579,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 vtex_account=vtex_account,
                 vtex_host_store=vtex_host_store,
                 storefront_type=storefront_type,
+                is_live_desk_copilot=is_live_desk_copilot,
+                room_uuid=room_uuid,
             ),
         }
 
@@ -593,17 +601,22 @@ class OpenAITeamAdapter(TeamAdapter):
         vtex_account: Optional[str] = None,
         vtex_host_store: Optional[str] = None,
         storefront_type: Optional[str] = None,
+        is_live_desk_copilot: bool = False,
+        room_uuid: Optional[str] = None,
     ) -> Context:
         if globals_dict is None:
             globals_dict = {}
 
         try:
             contact_fields = json.loads(contact_fields)
-        except json.JSONDecodeError:
+        except (TypeError, json.JSONDecodeError):
+            contact_fields = {}
+        if not isinstance(contact_fields, dict):
             contact_fields = {}
 
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
+        resolved_room = room_uuid or contact_fields.get("room_uuid") or contact_fields.get("roomUuid")
         project = {
             "uuid": project_uuid,
             "auth_token": auth_token,
@@ -611,6 +624,8 @@ class OpenAITeamAdapter(TeamAdapter):
             "vtex_account": vtex_account,
             "vtex_host_store": vtex_host_store,
             "storefront_type": storefront_type,
+            "is_live_desk_copilot": bool(is_live_desk_copilot),
+            "room_uuid": str(resolved_room) if resolved_room else None,
         }
         content_base = {"uuid": content_base_uuid}
 

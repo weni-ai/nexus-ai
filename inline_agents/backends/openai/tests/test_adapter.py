@@ -117,7 +117,7 @@ class TestBuildAgentsCollaboratorCache(TestCase):
 
     @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())
     @patch("inline_agents.backends.openai.adapter.CollaboratorEntity")
-    def test_openai_vendor_with_flag_keeps_uncached_instruction_layout(self, collaborator_entity, _make_proxy):
+    def test_openai_vendor_with_flag_enables_collaborator_cache_layout(self, collaborator_entity, _make_proxy):
         collaborator_entity.return_value.name = "orders"
         supervisor = {
             "user_model_credentials": {},
@@ -134,7 +134,7 @@ class TestBuildAgentsCollaboratorCache(TestCase):
 
         self.assertEqual(
             collaborator_entity.call_args.kwargs["instructions"],
-            "Track orders only.\nShared guidelines",
+            f"Shared guidelines\n{OBJECTIVE_MARKER}\nTrack orders only.",
         )
 
     @patch("inline_agents.backends.openai.adapter.make_agent_proxy_tool", return_value=MagicMock())

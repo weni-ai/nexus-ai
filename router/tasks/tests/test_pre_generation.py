@@ -289,3 +289,4 @@ class PreGenerationProjectToDictTestCase(SimpleTestCase):
         self.assertEqual(result["vtex_host_store"], "https://www.mystore.com.br")
         self.assertEqual(result["storefront_type"], "vtex_io")
         self.assertEqual(result["timezone"], "America/Manaus")
+        self.assertFalse(result["is_live_desk_copilot"])

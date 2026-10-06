@@ -3,6 +3,7 @@ import secrets
 from enum import Enum
 from uuid import uuid4
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -325,3 +326,69 @@ class ProjectGuardrailsConfig(models.Model):
         for slug, blocked in self.category_states.items():
             if not isinstance(slug, str) or not isinstance(blocked, bool):
                 raise ValidationError({"category_states": "Each entry must be a slug string mapped to a boolean."})
+
+
+class SpecializedKnowledgeEntry(models.Model):
+    """Operator-curated knowledge for a Live Desk copilot project."""
+
+    CATEGORY_CHOICES = (
+        ("pedido", "pedido"),
+        ("entrega", "entrega"),
+        ("pagamento", "pagamento"),
+        ("produto", "produto"),
+        ("conta", "conta"),
+        ("preferencia", "preferencia"),
+        ("contato", "contato"),
+        ("politica", "politica"),
+        ("procedimento", "procedimento"),
+        ("outro", "outro"),
+    )
+    RELEVANCE_CHOICES = (
+        ("current_issue", "current_issue"),
+        ("likely_future_issue", "likely_future_issue"),
+    )
+
+    uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="specialized_knowledge_entries",
+        limit_choices_to={"is_live_desk_copilot": True},
+    )
+    content = models.TextField()
+    source = models.CharField(max_length=512, blank=True)
+    room_uuid = models.CharField(max_length=64, blank=True)
+    origin = models.CharField(max_length=32, default="agent", choices=(("agent", "agent"),))
+    demand = models.TextField(blank=True)
+    category = models.CharField(max_length=32, blank=True, choices=CATEGORY_CHOICES)
+    relevance = models.CharField(max_length=32, blank=True, choices=RELEVANCE_CHOICES)
+    tags = models.JSONField(default=list, blank=True)
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["project", "category"], name="projects_sp_project_7a0c0d_idx"),
+            models.Index(fields=["project", "relevance"], name="projects_sp_project_1b6e2a_idx"),
+            models.Index(fields=["project", "room_uuid"], name="projects_sp_project_9c4f11_idx"),
+        ]
+
+    def clean(self):
+        if self.project_id and not self.project.is_live_desk_copilot:
+            raise ValidationError(
+                {"project": "Specialized knowledge can only be attached to a Live Desk copilot project."}
+            )
+        self.content = (self.content or "").strip()
+        if not self.content:
+            raise ValidationError({"content": "content is required."})
+        if self.tags in (None, ""):
+            self.tags = []
+        if not isinstance(self.tags, list) or any(not isinstance(tag, str) for tag in self.tags):
+            raise ValidationError({"tags": "tags must be a list of strings."})
+        if not (self.source or "").strip():
+            if self.room_uuid:
+                self.source = f"Operator specialized KB (agent-provided, room {self.room_uuid})"
+            else:
+                self.source = "Operator specialized KB (agent-provided)"
+
+    def __str__(self) -> str:
+        return f"{self.project_id} - {self.content[:40]}"
