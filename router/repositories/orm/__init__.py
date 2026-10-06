@@ -1,7 +1,9 @@
+import logging
 import os
 from typing import List
 
 import django
+from django.conf import settings
 from django.core.cache import cache
 
 from nexus.actions.models import Flow
@@ -27,6 +29,8 @@ try:
 except RuntimeError:
     pass  # Django is already setting up or configured
 
+logger = logging.getLogger(__name__)
+
 
 class ContentBaseORMRepository(Repository):
     def _get_content_base(self, content_base_uuid: str) -> ContentBase:
@@ -43,7 +47,18 @@ class ContentBaseORMRepository(Repository):
 
     def get_agent(self, content_base_uuid: str) -> AgentDTO:
         content_base = ContentBase.objects.get(uuid=content_base_uuid)
-        agent: ContentBaseAgent = content_base.agent
+        try:
+            agent = content_base.agent
+        except ContentBaseAgent.DoesNotExist:
+            agent, created = ContentBaseAgent.objects.get_or_create(
+                content_base=content_base,
+                defaults={"personality": settings.DEFAULT_AGENT_PERSONALITY},
+            )
+            if created:
+                logger.info(
+                    "Created default ContentBaseAgent for content base %s",
+                    content_base.uuid,
+                )
 
         return AgentDTO(
             name=agent.name,
