@@ -79,6 +79,26 @@ def should_skip_conversation_sqs(preview: bool, simulation_channel_effective: bo
     return bool(preview) or bool(simulation_channel_effective)
 
 
+def _is_manager_agent_uuid(value: Optional[str]) -> bool:
+    """True when the preview cache holds a ManagerAgent UUID, not a model name."""
+    if not value or not str(value).strip():
+        return False
+    try:
+        UUID(str(value).strip())
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return True
+
+
+def _simulation_manager_switch_blocked(project_uuid: str) -> bool:
+    """Projects on an API-hidden provider keep their manager in preview."""
+    from nexus.inline_agents.backends.openai.models import is_api_hidden_model_vendor
+    from nexus.projects.models import Project
+
+    project = Project.objects.filter(uuid=project_uuid).select_related("manager_agent").first()
+    return bool(project and is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)))
+
+
 def _get_simulation_manager_model(project_uuid: str, contact_urn: str) -> Optional[str]:
     try:
         raw = get_redis_read_client().get(simulation_manager_model_redis_key(project_uuid, contact_urn))
@@ -101,20 +121,9 @@ def _get_simulation_manager_pipeline_version(project_uuid: str, contact_urn: str
         return None
 
 
-def apply_simulation_manager_pipeline_version_override(
-    on_default_simulation_channel: bool,
-    project_uuid: str,
-    contact_urn: str,
-    base_version: Optional[str],
-) -> Optional[str]:
-    if not on_default_simulation_channel or not project_uuid:
-        return base_version
-    cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
-    if cached is None:
-        return base_version
+def _pipeline_version_from_cache(cached: str, project_uuid: str, contact_urn: str) -> Optional[str]:
+    """Map a cached pipeline token to the version used for this turn. No Redis."""
     stripped = cached.strip()
-    if not stripped:
-        return base_version
     urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
     if is_new_pipeline_sentinel(stripped):
         logger.info(
@@ -134,22 +143,92 @@ def apply_simulation_manager_pipeline_version_override(
     return stripped
 
 
+def apply_simulation_manager_pipeline_version_override(
+    on_default_simulation_channel: bool,
+    project_uuid: str,
+    contact_urn: str,
+    base_version: Optional[str],
+) -> Optional[str]:
+    if not on_default_simulation_channel or not project_uuid:
+        return base_version
+    if _simulation_manager_switch_blocked(project_uuid):
+        return base_version
+    cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
+    if cached is None or not cached.strip():
+        return base_version
+    return _pipeline_version_from_cache(cached, project_uuid, contact_urn)
+
+
+def resolve_simulation_pipeline_replacement(
+    on_default_simulation_channel: bool,
+    project_uuid: str,
+    contact_urn: str,
+    base_version: Optional[str],
+) -> tuple[bool, Optional[str]]:
+    """Return whether Redis should replace the project pipeline for this turn.
+
+    ``False`` keeps the pipeline already resolved for the project. ``True`` applies
+    the cached version, including ``None`` when the cache forces the new pipeline.
+    """
+    if not on_default_simulation_channel or not project_uuid:
+        return False, base_version
+    cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
+    if cached is None or not cached.strip():
+        return False, base_version
+    if _simulation_manager_switch_blocked(project_uuid):
+        return False, base_version
+    return True, _pipeline_version_from_cache(cached, project_uuid, contact_urn)
+
+
+def apply_simulation_supervisor_agent_override(
+    on_default_simulation_channel: bool,
+    project_uuid: str,
+    contact_urn: str,
+    supervisor_agent_uuid: Optional[str],
+) -> Optional[str]:
+    """Use the preview-selected ManagerAgent for this simulation contact.
+
+    The preview dropdown posts the manager UUID in the foundation-model cache.
+    A model-name cache value does not change the supervisor. An explicit
+    supervisor on the task wins over the cache.
+    """
+    if supervisor_agent_uuid:
+        return supervisor_agent_uuid
+    if not on_default_simulation_channel or not project_uuid:
+        return supervisor_agent_uuid
+    cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
+    if not cached or not _is_manager_agent_uuid(cached):
+        return supervisor_agent_uuid
+    if _simulation_manager_switch_blocked(project_uuid):
+        return supervisor_agent_uuid
+    selected = cached.strip()
+    urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
+    logger.info(
+        "Simulation supervisor override: project_uuid=%s, contact_urn_suffix=%s, supervisor_agent_uuid=%s",
+        project_uuid,
+        urn_tail,
+        selected,
+    )
+    return selected
+
+
 def apply_simulation_foundation_model_override(
     on_default_simulation_channel: bool,
     project_uuid: str,
     contact_urn: str,
     foundation_model: Optional[str],
 ) -> Optional[str]:
-    """Replace foundation model with Redis-cached value on default preview-channel traffic."""
+    """Replace foundation model with Redis-cached value on default preview-channel traffic.
+
+    A cached ManagerAgent UUID selects the supervisor row instead of a model name.
+    """
     if not on_default_simulation_channel or not project_uuid:
         return foundation_model
-    from nexus.inline_agents.backends.openai.models import is_api_hidden_model_vendor
-    from nexus.projects.models import Project
-
-    project = Project.objects.filter(uuid=project_uuid).select_related("manager_agent").first()
-    if project and is_api_hidden_model_vendor(getattr(project.manager_agent, "model_vendor", None)):
+    if _simulation_manager_switch_blocked(project_uuid):
         return foundation_model
     cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
+    if cached and _is_manager_agent_uuid(cached):
+        return foundation_model
     effective = cached if cached else foundation_model
     urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
     logger.info(
@@ -606,6 +685,12 @@ def start_inline_agents(  # noqa: C901
                     project_uuid or "",
                     message.get("contact_urn") or "",
                     project_dict.get("manager_pipeline_version"),
+                )
+                supervisor_agent_uuid = apply_simulation_supervisor_agent_override(
+                    simulation_channel_effective,
+                    project_uuid or "",
+                    message.get("contact_urn") or "",
+                    supervisor_agent_uuid,
                 )
 
                 message_obj = message_factory(
