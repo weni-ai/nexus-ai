@@ -129,6 +129,8 @@ def apply_simulation_manager_pipeline_version_override(
 ) -> Optional[str]:
     if not on_default_simulation_channel or not project_uuid:
         return base_version
+    if _simulation_manager_switch_blocked(project_uuid):
+        return base_version
     cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
     if cached is None:
         return base_version
@@ -169,6 +171,8 @@ def resolve_simulation_pipeline_replacement(
         return False, base_version
     cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
     if cached is None or not cached.strip():
+        return False, base_version
+    if _simulation_manager_switch_blocked(project_uuid):
         return False, base_version
     return True, apply_simulation_manager_pipeline_version_override(
         on_default_simulation_channel,

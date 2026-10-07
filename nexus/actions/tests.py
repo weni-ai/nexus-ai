@@ -536,12 +536,14 @@ class SimulationActionsApiTestCase(TestCase):
         force_authenticate(request, user=self.user)
         return SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
 
+    @patch("nexus.actions.api.views.clear_simulation_manager_pipeline_version")
     @patch("nexus.actions.api.views.get_redis_write_client")
-    def test_simulation_manager_model_post_stores_model_name(self, mock_redis):
+    def test_simulation_manager_model_post_stores_model_name(self, mock_redis, mock_clear_pipeline):
         response = self._post_manager_model("gpt-4.1", contact_urn="ext:preview@weni.ai")
         self.assertEqual(response.status_code, 200)
         key = simulation_manager_model_redis_key(str(self.project.uuid), "ext:preview@weni.ai")
         mock_redis.return_value.setex.assert_called_once_with(key, SIMULATION_MANAGER_MODEL_TTL_SECONDS, "gpt-4.1")
+        mock_clear_pipeline.assert_called_once_with(str(self.project.uuid), "ext:preview@weni.ai")
 
     @patch("nexus.actions.api.views.get_redis_write_client")
     def test_simulation_manager_model_post_uuid_stores_manager_and_new_pipeline(self, mock_redis):

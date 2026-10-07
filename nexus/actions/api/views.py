@@ -425,6 +425,7 @@ class SimulationManagerModelView(APIView):
                 SIMULATION_MANAGER_MODEL_TTL_SECONDS,
                 str(manager_foundation_model),
             )
+            clear_simulation_manager_pipeline_version(project_uuid, contact_urn)
             return Response(
                 {
                     "manager_foundation_model": manager_foundation_model,

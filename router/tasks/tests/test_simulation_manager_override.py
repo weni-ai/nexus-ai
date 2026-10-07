@@ -4,6 +4,7 @@ from django.test import SimpleTestCase
 
 from router.tasks.invoke import (
     apply_simulation_foundation_model_override,
+    apply_simulation_manager_pipeline_version_override,
     apply_simulation_supervisor_agent_override,
     resolve_simulation_pipeline_replacement,
 )
@@ -65,15 +66,17 @@ class SimulationManagerOverrideTest(SimpleTestCase):
         result = apply_simulation_supervisor_agent_override(True, "proj", "ext:user@weni.ai", None)
         self.assertIsNone(result)
 
+    @patch("router.tasks.invoke._simulation_manager_switch_blocked", return_value=False)
     @patch("router.tasks.invoke.get_redis_read_client")
-    def test_pipeline_replacement_forces_new_pipeline(self, mock_redis):
+    def test_pipeline_replacement_forces_new_pipeline(self, mock_redis, _blocked):
         mock_redis.return_value = _redis_get("new")
         replace, version = resolve_simulation_pipeline_replacement(True, "proj", "ext:user@weni.ai", "2.6")
         self.assertTrue(replace)
         self.assertIsNone(version)
 
+    @patch("router.tasks.invoke._simulation_manager_switch_blocked", return_value=False)
     @patch("router.tasks.invoke.get_redis_read_client")
-    def test_pipeline_replacement_uses_legacy_token(self, mock_redis):
+    def test_pipeline_replacement_uses_legacy_token(self, mock_redis, _blocked):
         mock_redis.return_value = _redis_get("2.6")
         replace, version = resolve_simulation_pipeline_replacement(True, "proj", "ext:user@weni.ai", None)
         self.assertTrue(replace)
@@ -85,6 +88,22 @@ class SimulationManagerOverrideTest(SimpleTestCase):
         replace, version = resolve_simulation_pipeline_replacement(True, "proj", "ext:user@weni.ai", "2.6")
         self.assertFalse(replace)
         self.assertEqual(version, "2.6")
+
+    @patch("router.tasks.invoke._simulation_manager_switch_blocked", return_value=True)
+    @patch("router.tasks.invoke.get_redis_read_client")
+    def test_pipeline_replacement_ignores_cache_for_hidden_vendor(self, mock_redis, _blocked):
+        mock_redis.return_value = _redis_get("2.6")
+        replace, version = resolve_simulation_pipeline_replacement(True, "proj", "ext:user@weni.ai", None)
+        self.assertFalse(replace)
+        self.assertIsNone(version)
+
+    @patch("router.tasks.invoke._simulation_manager_switch_blocked", return_value=True)
+    @patch("router.tasks.invoke.get_redis_read_client")
+    def test_pipeline_override_keeps_project_version_for_hidden_vendor(self, mock_redis, _blocked):
+        mock_redis.return_value = _redis_get("new")
+        version = apply_simulation_manager_pipeline_version_override(True, "proj", "ext:user@weni.ai", "2.6")
+        self.assertEqual(version, "2.6")
+        mock_redis.return_value.get.assert_not_called()
 
 
 class WorkflowPreviewManagerTest(SimpleTestCase):
