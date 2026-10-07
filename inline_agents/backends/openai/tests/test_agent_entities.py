@@ -72,15 +72,16 @@ class ResolveAgentModelTests(SimpleTestCase):
 
         self.assertEqual(model, "openai.gpt-6-luna")
 
-    def test_openai_vendor_with_flag_skips_prompt_caching_wrapper(self):
+    def test_openai_vendor_with_flag_uses_prompt_caching_wrapper(self):
         model = resolve_agent_model(
-            "openai.gpt-6-luna",
+            "gpt-6-luna",
             {},
             model_vendor="openai",
             enable_explicit_prompt_cache=True,
         )
 
-        self.assertEqual(model, "openai.gpt-6-luna")
+        self.assertIsInstance(model, PromptCachingOpenAIResponsesModel)
+        self.assertEqual(model.model, "gpt-6-luna")
 
     def test_mantle_collaborator_uses_collaborator_cache_profile(self):
         model = resolve_agent_model(

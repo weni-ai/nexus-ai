@@ -76,6 +76,7 @@ class CreateContentBaseUseCase:
         language: str = "pt-br",
         is_router: bool = False,
         check_permission: bool = True,
+        agent_profile: dict | None = None,
     ) -> ContentBase:
         org_usecase = orgs.GetOrgByIntelligenceUseCase()
         org = org_usecase.get_org_by_intelligence_uuid(intelligence_uuid)
@@ -93,10 +94,10 @@ class CreateContentBaseUseCase:
             language=language,
             is_router=is_router,
         )
-        ContentBaseAgent.objects.create(
-            content_base=contentbase,
-            personality=settings.DEFAULT_AGENT_PERSONALITY,
-        )
+        agent_fields = {"personality": settings.DEFAULT_AGENT_PERSONALITY}
+        if agent_profile:
+            agent_fields.update(agent_profile)
+        ContentBaseAgent.objects.create(content_base=contentbase, **agent_fields)
         intelligence.increase_content_bases_count()
 
         self.event_manager_notify(event="contentbase_activity", contentbase=contentbase, action_type="C", user=user)
