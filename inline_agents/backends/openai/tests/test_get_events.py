@@ -30,6 +30,26 @@ class GetEventsTests(SimpleTestCase):
             [{"event_name": "a"}, {"event_name": "b"}],
         )
 
+    def test_json_null_number_and_bool_return_empty_list(self):
+        state = HooksState(agents=[])
+        for value in (None, 0, 1, True, False):
+            self.assertEqual(state.get_events(value, "tool"), [])
+
+    def test_dict_without_events_key_returns_empty_list(self):
+        state = HooksState(agents=[])
+        self.assertEqual(state.get_events({"result": "ok"}, "tool"), [])
+
+    def test_list_item_with_non_list_events_is_skipped(self):
+        state = HooksState(agents=[])
+        result = [
+            {"events": "abc"},
+            {"events": None},
+            {"events": {"event_name": "nested"}},
+            {"other": True},
+            {"events": [{"event_name": "kept"}]},
+        ]
+        self.assertEqual(state.get_events(result, "tool"), [{"event_name": "kept"}])
+
     def test_json_string_tool_result_does_not_report_to_sentry(self):
         state = HooksState(agents=[])
         with patch("inline_agents.backends.openai.hooks.sentry_sdk.capture_exception") as capture:

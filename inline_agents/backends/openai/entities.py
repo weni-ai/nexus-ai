@@ -76,14 +76,17 @@ class HooksState:
         if isinstance(result, list):
             events = []
             for item in result:
-                if isinstance(item, dict):
-                    events.extend(item.get("events", {}))
+                if not isinstance(item, dict):
+                    continue
+                item_events = item.get("events", [])
+                if isinstance(item_events, list):
+                    events.extend(item_events)
             return events
 
         if not isinstance(result, dict):
             return []
 
-        events = result.get("events", {})
+        events = result.get("events", [])
         return events
 
 
