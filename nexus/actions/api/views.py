@@ -1,5 +1,6 @@
 import logging
 from typing import Dict
+from uuid import UUID
 
 import sentry_sdk
 from celery.exceptions import TaskRevokedError
@@ -16,6 +17,8 @@ from nexus.actions.api.serializers import (
 )
 from nexus.actions.models import Flow, TemplateAction
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.inline_agents.backends.openai.models import ManagerAgent, is_api_hidden_model_vendor
+from nexus.inline_agents.manager_rollout import can_select_manager_via_api
 from nexus.internals.flows import FlowsRESTClient
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.api.permissions import ProjectPermission
@@ -29,7 +32,6 @@ from nexus.projects.simulation_model_cache import (
     simulation_manager_model_redis_key,
     simulation_manager_pipeline_version_redis_key,
 )
-from nexus.inline_agents.backends.openai.models import is_api_hidden_model_vendor
 from nexus.usecases import projects
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
@@ -67,6 +69,45 @@ from router.tasks.tasks import start_route
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
+
+
+def _manager_uuid_from_preview_field(value) -> UUID | None:
+    """The preview client posts a ManagerAgent UUID in manager_foundation_model."""
+    try:
+        return UUID(str(value).strip())
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _store_simulation_manager_agent(project_uuid: str, contact_urn: str, manager: ManagerAgent) -> None:
+    from inline_agents.backends.openai.legacy_formatter_pipeline import (
+        LEGACY_PIPELINE_VERSION,
+        NEW_PIPELINE_SENTINEL,
+    )
+
+    client = get_redis_write_client()
+    client.setex(
+        simulation_manager_model_redis_key(project_uuid, contact_urn),
+        SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+        str(manager.uuid),
+    )
+    pipeline_value = LEGACY_PIPELINE_VERSION if is_legacy_manager_uuid(manager.uuid) else NEW_PIPELINE_SENTINEL
+    client.setex(
+        simulation_manager_pipeline_version_redis_key(project_uuid, contact_urn),
+        SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+        pipeline_value,
+    )
+
+
+def _reject_preview_manager(manager: ManagerAgent, project, user_email: str | None):
+    if is_api_hidden_model_vendor(manager.model_vendor):
+        return Response(
+            {"error": "This provider cannot be changed via API"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if not can_select_manager_via_api(manager, project, user_email):
+        return Response({"error": "Manager agent not found"}, status=status.HTTP_404_NOT_FOUND)
+    return None
 
 
 class SearchFlowView(APIView):
@@ -361,12 +402,30 @@ class SimulationManagerModelView(APIView):
                     {"error": "This provider cannot be changed via API"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
+            manager_uuid = _manager_uuid_from_preview_field(manager_foundation_model)
+            if manager_uuid is not None:
+                manager = ManagerAgent.objects.filter(uuid=manager_uuid).first()
+                if manager is None:
+                    return Response({"error": "Manager agent not found"}, status=status.HTTP_404_NOT_FOUND)
+                user_email = getattr(request.user, "email", None)
+                rejected = _reject_preview_manager(manager, project, user_email)
+                if rejected is not None:
+                    return rejected
+                _store_simulation_manager_agent(project_uuid, contact_urn, manager)
+                return Response(
+                    {
+                        "manager_foundation_model": str(manager.uuid),
+                        "manager_agent_uuid": str(manager.uuid),
+                        "ttl_seconds": SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+                    }
+                )
             key = simulation_manager_model_redis_key(project_uuid, contact_urn)
             get_redis_write_client().setex(
                 key,
                 SIMULATION_MANAGER_MODEL_TTL_SECONDS,
                 str(manager_foundation_model),
             )
+            clear_simulation_manager_pipeline_version(project_uuid, contact_urn)
             return Response(
                 {
                     "manager_foundation_model": manager_foundation_model,
