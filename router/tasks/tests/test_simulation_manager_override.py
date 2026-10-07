@@ -73,6 +73,7 @@ class SimulationManagerOverrideTest(SimpleTestCase):
         replace, version = resolve_simulation_pipeline_replacement(True, "proj", "ext:user@weni.ai", "2.6")
         self.assertTrue(replace)
         self.assertIsNone(version)
+        mock_redis.return_value.get.assert_called_once()
 
     @patch("router.tasks.invoke._simulation_manager_switch_blocked", return_value=False)
     @patch("router.tasks.invoke.get_redis_read_client")
@@ -81,6 +82,7 @@ class SimulationManagerOverrideTest(SimpleTestCase):
         replace, version = resolve_simulation_pipeline_replacement(True, "proj", "ext:user@weni.ai", None)
         self.assertTrue(replace)
         self.assertEqual(version, "2.6")
+        mock_redis.return_value.get.assert_called_once()
 
     @patch("router.tasks.invoke.get_redis_read_client")
     def test_pipeline_replacement_keeps_project_pipeline_without_cache(self, mock_redis):

@@ -121,22 +121,9 @@ def _get_simulation_manager_pipeline_version(project_uuid: str, contact_urn: str
         return None
 
 
-def apply_simulation_manager_pipeline_version_override(
-    on_default_simulation_channel: bool,
-    project_uuid: str,
-    contact_urn: str,
-    base_version: Optional[str],
-) -> Optional[str]:
-    if not on_default_simulation_channel or not project_uuid:
-        return base_version
-    if _simulation_manager_switch_blocked(project_uuid):
-        return base_version
-    cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
-    if cached is None:
-        return base_version
+def _pipeline_version_from_cache(cached: str, project_uuid: str, contact_urn: str) -> Optional[str]:
+    """Map a cached pipeline token to the version used for this turn. No Redis."""
     stripped = cached.strip()
-    if not stripped:
-        return base_version
     urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
     if is_new_pipeline_sentinel(stripped):
         logger.info(
@@ -154,6 +141,22 @@ def apply_simulation_manager_pipeline_version_override(
         stripped,
     )
     return stripped
+
+
+def apply_simulation_manager_pipeline_version_override(
+    on_default_simulation_channel: bool,
+    project_uuid: str,
+    contact_urn: str,
+    base_version: Optional[str],
+) -> Optional[str]:
+    if not on_default_simulation_channel or not project_uuid:
+        return base_version
+    if _simulation_manager_switch_blocked(project_uuid):
+        return base_version
+    cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
+    if cached is None or not cached.strip():
+        return base_version
+    return _pipeline_version_from_cache(cached, project_uuid, contact_urn)
 
 
 def resolve_simulation_pipeline_replacement(
@@ -174,12 +177,7 @@ def resolve_simulation_pipeline_replacement(
         return False, base_version
     if _simulation_manager_switch_blocked(project_uuid):
         return False, base_version
-    return True, apply_simulation_manager_pipeline_version_override(
-        on_default_simulation_channel,
-        project_uuid,
-        contact_urn,
-        base_version,
-    )
+    return True, _pipeline_version_from_cache(cached, project_uuid, contact_urn)
 
 
 def apply_simulation_supervisor_agent_override(
