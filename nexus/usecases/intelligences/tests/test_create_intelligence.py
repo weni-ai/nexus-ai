@@ -4,7 +4,7 @@ from django.db.models.signals import post_save
 from django.test import TestCase
 
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
-from nexus.intelligences.models import LLM
+from nexus.intelligences.models import ContentBaseAgent, LLM
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO, ContentBaseDTO, ContentBaseTextDTO
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
@@ -168,6 +168,22 @@ class TestBrain(TestCase):
         self.assertEqual(brain.intelligence.created_by, self.project.created_by)
         self.assertEqual(brain.intelligence.contentbases.first().title, self.project.name)
         self.assertEqual(brain.intelligence.contentbases.first().created_by, self.project.created_by)
-        self.assertTrue(brain.intelligence.contentbases.first().is_router)
+        content_base = brain.intelligence.contentbases.first()
+        self.assertTrue(content_base.is_router)
+        self.assertEqual(content_base.agent.personality, settings.DEFAULT_AGENT_PERSONALITY)
         self.assertEqual(brain.project, self.project)
         self.assertEqual(brain.created_by, self.project.created_by)
+
+    def test_get_agent_creates_default_when_missing(self):
+        from router.repositories.orm import ContentBaseORMRepository
+
+        brain = create_base_brain_structure(self.project)
+        content_base = brain.intelligence.contentbases.get(is_router=True)
+        content_base.agent.delete()
+
+        dto = ContentBaseORMRepository().get_agent(str(content_base.uuid))
+
+        content_base.refresh_from_db()
+        self.assertEqual(content_base.agent.personality, settings.DEFAULT_AGENT_PERSONALITY)
+        self.assertEqual(dto.personality, settings.DEFAULT_AGENT_PERSONALITY)
+        self.assertEqual(ContentBaseAgent.objects.filter(content_base=content_base).count(), 1)

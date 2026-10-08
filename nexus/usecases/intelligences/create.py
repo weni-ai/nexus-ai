@@ -262,7 +262,13 @@ def create_base_brain_structure(
     user = org.created_by
 
     intelligence = Intelligence.objects.create(name=proj.name, org=org, created_by=user, is_router=True)
-    ContentBase.objects.create(title=proj.name, intelligence=intelligence, created_by=user, is_router=True)
+    content_base = ContentBase.objects.create(
+        title=proj.name, intelligence=intelligence, created_by=user, is_router=True
+    )
+    ContentBaseAgent.objects.create(
+        content_base=content_base,
+        personality=settings.DEFAULT_AGENT_PERSONALITY,
+    )
     integrated_intelligence = create_base_integrated_intelligence(project=proj, user=user, intelligence=intelligence)
     # TODO: Handle different languages
     LLM.objects.create(
