@@ -35,6 +35,23 @@ def apply_ig_comment_fields_to_broadcast_msgs(msgs: List, ig_fields: Dict[str, s
     return msgs
 
 
+def _is_empty_text_broadcast(item) -> bool:
+    """True when msg has no content besides a missing or whitespace-only text."""
+    if not isinstance(item, dict):
+        return False
+    payload = item.get("msg")
+    if not isinstance(payload, dict):
+        return False
+    if set(payload) - {"text"}:
+        return False
+    text = payload.get("text")
+    if text is None:
+        return True
+    if not isinstance(text, str):
+        return False
+    return not text.strip()
+
+
 class SendMessageHTTPClient(DirectMessage):
     def __init__(self, host: str, access_token: str, use_grpc: bool = False) -> None:
         self.__host = host
@@ -165,6 +182,11 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             msgs = self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
 
         apply_ig_comment_fields_to_broadcast_msgs(msgs, ig_comment_fields_from_kwargs(kwargs))
+
+        msgs = [item for item in msgs if not _is_empty_text_broadcast(item)]
+        if not msgs:
+            logger.info("Skipping WhatsApp broadcast with empty text for project %s", project_uuid)
+            return
 
         for msg in msgs:
             response = FlowsRESTClient().whatsapp_broadcast(

@@ -268,3 +268,64 @@ class InstagramCommentActionClientTestCase(SimpleTestCase):
         )
 
         self.assertIs(type(client), InstagramCommentBroadcastHTTPClient)
+
+
+class EmptyTextBroadcastTestCase(SimpleTestCase):
+    @patch("router.clients.flows.http.send_message.FlowsRESTClient")
+    def test_empty_text_does_not_call_whatsapp_broadcast(self, mock_rest):
+        mock_rest.return_value.whatsapp_broadcast.return_value.raise_for_status = MagicMock()
+        client = WhatsAppBroadcastHTTPClient("http://flows.example", "token")
+        payload = json.dumps([{"msg": {"text": ""}}])
+
+        with self.assertLogs("router.clients.flows.http.send_message", level="INFO") as logs:
+            client.send_direct_message(
+                payload,
+                ["whatsapp:5511999999999"],
+                "project-uuid",
+                "user@example.com",
+                full_chunks=[],
+                backend="OpenAIBackend",
+            )
+
+        mock_rest.return_value.whatsapp_broadcast.assert_not_called()
+        logged = "\n".join(logs.output)
+        self.assertIn("project-uuid", logged)
+        self.assertNotIn("5511999999999", logged)
+
+    @patch("router.clients.flows.http.send_message.FlowsRESTClient")
+    def test_empty_text_with_quick_replies_still_calls_whatsapp_broadcast(self, mock_rest):
+        mock_rest.return_value.whatsapp_broadcast.return_value.raise_for_status = MagicMock()
+        client = WhatsAppBroadcastHTTPClient("http://flows.example", "token")
+        payload = json.dumps([{"msg": {"text": "", "quick_replies": ["yes"]}}])
+
+        client.send_direct_message(
+            payload,
+            ["whatsapp:5511999999999"],
+            "project-uuid",
+            "user@example.com",
+            full_chunks=[],
+            backend="OpenAIBackend",
+        )
+
+        mock_rest.return_value.whatsapp_broadcast.assert_called_once()
+        sent_msg = mock_rest.return_value.whatsapp_broadcast.call_args.args[1]
+        self.assertEqual(sent_msg, {"msg": {"text": "", "quick_replies": ["yes"]}})
+
+    @patch("router.clients.flows.http.send_message.FlowsRESTClient")
+    def test_non_empty_text_still_calls_whatsapp_broadcast(self, mock_rest):
+        mock_rest.return_value.whatsapp_broadcast.return_value.raise_for_status = MagicMock()
+        client = WhatsAppBroadcastHTTPClient("http://flows.example", "token")
+        payload = json.dumps([{"msg": {"text": "hello"}}])
+
+        client.send_direct_message(
+            payload,
+            ["whatsapp:5511999999999"],
+            "project-uuid",
+            "user@example.com",
+            full_chunks=[],
+            backend="OpenAIBackend",
+        )
+
+        mock_rest.return_value.whatsapp_broadcast.assert_called_once()
+        sent_msg = mock_rest.return_value.whatsapp_broadcast.call_args.args[1]
+        self.assertEqual(sent_msg, {"msg": {"text": "hello"}})
