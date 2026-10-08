@@ -66,7 +66,7 @@ class HooksState:
     def add_tool_call(self, tool_call: Dict[str, Any]):
         self.tool_calls.update(tool_call)
 
-    def get_events(self, result: dict, tool_name: str):
+    def get_events(self, result: Any, tool_name: str):
         current_info = self.get_tool_info(tool_name)
         session_events = current_info.get("events", {})
 
@@ -76,11 +76,17 @@ class HooksState:
         if isinstance(result, list):
             events = []
             for item in result:
-                if isinstance(item, dict):
-                    events.extend(item.get("events", {}))
+                if not isinstance(item, dict):
+                    continue
+                item_events = item.get("events", [])
+                if isinstance(item_events, list):
+                    events.extend(item_events)
             return events
 
-        events = result.get("events", {})
+        if not isinstance(result, dict):
+            return []
+
+        events = result.get("events", [])
         return events
 
 
