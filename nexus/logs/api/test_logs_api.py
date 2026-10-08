@@ -4,14 +4,15 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pendulum
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework import status
 from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
 
 from nexus.actions.models import Flow
-from nexus.logs.api.serializers import MessageLogSerializer
+from nexus.inline_agents.models import InlineAgentMessage
+from nexus.logs.api.serializers import InlineConversationSerializer, MessageLogSerializer
 from nexus.logs.api.views import (
     InlineConversationsViewset,
     LogsViewset,
@@ -868,3 +869,34 @@ class InlineConversationsViewsetTestCase(TestCase):
         # Verify message5 is not in the results
         for result in results:
             self.assertNotEqual(result.get("text"), self.message5.text)
+
+
+class InlineConversationMessageKindTestCase(SimpleTestCase):
+    def test_history_payload_includes_kind_and_omits_null(self):
+        tagged = InlineAgentMessage(
+            uuid=uuid4(),
+            text="checking",
+            source_type="agent",
+            source="router",
+            session_id="s",
+            contact_urn="ext:1",
+            message_kind="rationale",
+            rationale_index=1,
+        )
+        legacy = InlineAgentMessage(
+            uuid=uuid4(),
+            text="old answer",
+            source_type="agent",
+            source="router",
+            session_id="s",
+            contact_urn="ext:1",
+            message_kind=None,
+            rationale_index=None,
+        )
+
+        tagged_data = InlineConversationSerializer(tagged).data
+        self.assertEqual(tagged_data["message_kind"], "rationale")
+        self.assertEqual(tagged_data["rationale_index"], 1)
+        legacy_data = InlineConversationSerializer(legacy).data
+        self.assertNotIn("message_kind", legacy_data)
+        self.assertNotIn("rationale_index", legacy_data)

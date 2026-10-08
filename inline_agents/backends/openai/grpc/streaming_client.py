@@ -22,6 +22,12 @@ from inline_agents.backends.openai.grpc.generated import (
 logger = logging.getLogger(__name__)
 
 
+def _with_final_response(metadata: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    from router.clients.flows.http.send_message import FINAL_RESPONSE
+
+    return {"message_kind": FINAL_RESPONSE, **(metadata or {})}
+
+
 def is_grpc_enabled(project_uuid: str, use_components: bool, stream_support: bool) -> bool:
     """
     Check if GRPC is enabled for a project.
@@ -88,8 +94,16 @@ class StreamingSession:
         self._responses: List[Dict[str, Any]] = []
         self._error: Optional[Exception] = None
 
-    def _create_message(self, msg_type: str, content: str = "") -> message_stream_service_pb2.StreamMessage:
-        """Create a StreamMessage with the given type and content."""
+    def _create_message(
+        self,
+        msg_type: str,
+        content: str = "",
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> message_stream_service_pb2.StreamMessage:
+        """Create a StreamMessage. Extra metadata overrides the session metadata."""
+        merged = dict(self.metadata)
+        if metadata:
+            merged.update(metadata)
         return message_stream_service_pb2.StreamMessage(
             type=msg_type,
             msg_id=self.msg_id,
@@ -97,7 +111,7 @@ class StreamingSession:
             channel_uuid=self.channel_uuid,
             contact_urn=self.contact_urn,
             project_uuid=self.project_uuid,
-            metadata=self.metadata,
+            metadata=merged,
             timestamp=datetime.now().isoformat(),
         )
 
@@ -219,7 +233,7 @@ class StreamingSession:
             self._error = e
             return False
 
-    def send_delta(self, content: str) -> bool:
+    def send_delta(self, content: str, metadata: Optional[Dict[str, str]] = None) -> bool:
         """
         Send a delta message through the persistent stream.
 
@@ -234,12 +248,12 @@ class StreamingSession:
             return False
 
         self._delta_counter += 1
-        delta_msg = self._create_message("delta", content)
+        delta_msg = self._create_message("delta", content, metadata=_with_final_response(metadata))
         self._message_queue.put(delta_msg)
         logger.debug(f"[gRPC Session] Queued delta #{self._delta_counter}")
         return True
 
-    def send_completed(self, content: str) -> bool:
+    def send_completed(self, content: str, metadata: Optional[Dict[str, str]] = None) -> bool:
         """
         Send a completed message and close the stream.
 
@@ -254,7 +268,7 @@ class StreamingSession:
             return False
 
         logger.info(f"[gRPC Session] Sending completed message ({len(content)} chars)")
-        completed_msg = self._create_message("completed", content)
+        completed_msg = self._create_message("completed", content, metadata=_with_final_response(metadata))
         self._message_queue.put(completed_msg)
 
         # Signal the generator to stop
@@ -265,6 +279,30 @@ class StreamingSession:
             self._response_thread.join(timeout=5)
 
         self._stream_active = False
+        return True
+
+    def send_rationale(self, content: str, rationale_index: str) -> bool:
+        """Send one complete progress update. Does not close the stream."""
+        if not self._stream_active:
+            logger.warning("[gRPC Session] Cannot send rationale - stream not active")
+            return False
+
+        text = (content or "").strip()
+        if not text:
+            return False
+
+        from router.clients.flows.http.send_message import RATIONALE
+
+        rationale_msg = self._create_message(
+            "rationale",
+            text,
+            metadata={
+                "message_kind": RATIONALE,
+                "rationale_index": str(rationale_index),
+            },
+        )
+        self._message_queue.put(rationale_msg)
+        logger.info("[gRPC Session] Queued rationale #%s", rationale_index)
         return True
 
     def close(self):

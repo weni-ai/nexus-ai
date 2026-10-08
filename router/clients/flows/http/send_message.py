@@ -12,6 +12,9 @@ from router.entities.mailroom import extract_ig_comment_broadcast_fields
 
 logger = logging.getLogger(__name__)
 
+RATIONALE = "rationale"
+FINAL_RESPONSE = "final_response"
+
 
 def ig_comment_fields_from_kwargs(kwargs: Dict) -> Dict[str, str]:
     """Prefer explicit kwargs from dispatch; fall back to message metadata."""
@@ -42,7 +45,7 @@ class SendMessageHTTPClient(DirectMessage):
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ) -> None:
         if self.__use_grpc:
-            # Use same format as whatsapp_broadcasts endpoint
+            # Use same format as whatsapp_broadcasts endpoint.
             msg = {"msg": {"text": text}}
             channel_uuid = kwargs.get("channel_uuid", "")
             logger.info(
