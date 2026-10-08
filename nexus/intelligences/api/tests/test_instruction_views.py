@@ -9,6 +9,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from nexus.intelligences.api.instruction_views import ProjectInstructionsViewSet
 from nexus.intelligences.constants import DUPLICATE_CATEGORY_NAME_ERROR
+from nexus.intelligences.default_instructions import default_instruction_texts
 from nexus.intelligences.models import ContentBaseInstruction, InstructionCategory
 from nexus.projects.models import Project
 from nexus.projects.permissions import has_project_permission
@@ -67,6 +68,9 @@ class TestProjectInstructionsViewSet(TestCase):
         }
         payload.update(overrides)
         return payload
+
+    def _catalog_rows(self, label="Instruções padrão", language="Portuguese"):
+        return [[label, text] for text in default_instruction_texts(language)]
 
     def _export(self, data=None):
         export_url = f"{self.project.uuid}/instructions/export/"
@@ -238,6 +242,27 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertEqual(len(content["categories"][0]["instructions"]), 1)
         self.assertEqual(content["categories"][1]["name"], "policy")
         self.assertEqual(content["categories"][1]["instructions"], [])
+        self.assertEqual(
+            [item["instruction"] for item in content["default_instructions"]["instructions"]],
+            default_instruction_texts("Portuguese"),
+        )
+        self.assertTrue(content["default_instructions"]["instructions"][0]["locked"])
+
+    def test_list_returns_default_instructions_in_the_requested_language(self):
+        request = self.factory.get(f"{self.url}?language=English")
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"get": "list"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+        instructions = content["default_instructions"]["instructions"]
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("NEVER", instructions[1]["instruction"])
+        self.assertEqual(instructions[0]["id"], "default-1")
 
     def test_post_creates_instruction_in_new_category_by_name(self):
         response = self._post(
@@ -478,6 +503,7 @@ class TestProjectInstructionsViewSet(TestCase):
             [
                 ["greeting", "Always greet the customer"],
                 ["Sem categoria", "Legacy instruction"],
+                *self._catalog_rows(),
             ],
         )
 
@@ -526,12 +552,12 @@ class TestProjectInstructionsViewSet(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
 
-    def test_export_returns_header_only_when_no_instructions(self):
+    def test_export_uses_catalog_when_default_texts_are_omitted(self):
         response = self._export()
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
-        self.assertEqual(rows, [["Categoria", "Instrução"]])
+        self.assertEqual(rows, [["Categoria", "Instrução"], *self._catalog_rows()])
 
     def test_destroy_deletes_instruction_and_returns_grouped_payload(self):
         category = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")

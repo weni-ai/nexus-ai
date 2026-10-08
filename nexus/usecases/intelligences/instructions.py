@@ -7,6 +7,7 @@ from django.db import IntegrityError
 from django.forms.models import model_to_dict
 
 from nexus.events import event_manager, notify_async
+from nexus.intelligences.default_instructions import default_instruction_group
 from nexus.intelligences.models import ContentBase, ContentBaseInstruction, InstructionCategory
 
 
@@ -19,7 +20,11 @@ def _find_category_by_name(content_base: ContentBase, name: str) -> InstructionC
 
 
 class ProjectInstructionsUseCase:
-    def get_grouped_instructions(self, content_base: ContentBase) -> dict[str, list[dict[str, Any]]]:
+    def get_grouped_instructions(
+        self,
+        content_base: ContentBase,
+        language: str = "Portuguese",
+    ) -> dict[str, Any]:
         categories = []
         for category in content_base.instruction_categories.prefetch_related("instructions").order_by("id"):
             categories.append(
@@ -38,7 +43,10 @@ class ProjectInstructionsUseCase:
             {"id": instruction.id, "instruction": instruction.instruction} for instruction in uncategorized
         ]
 
-        payload: dict[str, list] = {"categories": categories}
+        payload: dict[str, Any] = {
+            "categories": categories,
+            "default_instructions": default_instruction_group(language),
+        }
         if uncategorized_instructions:
             payload["uncategorized_instructions"] = uncategorized_instructions
 
@@ -80,7 +88,8 @@ class ProjectInstructionsUseCase:
         category_data: dict[str, Any] | None,
         user,
         project_uuid: str,
-    ) -> dict[str, list[dict[str, Any]]]:
+        language: str = "Portuguese",
+    ) -> dict[str, Any]:
         instruction_text = (instruction_text or "").strip()
         if not instruction_text:
             raise ValueError("Instruction text is required")
@@ -106,7 +115,7 @@ class ProjectInstructionsUseCase:
             project_uuid=project_uuid,
         )
 
-        return self.get_grouped_instructions(content_base)
+        return self.get_grouped_instructions(content_base, language=language)
 
     def patch_grouped_instructions(
         self,
@@ -115,7 +124,8 @@ class ProjectInstructionsUseCase:
         uncategorized_data: list[dict[str, Any]] | None,
         user,
         project_uuid: str,
-    ) -> dict[str, list[dict[str, Any]]]:
+        language: str = "Portuguese",
+    ) -> dict[str, Any]:
         if categories_data:
             for category_data in categories_data:
                 category = self._resolve_category_for_patch(content_base, category_data)
@@ -130,9 +140,15 @@ class ProjectInstructionsUseCase:
             project_uuid=project_uuid,
         )
 
-        return self.get_grouped_instructions(content_base)
+        return self.get_grouped_instructions(content_base, language=language)
 
-    def delete_category(self, content_base: ContentBase, category_id: int, project_uuid: str) -> dict[str, list]:
+    def delete_category(
+        self,
+        content_base: ContentBase,
+        category_id: int,
+        project_uuid: str,
+        language: str = "Portuguese",
+    ) -> dict[str, Any]:
         category = content_base.instruction_categories.get(id=category_id)
         self._uncategorize_instructions_for_category(category)
         category.delete()
@@ -142,7 +158,7 @@ class ProjectInstructionsUseCase:
             project_uuid=project_uuid,
         )
 
-        return self.get_grouped_instructions(content_base)
+        return self.get_grouped_instructions(content_base, language=language)
 
     def _resolve_category_for_create(
         self, content_base: ContentBase, category_data: dict[str, Any] | None
