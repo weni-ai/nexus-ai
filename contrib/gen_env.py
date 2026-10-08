@@ -83,6 +83,7 @@ def generate_env():
         "WENIGPT_FINE_TUNNING_VERSIONS": "",
         "WENIGPT_OPENAI_TOKEN": "",
         "DEFAULT_INSTRUCTIONS": "",
+        "DEFAULT_PROJECT_INSTRUCTIONS_FILE": "",
         "LLM_DEFAULT_CHAR_INSTRUCTION": "",
         "ENVIRONMENT": "",
         "FEW_SHOT_BOTO": "",

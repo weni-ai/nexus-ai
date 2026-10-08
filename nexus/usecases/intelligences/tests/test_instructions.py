@@ -4,6 +4,7 @@ from unittest import mock
 
 from django.test import TestCase
 
+from nexus.intelligences.default_instructions import default_instruction_texts
 from nexus.intelligences.models import ContentBaseInstruction, InstructionCategory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.intelligences.instructions import (
@@ -45,6 +46,14 @@ class TestProjectInstructionsUseCase(TestCase):
         self.assertEqual(len(payload["categories"]), 1)
         self.assertEqual(len(payload["uncategorized_instructions"]), 1)
         self.assertEqual(payload["uncategorized_instructions"][0]["instruction"], "Legacy instruction")
+        defaults = payload["default_instructions"]
+        self.assertFalse(defaults["editable"])
+        self.assertFalse(defaults["deletable"])
+        self.assertEqual(
+            [item["instruction"] for item in defaults["instructions"]],
+            default_instruction_texts("Portuguese"),
+        )
+        self.assertTrue(all(item["locked"] for item in defaults["instructions"]))
 
     def test_build_instructions_csv_exports_flat_instruction_list(self):
         greeting = InstructionCategory.objects.create(content_base=self.content_base, name="greeting")

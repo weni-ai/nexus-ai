@@ -16,6 +16,7 @@ from nexus.intelligences.api.instruction_serializers import (
     ProjectInstructionsResponseSerializer,
 )
 from nexus.intelligences.constants import DUPLICATE_CATEGORY_NAME_ERROR
+from nexus.intelligences.default_instructions import default_instruction_texts
 from nexus.intelligences.models import ContentBase, ContentBaseInstruction, InstructionCategory
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.usecases.intelligences import get_default_content_base_by_project
@@ -23,6 +24,22 @@ from nexus.usecases.intelligences.delete import DeleteContentBaseUseCase
 from nexus.usecases.intelligences.instructions import DuplicateCategoryNameError, ProjectInstructionsUseCase
 
 logger = logging.getLogger(__name__)
+
+_LANGUAGE_PARAMETER = OpenApiParameter(
+    name="language",
+    location=OpenApiParameter.QUERY,
+    description=(
+        "Language of the read-only default instructions. "
+        "Portuguese, English, Spanish, or Romanian. Defaults to Portuguese."
+    ),
+    required=False,
+    type=OpenApiTypes.STR,
+)
+
+
+def _instruction_language(request, body_language: str = "") -> str:
+    """The query param wins over the export body. Unknown languages become Portuguese."""
+    return (request.query_params.get("language") or body_language or "").strip() or "Portuguese"
 
 
 class InstructionsCSVRenderer(BaseRenderer):
@@ -54,6 +71,11 @@ class ProjectInstructionsViewSet(ModelViewSet):
     @extend_schema(
         operation_id="list_project_instructions",
         summary="List project instructions grouped by category",
+        description=(
+            "Returns the project's categories and instructions, plus default_instructions. "
+            "Default instructions are read-only system rules and are not stored on the project. "
+            "Pass language to choose Portuguese, English, Spanish, or Romanian."
+        ),
         parameters=[
             OpenApiParameter(
                 name="project_uuid",
@@ -61,7 +83,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 description="Project UUID",
                 required=True,
                 type=OpenApiTypes.STR,
-            )
+            ),
+            _LANGUAGE_PARAMETER,
         ],
         responses={
             200: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
@@ -72,7 +95,10 @@ class ProjectInstructionsViewSet(ModelViewSet):
     def list(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         content_base = self._get_content_base(project_uuid)
-        data = self.use_case.get_grouped_instructions(content_base)
+        data = self.use_case.get_grouped_instructions(
+            content_base,
+            language=_instruction_language(request),
+        )
         return Response(data=data, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -80,8 +106,9 @@ class ProjectInstructionsViewSet(ModelViewSet):
         summary="Export project instructions as CSV",
         description=(
             "Returns a CSV file with project instructions for download. "
-            "The frontend sends localized column headers, category row labels, "
-            "and default instruction texts in the request body."
+            "The client sends localized column headers and category row labels. "
+            "Default instruction texts come from the server catalog unless the "
+            "client still sends them in the request body."
         ),
         request=ProjectInstructionsExportSerializer,
         parameters=[
@@ -91,7 +118,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 description="Project UUID",
                 required=True,
                 type=OpenApiTypes.STR,
-            )
+            ),
+            _LANGUAGE_PARAMETER,
         ],
         responses={
             200: OpenApiResponse(description="CSV file download"),
@@ -109,6 +137,12 @@ class ProjectInstructionsViewSet(ModelViewSet):
         validated = serializer.validated_data
         columns = validated["columns"]
         category_labels = validated["category_labels"]
+        language = _instruction_language(request, validated.get("language", ""))
+        supplied = [
+            text.strip()
+            for text in validated.get("default_instructions") or []
+            if isinstance(text, str) and text.strip()
+        ]
 
         csv_content = self.use_case.build_instructions_csv(
             content_base,
@@ -116,7 +150,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
             instruction_column=columns["instruction"],
             uncategorized_label=category_labels["uncategorized"],
             default_label=category_labels["default"],
-            default_instructions=validated.get("default_instructions"),
+            default_instructions=supplied or default_instruction_texts(language),
         )
 
         response = HttpResponse(csv_content, content_type="text/csv; charset=utf-8")
@@ -139,7 +173,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 description="Project UUID",
                 required=True,
                 type=OpenApiTypes.STR,
-            )
+            ),
+            _LANGUAGE_PARAMETER,
         ],
         responses={
             201: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
@@ -164,6 +199,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 category_data=serializer.validated_data.get("category"),
                 user=request.user,
                 project_uuid=str(project_uuid),
+                language=_instruction_language(request),
             )
         except ValueError as error:
             return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
@@ -197,7 +233,8 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 description="Project UUID",
                 required=True,
                 type=OpenApiTypes.STR,
-            )
+            ),
+            _LANGUAGE_PARAMETER,
         ],
         responses={
             200: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
@@ -221,6 +258,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 uncategorized_data=serializer.validated_data.get("uncategorized_instructions"),
                 user=request.user,
                 project_uuid=str(project_uuid),
+                language=_instruction_language(request),
             )
         except ValueError as error:
             return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
@@ -254,6 +292,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 required=True,
                 type=OpenApiTypes.INT,
             ),
+            _LANGUAGE_PARAMETER,
         ],
         responses={
             200: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
@@ -267,7 +306,10 @@ class ProjectInstructionsViewSet(ModelViewSet):
         content_base = self._get_content_base(project_uuid)
 
         self.delete_use_case.bulk_delete_instruction_by_id(content_base, [instruction_id], request.user)
-        data = self.use_case.get_grouped_instructions(content_base)
+        data = self.use_case.get_grouped_instructions(
+            content_base,
+            language=_instruction_language(request),
+        )
         return Response(data=data, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -292,6 +334,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 required=True,
                 type=OpenApiTypes.INT,
             ),
+            _LANGUAGE_PARAMETER,
         ],
         responses={
             200: OpenApiResponse(response=ProjectInstructionsResponseSerializer),
@@ -309,6 +352,7 @@ class ProjectInstructionsViewSet(ModelViewSet):
                 content_base=content_base,
                 category_id=category_id,
                 project_uuid=str(project_uuid),
+                language=_instruction_language(request),
             )
         except InstructionCategory.DoesNotExist:
             return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
