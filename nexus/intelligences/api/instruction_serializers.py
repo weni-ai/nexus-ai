@@ -42,9 +42,22 @@ class InstructionCategoryPatchSerializer(serializers.Serializer):
         raise serializers.ValidationError("Category id or name is required")
 
 
+class DefaultInstructionItemSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    instruction = serializers.CharField()
+    locked = serializers.BooleanField()
+
+
+class DefaultInstructionGroupSerializer(serializers.Serializer):
+    editable = serializers.BooleanField()
+    deletable = serializers.BooleanField()
+    instructions = DefaultInstructionItemSerializer(many=True)
+
+
 class ProjectInstructionsResponseSerializer(serializers.Serializer):
     categories = InstructionCategoryItemSerializer(many=True)
     uncategorized_instructions = GroupedInstructionItemSerializer(many=True, required=False)
+    default_instructions = DefaultInstructionGroupSerializer(required=False)
 
 
 class ProjectInstructionsCreateSerializer(serializers.Serializer):
@@ -83,5 +96,14 @@ class ProjectInstructionsExportSerializer(serializers.Serializer):
         child=serializers.CharField(allow_blank=True),
         required=False,
         default=list,
-        help_text="Default instruction texts from the frontend to include in the CSV export.",
+        help_text=(
+            "Optional default instruction texts. When omitted or empty, the export uses "
+            "the server catalog for the requested language."
+        ),
+    )
+    language = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Language of the catalog used when default_instructions is omitted.",
     )
