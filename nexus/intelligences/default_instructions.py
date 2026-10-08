@@ -1,11 +1,16 @@
 """Read-only default instructions for the Agent Builder.
 
-The texts ship with the image. ``DEFAULT_PROJECT_INSTRUCTIONS_FILE`` can point
-at a JSON file, usually a ConfigMap mount, with the same shape: an object
+The texts ship in ``default_project_instructions.json``, next to this module.
+The image copies the application directory, so the file is included without a
+package-data setting. ``DEFAULT_PROJECT_INSTRUCTIONS_FILE`` can point at
+another JSON file, usually a ConfigMap mount, with the same shape: an object
 whose keys are language codes (``pt``, ``en``, ``es``, ``ro``) and whose
 values are lists of instruction strings. A missing, unreadable, or invalid
-file keeps the copy that ships with the image. These instructions are not
-stored on the project.
+file keeps the copy that ships with the image.
+
+This catalog is what the instruction list and the CSV export show. It is not
+``DEFAULT_INSTRUCTIONS``, the legacy prompt used only when a content base has
+no stored instructions. These instructions are not stored on the project.
 """
 
 from __future__ import annotations
@@ -21,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 _PACKAGED_CATALOG = Path(__file__).with_name("default_project_instructions.json")
 _FALLBACK_LANGUAGE = "pt"
+_CACHE_LIMIT = 8
+_catalog_cache: dict[tuple[str, tuple[int, int] | None], dict[str, list[str]] | None] = {}
 _LANGUAGE_CODES = {
     "en": "en",
     "english": "en",
@@ -39,11 +46,22 @@ _LANGUAGE_CODES = {
 }
 
 
+class DefaultInstructionCatalogError(RuntimeError):
+    """The catalog shipped with the image cannot be loaded."""
+
+
+def clear_catalog_cache() -> None:
+    _catalog_cache.clear()
+
+
 def language_code(language: str | None, *, fallback: str | None = _FALLBACK_LANGUAGE) -> str | None:
-    normalized = (language or "").strip().casefold()
+    normalized = (language or "").strip().casefold().replace("_", "-")
     if not normalized:
         return fallback
-    return _LANGUAGE_CODES.get(normalized, fallback)
+    if normalized in _LANGUAGE_CODES:
+        return _LANGUAGE_CODES[normalized]
+    primary = normalized.split("-", 1)[0]
+    return _LANGUAGE_CODES.get(primary, fallback)
 
 
 def default_instruction_texts(language: str | None = "Portuguese") -> list[str]:
@@ -54,8 +72,9 @@ def default_instruction_texts(language: str | None = "Portuguese") -> list[str]:
 
     packaged = _catalog_from_path(_PACKAGED_CATALOG)
     if not packaged:
-        logger.error("Packaged default instruction catalog is missing or invalid")
-        return []
+        raise DefaultInstructionCatalogError(
+            f"Packaged default instruction catalog is missing or invalid: {_PACKAGED_CATALOG}"
+        )
     return packaged.get(code) or packaged.get(_FALLBACK_LANGUAGE) or []
 
 
@@ -75,8 +94,29 @@ def _catalog_from_path(path: str | Path | None) -> dict[str, list[str]] | None:
     if not location:
         return None
 
+    file_path = Path(location)
+    key = (location, _file_stamp(file_path))
+    if key in _catalog_cache:
+        return _catalog_cache[key]
+
+    catalog = _read_catalog(file_path, location)
+    if len(_catalog_cache) >= _CACHE_LIMIT:
+        _catalog_cache.clear()
+    _catalog_cache[key] = catalog
+    return catalog
+
+
+def _file_stamp(path: Path) -> tuple[int, int] | None:
     try:
-        raw = json.loads(Path(location).read_text(encoding="utf-8"))
+        stat = path.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _read_catalog(path: Path, location: str) -> dict[str, list[str]] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         logger.warning("Default instruction catalog could not be read: %s", location)
         return None

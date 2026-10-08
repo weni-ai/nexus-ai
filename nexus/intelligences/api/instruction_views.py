@@ -38,6 +38,7 @@ _LANGUAGE_PARAMETER = OpenApiParameter(
 
 
 def _instruction_language(request, body_language: str = "") -> str:
+    """The query param wins over the export body. Unknown languages become Portuguese."""
     return (request.query_params.get("language") or body_language or "").strip() or "Portuguese"
 
 

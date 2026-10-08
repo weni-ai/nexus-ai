@@ -3,7 +3,7 @@ import io
 import json
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -17,6 +17,7 @@ from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
 
 
+@override_settings(DEFAULT_PROJECT_INSTRUCTIONS_FILE="")
 class TestProjectInstructionsViewSet(TestCase):
     def setUp(self):
         integrated_intelligence = IntegratedIntelligenceFactory()
@@ -551,6 +552,23 @@ class TestProjectInstructionsViewSet(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+
+    def test_export_query_language_overrides_body_language(self):
+        export_url = f"{self.project.uuid}/instructions/export/?language=English"
+        request = self.factory.post(
+            export_url,
+            self._export_payload(default_instructions=[], language="Portuguese"),
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = ProjectInstructionsViewSet.as_view({"post": "export"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
+        self.assertEqual(rows[1:], self._catalog_rows(language="English"))
 
     def test_export_uses_catalog_when_default_texts_are_omitted(self):
         response = self._export()
